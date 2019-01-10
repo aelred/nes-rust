@@ -156,6 +156,7 @@ impl CPU {
                 let addr = self.addressable.fetch_by(opcode.addressing_mode());
                 CPU::increment(&mut self.status, addr);
             }
+            INX => CPU::increment(&mut self.status, &mut self.x),
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -481,7 +482,13 @@ pub enum Instruction {
     /// flags as appropriate.
     INC,
 
+    /// Increment X Register
+    ///
+    /// X,Z,N = X+1
+    ///
+    /// Adds one to the X register setting the zero and negative flags as appropriate.
     INX,
+
     INY,
     JMP,
     JSR,
@@ -1179,6 +1186,15 @@ mod tests {
 
         assert_eq!(cpu.get(Address(100)) as i8, -9i8);
         assert_eq!(cpu.status.negative, true);
+    }
+
+    #[test]
+    fn instr_inx_increments_x_register() {
+        let cpu = run_instr(mem!(INX), |cpu| {
+            cpu.x = 45;
+        });
+
+        assert_eq!(cpu.x, 46);
     }
 
     #[test]
