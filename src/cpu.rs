@@ -248,9 +248,19 @@ pub enum Instruction {
     /// cause a branch to a new location.
     BMI,
 
+    /// If the zero flag is clear then add the relative displacement to the program counter to cause
+    /// a branch to a new location.
     BNE,
+
+    /// If the negative flag is clear then add the relative displacement to the program counter to
+    /// cause a branch to a new location.
     BPL,
+
+    /// The BRK instruction forces the generation of an interrupt request. The program counter and
+    /// processor status are pushed on the stack then the IRQ interrupt vector at $FFFE/F is loaded
+    /// into the PC and the break flag in the status set to one.
     BRK,
+
     BVC,
     BVS,
     CLC,
