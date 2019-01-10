@@ -124,6 +124,7 @@ impl CPU {
                 self.status.negative = value & (1 << 7) != 0;
             }
             BMI => self.branch_if(self.status.negative),
+            BNE => self.branch_if(!self.status.zero),
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -534,6 +535,27 @@ mod tests {
 
         // 2 steps ahead because PC also automatically increments
         assert_eq!(cpu.program_counter, Address(82));
+    }
+
+    #[test]
+    fn instr_bne_branches_when_zero_flag_clear() {
+        let cpu = run_instr(mem!(BNE, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.zero = false;
+        });
+
+        // 2 steps ahead because PC also automatically increments
+        assert_eq!(cpu.program_counter, Address(82));
+    }
+
+    #[test]
+    fn instr_bne_does_not_branch_when_zero_flag_set() {
+        let cpu = run_instr(mem!(BNE, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.zero = true;
+        });
+
+        assert_eq!(cpu.program_counter, Address(92));
     }
 
     #[test]
