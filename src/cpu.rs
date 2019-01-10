@@ -129,6 +129,7 @@ impl CPU {
             BRK => unimplemented!("BRK"), // TODO
             BVC => self.branch_if(!self.status.overflow),
             BVS => self.branch_if(self.status.overflow),
+            CLC => self.status.carry = false,
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -272,7 +273,11 @@ pub enum Instruction {
     /// cause a branch to a new location.
     BVS,
 
+    /// C = 0
+    ///
+    /// Set the carry flag to zero.
     CLC,
+
     CLD,
     CLI,
     CLV,
@@ -641,6 +646,14 @@ mod tests {
         assert_eq!(cpu.program_counter, Address(82));
     }
 
+    #[test]
+    fn instr_clc_clears_carry_flag() {
+        let cpu = run_instr(mem!(CLC), |cpu| {
+            cpu.status.carry = true;
+        });
+
+        assert_eq!(cpu.status.carry, false);
+    }
 
     #[test]
     #[should_panic]
