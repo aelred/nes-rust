@@ -131,6 +131,7 @@ impl CPU {
             BVS => self.branch_if(self.status.overflow),
             CLC => self.status.carry = false,
             CLD => self.status.decimal = false,
+            CLI => self.status.interrupt_disable = false,
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -284,7 +285,11 @@ pub enum Instruction {
     /// Sets the decimal mode flag to zero.
     CLD,
 
+    /// I = 0
+    ///
+    /// Clears the interrupt disable flag allowing normal interrupt requests to be serviced.
     CLI,
+
     CLV,
     CMP,
     CPX,
@@ -667,6 +672,15 @@ mod tests {
         });
 
         assert_eq!(cpu.status.decimal, false);
+    }
+
+    #[test]
+    fn instr_cli_clears_interrupt_disable_flag() {
+        let cpu = run_instr(mem!(CLI), |cpu| {
+            cpu.status.interrupt_disable = true;
+        });
+
+        assert_eq!(cpu.status.interrupt_disable, false);
     }
 
     #[test]
