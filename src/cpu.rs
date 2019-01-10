@@ -230,7 +230,7 @@ impl Default for CPU {
     fn default() -> Self {
         CPU {
             addressable: Addressable {
-                memory: [42; 0x7ff],
+                memory: [42; 0xffff],
                 accumulator: 0,
                 program_counter: Address(0x34),
             },
@@ -250,8 +250,8 @@ impl Default for CPU {
 }
 
 struct Addressable {
-    /// 2KB of internal RAM
-    memory: [u8; 0x7ff],
+    /// 2KB of internal RAM, plus more mapped space
+    memory: [u8; 0xffff],
     /// A
     accumulator: u8,
     /// PC
