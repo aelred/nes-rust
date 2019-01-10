@@ -128,6 +128,7 @@ impl CPU {
             BPL => self.branch_if(!self.status.negative),
             BRK => unimplemented!("BRK"), // TODO
             BVC => self.branch_if(!self.status.overflow),
+            BVS => self.branch_if(self.status.overflow),
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -267,7 +268,10 @@ pub enum Instruction {
     /// cause a branch to a new location.
     BVC,
 
+    /// If the overflow flag is set then add the relative displacement to the program counter to
+    /// cause a branch to a new location.
     BVS,
+
     CLC,
     CLD,
     CLI,
@@ -615,6 +619,28 @@ mod tests {
 
         assert_eq!(cpu.program_counter, Address(92));
     }
+
+    #[test]
+    fn instr_bvs_does_not_branch_when_carry_flag_clear() {
+        let cpu = run_instr(mem!(BVS, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.overflow = false;
+        });
+
+        assert_eq!(cpu.program_counter, Address(92));
+    }
+
+    #[test]
+    fn instr_bvs_branches_when_carry_flag_set() {
+        let cpu = run_instr(mem!(BVS, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.overflow = true;
+        });
+
+        // 2 steps ahead because PC also automatically increments
+        assert_eq!(cpu.program_counter, Address(82));
+    }
+
 
     #[test]
     #[should_panic]
