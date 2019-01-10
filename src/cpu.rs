@@ -133,15 +133,18 @@ impl CPU {
             CLD => self.status.decimal = false,
             CLI => self.status.interrupt_disable = false,
             CLV => self.status.overflow = false,
-            CMP => {
-                let value = self.fetch_by(opcode.addressing_mode());
-                let (result, carry) = self.accumulator.overflowing_sub(value);
-                self.status.carry = !carry;
-                self.status.zero = result == 0;
-                self.status.negative = result & (1 << 7) != 0;
-            },
+            CMP => self.compare(self.accumulator, opcode),
+            CPX => self.compare(self.x, opcode),
             _ => unimplemented!("{:?}", instr),
         }
+    }
+
+    fn compare(&mut self, register: u8, opcode: OpCode) {
+        let value = self.fetch_by(opcode.addressing_mode());
+        let (result, carry) = register.overflowing_sub(value);
+        self.status.carry = !carry;
+        self.status.zero = result == 0;
+        self.status.negative = result & (1 << 7) != 0;
     }
 
     fn set_accumulator(&mut self, value: u8) {
@@ -344,7 +347,15 @@ pub enum Instruction {
     /// This instruction compares the contents of the accumulator with another memory held value and
     /// sets the zero and carry flags as appropriate.
     CMP,
+
+    /// Compare X Register
+    ///
+    /// Z,C,N = X-M
+    ///
+    /// This instruction compares the contents of the X register with another memory held value and
+    /// sets the zero and carry flags as appropriate.
     CPX,
+
     CPY,
     DEC,
     DEX,
@@ -804,6 +815,33 @@ mod tests {
             cpu.accumulator = 100;
         });
 
+        assert_eq!(cpu.status.negative, false);
+    }
+
+    #[test]
+    fn instr_cpx_compares_using_x_register() {
+        let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
+            cpu.x = 1;
+        });
+
+        assert_eq!(cpu.status.carry, false);
+        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.negative, true);
+
+        let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
+            cpu.x = 10;
+        });
+
+        assert_eq!(cpu.status.carry, true);
+        assert_eq!(cpu.status.zero, true);
+        assert_eq!(cpu.status.negative, false);
+
+        let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
+            cpu.x = 100;
+        });
+
+        assert_eq!(cpu.status.carry, true);
+        assert_eq!(cpu.status.zero, false);
         assert_eq!(cpu.status.negative, false);
     }
 
