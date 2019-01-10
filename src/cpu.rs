@@ -1,7 +1,30 @@
 use crate::opcodes::OpCode;
 use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
 use std::ops::Add;
 use std::ops::AddAssign;
+
+pub trait SerializeBytes {
+    fn bytes(self) -> Vec<u8>;
+}
+
+impl SerializeBytes for i8 {
+    fn bytes(self) -> Vec<u8> {
+        vec![self as u8]
+    }
+}
+
+impl SerializeBytes for u8 {
+    fn bytes(self) -> Vec<u8> {
+        vec![self]
+    }
+}
+
+impl SerializeBytes for OpCode {
+    fn bytes(self) -> Vec<u8> {
+        vec![self as u8]
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 struct Address(u16);
@@ -11,13 +34,15 @@ impl Address {
         Address((u16::from(higher) << 8) + u16::from(lower))
     }
 
-    fn to_bytes(self) -> (u8, u8) {
+    fn split(self) -> (u8, u8) {
         (self.0 as u8, (self.0 >> 8) as u8)
     }
+}
 
-    fn into_iter(self) -> impl Iterator<Item = u8> {
-        let (lower, higher) = self.to_bytes();
-        vec![lower, higher].into_iter()
+impl SerializeBytes for Address {
+    fn bytes(self) -> Vec<u8> {
+        let (lower, higher) = self.split();
+        vec![lower, higher]
     }
 }
 
@@ -101,7 +126,7 @@ impl CPU {
                     self.program_counter += offset;
                 }
             }
-            _ => unimplemented!(),
+            _ => unimplemented!("{:?}", instr),
         }
 
         self.status.zero = self.accumulator == 0;
@@ -110,7 +135,9 @@ impl CPU {
 
     fn fetch_by(&mut self, addressing_mode: AddressingMode) -> u8 {
         match addressing_mode {
-            AddressingMode::Implied | AddressingMode::Relative => panic!("Expected a value"),
+            AddressingMode::Implied | AddressingMode::Relative => {
+                panic!("{:?} does not provide a value", addressing_mode)
+            }
             AddressingMode::Immediate => self.fetch(),
             AddressingMode::Accumulator => self.accumulator,
             AddressingMode::Absolute => {
@@ -119,7 +146,7 @@ impl CPU {
                 let address = Address::from_bytes(lower, higher);
                 self.deref_address(address)
             }
-            _ => unimplemented!(),
+            _ => unimplemented!("{:?}", addressing_mode),
         }
     }
 
@@ -164,7 +191,7 @@ struct Status {
     carry: bool,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Instruction {
     /// A,Z,C,N = A+M+C
     ///
@@ -247,7 +274,7 @@ pub enum Instruction {
     TYA,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum AddressingMode {
     Implied,
     Immediate,
@@ -264,82 +291,21 @@ pub enum AddressingMode {
     IndirectIndexed,
 }
 
-#[derive(Copy, Clone)]
-enum Operand {
-    Implied,
-    /// #v
-    Immediate(u8),
-    /// A
-    Accumulator,
-    /// label
-    Relative(i8),
-    /// d
-    ZeroPage(u8),
-    /// d,x
-    ZeroPageX(u8),
-    /// d,y
-    ZeroPageY(u8),
-    /// a
-    Absolute(Address),
-    /// a,x
-    AbsoluteX(Address),
-    /// a,y
-    AbsoluteY(Address),
-    Indirect(Address),
-    /// (d,x)
-    IndexedIndirect(u8),
-    /// (d),y
-    IndirectIndexed(u8),
-}
-
-impl Operand {
-    fn addressing_mode(self) -> AddressingMode {
-        match self {
-            Operand::Implied => AddressingMode::Implied,
-            Operand::Immediate(_) => AddressingMode::Immediate,
-            Operand::Accumulator => AddressingMode::Accumulator,
-            Operand::Relative(_) => AddressingMode::Relative,
-            Operand::ZeroPage(_) => AddressingMode::ZeroPage,
-            Operand::ZeroPageX(_) => AddressingMode::ZeroPageX,
-            Operand::ZeroPageY(_) => AddressingMode::ZeroPageY,
-            Operand::Absolute(_) => AddressingMode::Absolute,
-            Operand::AbsoluteX(_) => AddressingMode::AbsoluteX,
-            Operand::AbsoluteY(_) => AddressingMode::AbsoluteY,
-            Operand::Indirect(_) => AddressingMode::Indirect,
-            Operand::IndexedIndirect(_) => AddressingMode::IndexedIndirect,
-            Operand::IndirectIndexed(_) => AddressingMode::IndirectIndexed,
-        }
-    }
-
-    fn data(self) -> Vec<u8> {
-        let mut vec = vec![];
-
-        match self {
-            Operand::Implied => {}
-            Operand::Immediate(value) => vec.push(value),
-            Operand::Accumulator => {}
-            Operand::Relative(value) => vec.push(value as u8),
-            Operand::ZeroPage(value) => vec.push(value),
-            Operand::ZeroPageX(value) => vec.push(value),
-            Operand::ZeroPageY(value) => vec.push(value),
-            Operand::Absolute(value) => vec.extend(value.into_iter()),
-            Operand::AbsoluteX(value) => vec.extend(value.into_iter()),
-            Operand::AbsoluteY(value) => vec.extend(value.into_iter()),
-            Operand::Indirect(value) => vec.extend(value.into_iter()),
-            Operand::IndexedIndirect(value) => vec.push(value),
-            Operand::IndirectIndexed(value) => vec.push(value),
-        }
-
-        vec
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::Instruction::*;
-    use super::Operand::*;
+    use super::OpCode::*;
     use super::*;
     use crate::opcodes::OpCode;
+
+    macro_rules! mem {
+        ($( $data: expr ),*) => {
+            {
+                let mut vec: Vec<u8> = vec![];
+                $(vec.extend(SerializeBytes::bytes($data));)*
+                vec
+            }
+        };
+    }
 
     #[test]
     fn default_cpu_is_in_default_state() {
@@ -354,7 +320,7 @@ mod tests {
 
     #[test]
     fn can_exec_adc_without_overflow() {
-        let cpu = run_instr(ADC, Immediate(10), |cpu| {
+        let cpu = run_instr(mem!(ADCImmediate, 10u8), |cpu| {
             cpu.accumulator = 42;
         });
 
@@ -365,7 +331,7 @@ mod tests {
 
     #[test]
     fn can_exec_adc_with_unsigned_overflow() {
-        let cpu = run_instr(ADC, Immediate(255), |cpu| {
+        let cpu = run_instr(mem!(ADCImmediate, 255u8), |cpu| {
             cpu.accumulator = 42;
         });
 
@@ -376,7 +342,7 @@ mod tests {
 
     #[test]
     fn can_exec_adc_with_signed_overflow() {
-        let cpu = run_instr(ADC, Immediate(127i8 as u8), |cpu| {
+        let cpu = run_instr(mem!(ADCImmediate, 127i8), |cpu| {
             cpu.accumulator = 42i8 as u8;
         });
 
@@ -387,7 +353,7 @@ mod tests {
 
     #[test]
     fn can_exec_and() {
-        let cpu = run_instr(AND, Immediate(0b1100), |cpu| {
+        let cpu = run_instr(mem!(ANDImmediate, 0b1100u8), |cpu| {
             cpu.accumulator = 0b1010;
         });
 
@@ -396,7 +362,7 @@ mod tests {
 
     #[test]
     fn can_exec_asl_without_carry() {
-        let cpu = run_instr(ASL, Accumulator, |cpu| {
+        let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
             cpu.accumulator = 0b100;
         });
 
@@ -406,7 +372,7 @@ mod tests {
 
     #[test]
     fn can_exec_asl_with_carry() {
-        let cpu = run_instr(ASL, Accumulator, |cpu| {
+        let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
             cpu.accumulator = 0b10101010;
         });
 
@@ -416,7 +382,7 @@ mod tests {
 
     #[test]
     fn can_exec_bcc_when_carry_clear() {
-        let cpu = run_instr(BCC, Relative(-10), |cpu| {
+        let cpu = run_instr(mem!(BCC, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.carry = false;
         });
@@ -427,7 +393,7 @@ mod tests {
 
     #[test]
     fn can_exec_bcc_when_carry_set() {
-        let cpu = run_instr(BCC, Relative(-10), |cpu| {
+        let cpu = run_instr(mem!(BCC, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.carry = true;
         });
@@ -437,7 +403,7 @@ mod tests {
 
     #[test]
     fn can_exec_bcs_when_carry_clear() {
-        let cpu = run_instr(BCS, Relative(-10), |cpu| {
+        let cpu = run_instr(mem!(BCS, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.carry = false;
         });
@@ -447,7 +413,7 @@ mod tests {
 
     #[test]
     fn can_exec_bcs_when_carry_set() {
-        let cpu = run_instr(BCS, Relative(-10), |cpu| {
+        let cpu = run_instr(mem!(BCS, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.carry = true;
         });
@@ -487,7 +453,7 @@ mod tests {
     #[test]
     fn absolute_addressing_mode_fetches_values_at_given_address() {
         let mut cpu = CPU::default();
-        let (lower, higher) = Address(432).to_bytes();
+        let (lower, higher) = Address(432).split();
         cpu.set(cpu.program_counter, lower);
         cpu.set(cpu.program_counter + 1u16, higher);
         cpu.set(Address(432), 35);
@@ -495,22 +461,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn implied_operand_with_unsupported_instr_panics() {
-        let cpu = run_instr(ADC, Implied, |cpu| {});
-    }
-
-    #[test]
-    #[should_panic]
-    fn branch_operation_with_wrong_operand_panics() {
-        let cpu = run_instr(BCC, Immediate(10), |cpu| {
-            cpu.status.carry = false;
-        });
-    }
-
-    #[test]
     fn zero_flag_is_not_set_when_accumulator_is_non_zero() {
-        let cpu = run_instr(ADC, Immediate(1), |cpu| {
+        let cpu = run_instr(mem!(ADCImmediate, 1u8), |cpu| {
             cpu.accumulator = 42;
         });
 
@@ -520,7 +472,7 @@ mod tests {
 
     #[test]
     fn zero_flag_is_set_when_accumulator_is_zero() {
-        let cpu = run_instr(ADC, Immediate(214), |cpu| {
+        let cpu = run_instr(mem!(ADCImmediate, 214u8), |cpu| {
             cpu.accumulator = 42;
         });
 
@@ -530,7 +482,7 @@ mod tests {
 
     #[test]
     fn negative_flag_is_not_set_when_accumulator_is_positive() {
-        let cpu = run_instr(ADC, Immediate(1), |cpu| {
+        let cpu = run_instr(mem!(ADCImmediate, 1u8), |cpu| {
             cpu.accumulator = 42;
         });
 
@@ -540,53 +492,54 @@ mod tests {
 
     #[test]
     fn negative_flag_is_set_when_accumulator_is_negative() {
-        let cpu = run_instr(ADC, Immediate(-1i8 as u8), |cpu| {
+        let cpu = run_instr(mem!(ADCImmediate, -1i8), |cpu| {
             cpu.accumulator = 0;
         });
 
-        assert_eq!(cpu.accumulator, -1i8 as u8);
+        assert_eq!(cpu.accumulator as i8, -1i8);
         assert_eq!(cpu.status.negative, true);
     }
 
     #[test]
     fn program_counter_is_incremented_by_1_when_executing_1_byte_instr() {
-        let cpu = run_instr(ASL, Accumulator, |cpu| cpu.program_counter = Address(100));
+        let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
+            cpu.program_counter = Address(100)
+        });
 
         assert_eq!(cpu.program_counter, Address(101));
     }
 
     #[test]
     fn program_counter_is_incremented_by_2_when_executing_2_byte_instr() {
-        let cpu = run_instr(ADC, Immediate(0), |cpu| cpu.program_counter = Address(100));
+        let cpu = run_instr(mem!(ADCImmediate, 0u8), |cpu| {
+            cpu.program_counter = Address(100)
+        });
 
         assert_eq!(cpu.program_counter, Address(102));
     }
 
     #[test]
     fn program_counter_is_incremented_by_3_when_executing_3_byte_instr() {
-        let cpu = run_instr(ASL, Absolute(Address(0)), |cpu| {
+        let cpu = run_instr(mem!(ASLAbsolute, Address(0)), |cpu| {
             cpu.program_counter = Address(100)
         });
 
         assert_eq!(cpu.program_counter, Address(103));
     }
 
-    fn run_instr<F: FnOnce(&mut CPU)>(instr: Instruction, operand: Operand, cpu_setup: F) -> CPU {
+    fn run_instr<F: FnOnce(&mut CPU)>(data: Vec<u8>, cpu_setup: F) -> CPU {
         let mut cpu = CPU::default();
 
         cpu_setup(&mut cpu);
 
-        let opcode = OpCode::from_instruction(instr, operand.addressing_mode()).unwrap();
-        let operand_data = operand.data();
-
         let mut pc = cpu.program_counter;
 
-        cpu.set(pc, opcode as u8);
-
-        for data in operand_data {
+        for byte in data.iter() {
+            cpu.set(pc, *byte);
             pc += 1u16;
-            cpu.set(pc, data);
         }
+
+        println!("Loaded data: {:#?}", data);
 
         cpu.run_instruction();
 

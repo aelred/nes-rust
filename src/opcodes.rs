@@ -1,8 +1,9 @@
 use crate::cpu::AddressingMode;
 use crate::cpu::Instruction;
+use crate::cpu::SerializeBytes;
 use enum_primitive_derive::Primitive;
 
-#[derive(Primitive)]
+#[derive(Primitive, Copy, Clone)]
 pub enum OpCode {
     BRK = 0x00,
     ORAIndexedIndirect = 0x01,
