@@ -10,7 +10,6 @@ use crate::addressing_modes::STYAddressingMode;
 use crate::addressing_modes::ShiftAddressingMode;
 use crate::addressing_modes::StoreAddressingMode;
 use crate::cpu::Instruction;
-use crate::cpu::SerializeBytes;
 use enum_primitive_derive::Primitive;
 
 #[derive(Primitive, Copy, Clone)]
@@ -432,7 +431,7 @@ impl OpCode {
         }
     }
 
-    pub fn instruction(&self) -> Instruction {
+    pub fn instruction(self) -> Instruction {
         use crate::cpu::Instruction::*;
 
         match self {

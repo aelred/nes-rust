@@ -12,7 +12,6 @@ use crate::addressing_modes::StoreAddressingMode;
 use crate::addressing_modes::ValueAddressingMode;
 use crate::opcodes::OpCode;
 use num_traits::FromPrimitive;
-use num_traits::ToPrimitive;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Sub;
@@ -71,7 +70,7 @@ impl Add<u8> for Address {
     type Output = Address;
 
     fn add(self, rhs: u8) -> <Self as Add<u8>>::Output {
-        Address(self.0 + rhs as u16)
+        Address(self.0 + u16::from(rhs))
     }
 }
 
@@ -79,7 +78,7 @@ impl Sub<u8> for Address {
     type Output = Address;
 
     fn sub(self, rhs: u8) -> <Self as Sub<u8>>::Output {
-        Address(self.0 - rhs as u16)
+        Address(self.0 - u16::from(rhs))
     }
 }
 
@@ -97,7 +96,7 @@ impl Add<u16> for Address {
     }
 }
 
-struct CPU {
+pub struct CPU {
     addressable: Addressable,
     /// X
     x: u8,
@@ -118,7 +117,7 @@ fn bit7(value: u8) -> bool {
 }
 
 impl CPU {
-    fn run_instruction(&mut self) {
+    pub fn run_instruction(&mut self) {
         use self::Instruction::*;
 
         match self.addressable.instr() {
