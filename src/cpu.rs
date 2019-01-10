@@ -108,7 +108,6 @@ impl CPU {
             }
             AND => {
                 let value = *self.fetch_by(opcode.addressing_mode());
-
                 self.set_accumulator(self.accumulator() & value);
             }
             ASL => {
@@ -149,6 +148,10 @@ impl CPU {
             },
             DEX => CPU::decrement(&mut self.status, &mut self.x),
             DEY => CPU::decrement(&mut self.status, &mut self.y),
+            EOR => {
+                let value = *self.fetch_by(opcode.addressing_mode());
+                self.set_accumulator(self.accumulator() ^ value);
+            }
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -452,7 +455,14 @@ pub enum Instruction {
     /// Subtracts one from the Y register setting the zero and negative flags as appropriate.
     DEY,
 
+    /// Exclusive OR
+    ///
+    /// A,Z,N = A^M
+    ///
+    /// An exclusive OR is performed, bit by bit, on the accumulator contents using the contents of
+    /// a byte of memory.
     EOR,
+
     INC,
     INX,
     INY,
@@ -1100,6 +1110,15 @@ mod tests {
 
         assert_eq!(cpu.y as i8, -1i8);
         assert_eq!(cpu.status.negative, true);
+    }
+
+    #[test]
+    fn instr_eor_performs_bitwise_xor() {
+        let cpu = run_instr(mem!(EORImmediate, 0b1100u8), |cpu| {
+            *cpu.accumulator_mut() = 0b1010;
+        });
+
+        assert_eq!(*cpu.accumulator(), 0b0110);
     }
 
     #[test]
