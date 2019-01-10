@@ -159,6 +159,11 @@ impl CPU {
                 self.x = value;
                 self.set_flags(value);
             },
+            DEY => {
+                let (value, carry) = self.y.overflowing_sub(1);
+                self.y = value;
+                self.set_flags(value);
+            },
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -406,7 +411,12 @@ pub enum Instruction {
     /// Subtracts one from the X register setting the zero and negative flags as appropriate.
     DEX,
 
+    /// Decrement Y Register
+    /// Y,Z,N = Y-1
+    ///
+    /// Subtracts one from the Y register setting the zero and negative flags as appropriate.
     DEY,
+
     EOR,
     INC,
     INX,
@@ -1014,6 +1024,48 @@ mod tests {
         assert_eq!(cpu.status.negative, true);
     }
 
+    #[test]
+    fn instr_dey_decrements_y_register() {
+        let cpu = run_instr(mem!(DEY), |cpu| {
+            cpu.y = 45;
+        });
+
+        assert_eq!(cpu.y, 44);
+    }
+
+    #[test]
+    fn instr_dey_sets_zero_flag_based_on_result() {
+        let cpu = run_instr(mem!(DEY), |cpu| {
+            cpu.y = 45;
+        });
+
+        assert_eq!(cpu.y, 44);
+        assert_eq!(cpu.status.zero, false);
+
+        let cpu = run_instr(mem!(DEY), |cpu| {
+            cpu.y = 1;
+        });
+
+        assert_eq!(cpu.y, 0);
+        assert_eq!(cpu.status.zero, true);
+    }
+
+    #[test]
+    fn instr_dey_sets_negative_flag_based_on_result() {
+        let cpu = run_instr(mem!(DEY), |cpu| {
+            cpu.y = 45;
+        });
+
+        assert_eq!(cpu.y, 44);
+        assert_eq!(cpu.status.zero, false);
+
+        let cpu = run_instr(mem!(DEY), |cpu| {
+            cpu.y = 0;
+        });
+
+        assert_eq!(cpu.y as i8, -1i8);
+        assert_eq!(cpu.status.negative, true);
+    }
 
     #[test]
     #[should_panic]
