@@ -9,7 +9,7 @@ use crate::addressing_modes::STXAddressingMode;
 use crate::addressing_modes::STYAddressingMode;
 use crate::addressing_modes::ShiftAddressingMode;
 use crate::addressing_modes::StoreAddressingMode;
-use crate::cpu::Instruction;
+use crate::instructions::Instruction;
 use enum_primitive_derive::Primitive;
 
 #[derive(Primitive, Copy, Clone)]
@@ -274,7 +274,7 @@ pub enum OpCode {
 
 impl OpCode {
     pub fn new(instr: Instruction) -> Self {
-        use crate::cpu::Instruction::*;
+        use crate::instructions::Instruction::*;
 
         match instr {
             BRK => OpCode::BRK,
@@ -432,7 +432,7 @@ impl OpCode {
     }
 
     pub fn instruction(self) -> Instruction {
-        use crate::cpu::Instruction::*;
+        use crate::instructions::Instruction::*;
 
         match self {
             OpCode::BRK => BRK,

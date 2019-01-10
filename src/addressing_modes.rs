@@ -1,4 +1,4 @@
-use crate::cpu::Address;
+use crate::address::Address;
 use crate::cpu::Addressable;
 
 pub trait ValueAddressingMode {
