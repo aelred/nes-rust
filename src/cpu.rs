@@ -114,23 +114,21 @@ impl CPU {
                 self.status.carry = value >= 0b10000000;
                 self.accumulator = value << 1;
             }
-            BCC => {
-                let offset = self.fetch() as i8;
-                if !self.status.carry {
-                    self.program_counter += offset;
-                }
-            }
-            BCS => {
-                let offset = self.fetch() as i8;
-                if self.status.carry {
-                    self.program_counter += offset;
-                }
-            }
+            BCC => self.branch_if(!self.status.carry),
+            BCS => self.branch_if(self.status.carry),
+            BEQ => self.branch_if(self.status.zero),
             _ => unimplemented!("{:?}", instr),
         }
 
         self.status.zero = self.accumulator == 0;
         self.status.negative = (self.accumulator as i8).is_negative();
+    }
+
+    fn branch_if(&mut self, cond: bool) {
+        let offset = self.fetch() as i8;
+        if cond {
+            self.program_counter += offset;
+        }
     }
 
     fn fetch_by(&mut self, addressing_mode: AddressingMode) -> u8 {
@@ -221,7 +219,11 @@ pub enum Instruction {
     /// If the carry flag is set then add the relative displacement to the program counter to cause
     /// a branch to a new location.
     BCS,
+
+    /// If the zero flag is set then add the relative displacement to the program counter to cause a
+    /// branch to a new location.
     BEQ,
+
     BIT,
     BMI,
     BNE,
@@ -416,6 +418,27 @@ mod tests {
         let cpu = run_instr(mem!(BCS, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.carry = true;
+        });
+
+        // 2 steps ahead because PC also automatically increments
+        assert_eq!(cpu.program_counter, Address(82));
+    }
+
+    #[test]
+    fn can_exec_beq_when_zero_not_set() {
+        let cpu = run_instr(mem!(BEQ, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.zero = false;
+        });
+
+        assert_eq!(cpu.program_counter, Address(92));
+    }
+
+    #[test]
+    fn can_exec_beq_when_zero_set() {
+        let cpu = run_instr(mem!(BEQ, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.zero = true;
         });
 
         // 2 steps ahead because PC also automatically increments
