@@ -154,6 +154,11 @@ impl CPU {
                 *addr = value;
                 self.set_flags(value);
             },
+            DEX => {
+                let (value, carry) = self.x.overflowing_sub(1);
+                self.x = value;
+                self.set_flags(value);
+            },
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -387,13 +392,20 @@ pub enum Instruction {
     CPY,
 
     /// Decrement Memory
+    ///
     /// M,Z,N = M-1
     ///
     /// Subtracts one from the value held at a specified memory location setting the zero and
     /// negative flags as appropriate.
     DEC,
-    
+
+    /// Decrement X Register
+    ///
+    ///X,Z,N = X-1
+    ///
+    /// Subtracts one from the X register setting the zero and negative flags as appropriate.
     DEX,
+
     DEY,
     EOR,
     INC,
@@ -958,6 +970,50 @@ mod tests {
         assert_eq!(cpu.get(Address(100)) as i8, -1i8);
         assert_eq!(cpu.status.negative, true);
     }
+
+    #[test]
+    fn instr_dex_decrements_x_register() {
+        let cpu = run_instr(mem!(DEX), |cpu| {
+            cpu.x = 45;
+        });
+
+        assert_eq!(cpu.x, 44);
+    }
+
+    #[test]
+    fn instr_dex_sets_zero_flag_based_on_result() {
+        let cpu = run_instr(mem!(DEX), |cpu| {
+            cpu.x = 45;
+        });
+
+        assert_eq!(cpu.x, 44);
+        assert_eq!(cpu.status.zero, false);
+
+        let cpu = run_instr(mem!(DEX), |cpu| {
+            cpu.x = 1;
+        });
+
+        assert_eq!(cpu.x, 0);
+        assert_eq!(cpu.status.zero, true);
+    }
+
+    #[test]
+    fn instr_dex_sets_negative_flag_based_on_result() {
+        let cpu = run_instr(mem!(DEX), |cpu| {
+            cpu.x = 45;
+        });
+
+        assert_eq!(cpu.x, 44);
+        assert_eq!(cpu.status.zero, false);
+
+        let cpu = run_instr(mem!(DEX), |cpu| {
+            cpu.x = 0;
+        });
+
+        assert_eq!(cpu.x as i8, -1i8);
+        assert_eq!(cpu.status.negative, true);
+    }
+
 
     #[test]
     #[should_panic]
