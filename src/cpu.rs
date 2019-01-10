@@ -1354,9 +1354,9 @@ mod tests {
             pc += 1u16;
         }
 
-        println!("Loaded data: {:#?}", data);
-
         cpu.run_instruction();
+
+        hexdump::hexdump(&cpu.addressable.memory[..0x200]);
 
         cpu
     }
