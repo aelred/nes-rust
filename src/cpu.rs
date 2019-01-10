@@ -213,13 +213,13 @@ impl Default for CPU {
     fn default() -> Self {
         CPU {
             addressable: Addressable {
-                memory: [42; 0xffff],
+                memory: [0; 0xffff],
                 accumulator: 0,
-                program_counter: Address::new(0x34),
+                program_counter: Address::new(0x00),
             },
             x: 0,
             y: 0,
-            stack_pointer: 0xFD,
+            stack_pointer: 0xFF,
             status: Status {
                 negative: false,
                 overflow: false,
@@ -353,11 +353,11 @@ mod tests {
     fn default_cpu_is_in_default_state() {
         let cpu = CPU::default();
 
-        assert_eq!(*cpu.program_counter(), Address::new(0x34));
+        assert_eq!(*cpu.program_counter(), Address::new(0x00));
         assert_eq!(*cpu.accumulator(), 0);
         assert_eq!(cpu.x, 0);
         assert_eq!(cpu.y, 0);
-        assert_eq!(cpu.stack_pointer, 0xFD);
+        assert_eq!(cpu.stack_pointer, 0xFF);
     }
 
     #[test]
