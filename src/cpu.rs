@@ -144,6 +144,11 @@ impl CPU {
                 self.x = value;
                 self.set_flags(value);
             }
+            LDY(addressing_mode) => {
+                let value = *self.fetch(addressing_mode);
+                self.y = value;
+                self.set_flags(value);
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1047,6 +1052,13 @@ mod tests {
         let cpu = run_instr(mem!(LDXImmediate, 5u8), |cpu| {});
 
         assert_eq!(cpu.x, 5);
+    }
+
+    #[test]
+    fn instr_ldy_loads_operand_into_y_register() {
+        let cpu = run_instr(mem!(LDYImmediate, 5u8), |cpu| {});
+
+        assert_eq!(cpu.y, 5);
     }
 
     #[test]

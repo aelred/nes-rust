@@ -233,8 +233,15 @@ pub enum Instruction {
     /// Loads a byte of memory into the X register setting the zero and negative flags as
     /// appropriate.
     LDX(LDXAddressingMode),
-    
+
+    /// Load Y Register
+    ///
+    /// Y,Z,N = M
+    ///
+    /// Loads a byte of memory into the Y register setting the zero and negative flags as
+    /// appropriate.
     LDY(LDYAddressingMode),
+
     LSR(ShiftAddressingMode),
     NOP,
     ORA(FlexibleAddressingMode),

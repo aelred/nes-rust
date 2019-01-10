@@ -181,6 +181,18 @@ pub enum LDYAddressingMode {
     AbsoluteX,
 }
 
+impl ValueAddressingMode for LDYAddressingMode {
+    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+        match self {
+            LDYAddressingMode::Immediate => addressable.immediate(),
+            LDYAddressingMode::ZeroPage => addressable.zero_page(),
+            LDYAddressingMode::ZeroPageX => addressable.zero_page_x(),
+            LDYAddressingMode::Absolute => addressable.absolute(),
+            LDYAddressingMode::AbsoluteX => addressable.absolute_x(),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum STXAddressingMode {
     ZeroPage,
