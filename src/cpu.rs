@@ -135,6 +135,10 @@ impl CPU {
 
                 *self.program_counter_mut() = addr;
             }
+            LDA(addressing_mode) => {
+                let value = *self.fetch(addressing_mode);
+                self.set_accumulator(value);
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1024,6 +1028,13 @@ mod tests {
         });
 
         assert_eq!(cpu.stack_pointer, 4);
+    }
+    
+    #[test]
+    fn instr_lda_loads_operand_into_accumulator() {
+        let cpu = run_instr(mem!(LDAImmediate, 5u8), |cpu| {});
+
+        assert_eq!(*cpu.accumulator(), 5);
     }
 
     #[test]

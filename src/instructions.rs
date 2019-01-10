@@ -218,7 +218,14 @@ pub enum Instruction {
     /// then sets the program counter to the target memory address.
     JSR,
 
+    /// Load Accumulator
+    ///
+    /// A,Z,N = M
+    ///
+    /// Loads a byte of memory into the accumulator setting the zero and negative flags as
+    /// appropriate.
     LDA(FlexibleAddressingMode),
+
     LDX(LDXAddressingMode),
     LDY(LDYAddressingMode),
     LSR(ShiftAddressingMode),
