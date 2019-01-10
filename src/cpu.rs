@@ -210,6 +210,8 @@ struct Status {
 
 #[derive(Debug, Copy, Clone)]
 pub enum Instruction {
+    /// Add With Carry
+    ///
     /// A,Z,C,N = A+M+C
     ///
     /// This instruction adds the contents of a memory location to the accumulator together with the
@@ -217,12 +219,16 @@ pub enum Instruction {
     /// be performed.
     ADC,
 
+    /// Logical AND
+    ///
     /// A,Z,N = A&M
     ///
     /// A logical AND is performed, bit by bit, on the accumulator contents using the contents of a
     /// byte of memory.
     AND,
 
+    /// Arithmetic Shift Left
+    ///
     /// A,Z,C,N = M*2 or M,Z,C,N = M*2
     ///
     /// This operation shifts all the bits of the accumulator or memory contents one bit left. Bit 0
@@ -231,18 +237,26 @@ pub enum Instruction {
     /// carry if the result will not fit in 8 bits.
     ASL,
 
+    /// Branch if Carry Clear
+    ///
     /// If the carry flag is clear then add the relative displacement to the program counter to
     /// cause a branch to a new location.
     BCC,
 
+    /// Branch if Carry Set
+    ///
     /// If the carry flag is set then add the relative displacement to the program counter to cause
     /// a branch to a new location.
     BCS,
 
+    /// Branch if Equal
+    ///
     /// If the zero flag is set then add the relative displacement to the program counter to cause a
     /// branch to a new location.
     BEQ,
 
+    /// Bit Test
+    ///
     /// A & M, N = M7, V = M6
     ///
     /// This instructions is used to test if one or more bits are set in a target memory location.
@@ -251,46 +265,66 @@ pub enum Instruction {
     /// flags.
     BIT,
 
+    /// Branch if Minus
+    ///
     /// If the negative flag is set then add the relative displacement to the program counter to
     /// cause a branch to a new location.
     BMI,
 
+    /// Branch if Not Equal
+    ///
     /// If the zero flag is clear then add the relative displacement to the program counter to cause
     /// a branch to a new location.
     BNE,
 
+    /// Branch if Positive
+    ///
     /// If the negative flag is clear then add the relative displacement to the program counter to
     /// cause a branch to a new location.
     BPL,
 
+    /// Force Interrupt
+    ///
     /// The BRK instruction forces the generation of an interrupt request. The program counter and
     /// processor status are pushed on the stack then the IRQ interrupt vector at $FFFE/F is loaded
     /// into the PC and the break flag in the status set to one.
     BRK,
 
+    /// Branch if Overflow Clear
+    ///
     /// If the overflow flag is clear then add the relative displacement to the program counter to
     /// cause a branch to a new location.
     BVC,
 
+    /// Branch if Overflow Set
+    ///
     /// If the overflow flag is set then add the relative displacement to the program counter to
     /// cause a branch to a new location.
     BVS,
 
+    /// Clear Carry Flag
+    ///
     /// C = 0
     ///
     /// Set the carry flag to zero.
     CLC,
 
+    /// Clear Decimal Mode
+    ///
     /// D = 0
     ///
     /// Sets the decimal mode flag to zero.
     CLD,
 
+    /// Clear Interrupt Disable
+    ///
     /// I = 0
     ///
     /// Clears the interrupt disable flag allowing normal interrupt requests to be serviced.
     CLI,
 
+    /// Clear Overflow Flag
+    ///
     /// V = 0
     ///
     /// Clears the overflow flag.
