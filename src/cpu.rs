@@ -100,28 +100,37 @@ impl CPU {
                 // Perform the operation again, but signed, to check for signed overflow
                 self.status.overflow = (self.accumulator as i8).overflowing_add(value as i8).1;
 
-                self.accumulator = result;
+                self.set_accumulator(result);
                 self.status.carry = carry;
             }
             AND => {
                 let value = self.fetch_by(opcode.addressing_mode());
 
-                self.accumulator &= value;
+                self.set_accumulator(self.accumulator & value);
             }
             ASL => {
                 let value = self.fetch_by(opcode.addressing_mode());
 
                 self.status.carry = value >= 0b10000000;
-                self.accumulator = value << 1;
+                self.set_accumulator(value << 1);
             }
             BCC => self.branch_if(!self.status.carry),
             BCS => self.branch_if(self.status.carry),
             BEQ => self.branch_if(self.status.zero),
+            BIT => {
+                let value = self.fetch_by(opcode.addressing_mode());
+                self.status.zero = (self.accumulator & value) == 0;
+                self.status.overflow = value & (1 << 6) != 0;
+                self.status.negative = value & (1 << 7) != 0;
+            }
             _ => unimplemented!("{:?}", instr),
         }
+    }
 
-        self.status.zero = self.accumulator == 0;
-        self.status.negative = (self.accumulator as i8).is_negative();
+    fn set_accumulator(&mut self, value: u8) {
+        self.accumulator = value;
+        self.status.zero = value == 0;
+        self.status.negative = (value as i8).is_negative();
     }
 
     fn branch_if(&mut self, cond: bool) {
@@ -224,7 +233,14 @@ pub enum Instruction {
     /// branch to a new location.
     BEQ,
 
+    /// A & M, N = M7, V = M6
+    ///
+    /// This instructions is used to test if one or more bits are set in a target memory location.
+    /// The mask pattern in A is ANDed with the value in memory to set or clear the zero flag, but
+    /// the result is not kept. Bits 7 and 6 of the value from memory are copied into the N and V
+    /// flags.
     BIT,
+
     BMI,
     BNE,
     BPL,
@@ -443,6 +459,56 @@ mod tests {
 
         // 2 steps ahead because PC also automatically increments
         assert_eq!(cpu.program_counter, Address(82));
+    }
+
+    #[test]
+    fn can_exec_bit_when_result_is_zero() {
+        let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
+            cpu.accumulator = 0b11110000u8;
+            cpu.set(Address(654), 0b00001111u8);
+        });
+
+        assert_eq!(cpu.status.zero, true);
+    }
+
+    #[test]
+    fn can_exec_bit_when_result_is_non_zero() {
+        let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
+            cpu.accumulator = 0b11111100u8;
+            cpu.set(Address(654), 0b00111111u8);
+        });
+
+        assert_eq!(cpu.status.zero, false);
+    }
+
+    #[test]
+    fn can_exec_bit_and_set_overflow_bit() {
+        let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
+            cpu.set(Address(654), 0u8);
+        });
+
+        assert_eq!(cpu.status.overflow, false);
+
+        let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
+            cpu.set(Address(654), 0b01000000u8);
+        });
+
+        assert_eq!(cpu.status.overflow, true);
+    }
+
+    #[test]
+    fn can_exec_bit_and_set_negative_bit() {
+        let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
+            cpu.set(Address(654), 0u8);
+        });
+
+        assert_eq!(cpu.status.negative, false);
+
+        let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
+            cpu.set(Address(654), 0b10000000u8);
+        });
+
+        assert_eq!(cpu.status.negative, true);
     }
 
     #[test]
