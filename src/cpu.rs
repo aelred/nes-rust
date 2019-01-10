@@ -123,6 +123,7 @@ impl CPU {
                 self.status.overflow = value & (1 << 6) != 0;
                 self.status.negative = value & (1 << 7) != 0;
             }
+            BMI => self.branch_if(self.status.negative),
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -241,7 +242,10 @@ pub enum Instruction {
     /// flags.
     BIT,
 
+    /// If the negative flag is set then add the relative displacement to the program counter to
+    /// cause a branch to a new location.
     BMI,
+
     BNE,
     BPL,
     BRK,
@@ -509,6 +513,27 @@ mod tests {
         });
 
         assert_eq!(cpu.status.negative, true);
+    }
+
+    #[test]
+    fn instr_bmi_does_not_branch_when_negative_flag_clear() {
+        let cpu = run_instr(mem!(BMI, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.negative = false;
+        });
+
+        assert_eq!(cpu.program_counter, Address(92));
+    }
+
+    #[test]
+    fn instr_bmi_branches_when_negative_flag_set() {
+        let cpu = run_instr(mem!(BMI, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.negative = true;
+        });
+
+        // 2 steps ahead because PC also automatically increments
+        assert_eq!(cpu.program_counter, Address(82));
     }
 
     #[test]
