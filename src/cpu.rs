@@ -83,6 +83,14 @@ struct CPU {
     status: Status,
 }
 
+fn bit6(value: u8) -> bool {
+    value & (1 << 6) != 0
+}
+
+fn bit7(value: u8) -> bool {
+    value & (1 << 7) != 0
+}
+
 impl CPU {
     fn run_instruction(&mut self) {
         use self::Instruction::*;
@@ -111,7 +119,7 @@ impl CPU {
             ASL => {
                 let value = self.fetch_by(opcode.addressing_mode());
 
-                self.status.carry = value >= 0b10000000;
+                self.status.carry = bit7(value);
                 self.set_accumulator(value << 1);
             }
             BCC => self.branch_if(!self.status.carry),
@@ -120,8 +128,8 @@ impl CPU {
             BIT => {
                 let value = self.fetch_by(opcode.addressing_mode());
                 self.status.zero = (self.accumulator & value) == 0;
-                self.status.overflow = value & (1 << 6) != 0;
-                self.status.negative = value & (1 << 7) != 0;
+                self.status.overflow = bit6(value);
+                self.status.negative = bit7(value);
             }
             BMI => self.branch_if(self.status.negative),
             BNE => self.branch_if(!self.status.zero),
@@ -145,13 +153,13 @@ impl CPU {
         let (result, carry) = register.overflowing_sub(value);
         self.status.carry = !carry;
         self.status.zero = result == 0;
-        self.status.negative = result & (1 << 7) != 0;
+        self.status.negative = bit7(result);
     }
 
     fn set_accumulator(&mut self, value: u8) {
         self.accumulator = value;
         self.status.zero = value == 0;
-        self.status.negative = (value as i8).is_negative();
+        self.status.negative = bit7(value);
     }
 
     fn branch_if(&mut self, cond: bool) {
