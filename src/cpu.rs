@@ -139,6 +139,11 @@ impl CPU {
                 let value = *self.fetch(addressing_mode);
                 self.set_accumulator(value);
             }
+            LDX(addressing_mode) => {
+                let value = *self.fetch(addressing_mode);
+                self.x = value;
+                self.set_flags(value);
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1035,6 +1040,13 @@ mod tests {
         let cpu = run_instr(mem!(LDAImmediate, 5u8), |cpu| {});
 
         assert_eq!(*cpu.accumulator(), 5);
+    }
+
+    #[test]
+    fn instr_ldx_loads_operand_into_x_register() {
+        let cpu = run_instr(mem!(LDXImmediate, 5u8), |cpu| {});
+
+        assert_eq!(cpu.x, 5);
     }
 
     #[test]

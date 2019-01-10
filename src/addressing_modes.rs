@@ -160,6 +160,18 @@ pub enum LDXAddressingMode {
     AbsoluteY,
 }
 
+impl ValueAddressingMode for LDXAddressingMode {
+    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+        match self {
+            LDXAddressingMode::Immediate => addressable.immediate(),
+            LDXAddressingMode::ZeroPage => addressable.zero_page(),
+            LDXAddressingMode::ZeroPageY => addressable.zero_page_y(),
+            LDXAddressingMode::Absolute => addressable.absolute(),
+            LDXAddressingMode::AbsoluteY => addressable.absolute_y(),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum LDYAddressingMode {
     Immediate,

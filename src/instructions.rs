@@ -226,7 +226,14 @@ pub enum Instruction {
     /// appropriate.
     LDA(FlexibleAddressingMode),
 
+    /// Load X Register
+    ///
+    /// X,Z,N = M
+    ///
+    /// Loads a byte of memory into the X register setting the zero and negative flags as
+    /// appropriate.
     LDX(LDXAddressingMode),
+    
     LDY(LDYAddressingMode),
     LSR(ShiftAddressingMode),
     NOP,
