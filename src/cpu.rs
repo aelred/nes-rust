@@ -30,19 +30,19 @@ impl SerializeBytes for OpCode {
 struct Address(u16);
 
 impl Address {
-    fn from_bytes(lower: u8, higher: u8) -> Self {
+    fn from_bytes(higher: u8, lower: u8) -> Self {
         Address((u16::from(higher) << 8) + u16::from(lower))
     }
 
     fn split(self) -> (u8, u8) {
-        (self.0 as u8, (self.0 >> 8) as u8)
+        ((self.0 >> 8) as u8, self.0 as u8)
     }
 }
 
 impl SerializeBytes for Address {
     fn bytes(self) -> Vec<u8> {
-        let (lower, higher) = self.split();
-        vec![lower, higher]
+        let (higher, lower) = self.split();
+        vec![higher, lower]
     }
 }
 
@@ -265,9 +265,9 @@ impl Addressable {
                 panic!("{:?} does not provide an address", addressing_mode)
             }
             AddressingMode::Absolute => {
-                let lower = *self.fetch();
                 let higher = *self.fetch();
-                Address::from_bytes(lower, higher)
+                let lower = *self.fetch();
+                Address::from_bytes(higher, lower)
             }
             _ => unimplemented!("{:?}", addressing_mode),
         }
@@ -1268,9 +1268,9 @@ mod tests {
     #[test]
     fn absolute_addressing_mode_fetches_values_at_given_address() {
         let mut cpu = CPU::default();
-        let (lower, higher) = Address(432).split();
-        cpu.set(*cpu.program_counter(), lower);
-        cpu.set(*cpu.program_counter() + 1u16, higher);
+        let (higher, lower) = Address(432).split();
+        cpu.set(*cpu.program_counter(), higher);
+        cpu.set(*cpu.program_counter() + 1u16, lower);
         cpu.set(Address(432), 35);
         assert_eq!(*cpu.fetch_by(AddressingMode::Absolute), 35);
     }
