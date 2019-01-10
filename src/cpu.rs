@@ -126,6 +126,7 @@ impl CPU {
             BMI => self.branch_if(self.status.negative),
             BNE => self.branch_if(!self.status.zero),
             BPL => self.branch_if(!self.status.negative),
+            BRK => unimplemented!("BRK"), // TODO
             _ => unimplemented!("{:?}", instr),
         }
     }
