@@ -494,7 +494,7 @@ impl OpCode {
             OpCode::ADCIndexedIndirect => ADC(FlexibleAddressingMode::IndexedIndirect),
             OpCode::ADCZeroPage => ADC(FlexibleAddressingMode::ZeroPage),
             OpCode::RORZeroPage => ROR(ShiftAddressingMode::ZeroPage),
-            OpCode::PLA => PHA,
+            OpCode::PLA => PLA,
             OpCode::ADCImmediate => ADC(FlexibleAddressingMode::Immediate),
             OpCode::RORAccumulator => ROR(ShiftAddressingMode::Accumulator),
             OpCode::JMPIndirect => JMP(JumpAddressingMode::Indirect),
