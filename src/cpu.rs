@@ -3,6 +3,9 @@ use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use std::ops::Add;
 use std::ops::AddAssign;
+use std::ops::Sub;
+
+const STACK: Address = Address(0x0100);
 
 pub trait SerializeBytes {
     fn bytes(self) -> Vec<u8>;
@@ -49,6 +52,22 @@ impl SerializeBytes for Address {
 impl AddAssign<i8> for Address {
     fn add_assign(&mut self, rhs: i8) {
         self.0 = self.0.wrapping_add(rhs as u16);
+    }
+}
+
+impl Add<u8> for Address {
+    type Output = Address;
+
+    fn add(self, rhs: u8) -> <Self as Add<u8>>::Output {
+        Address(self.0 + rhs as u16)
+    }
+}
+
+impl Sub<u8> for Address {
+    type Output = Address;
+
+    fn sub(self, rhs: u8) -> <Self as Sub<u8>>::Output {
+        Address(self.0 - rhs as u16)
     }
 }
 
@@ -160,6 +179,21 @@ impl CPU {
             INY => CPU::increment(&mut self.status, &mut self.y),
             JMP => {
                 let addr = self.addressable.fetch_address(opcode.addressing_mode());
+                *self.program_counter_mut() = addr;
+            }
+            JSR => {
+                let addr = self.addressable.fetch_address(opcode.addressing_mode());
+
+                // For some reason the spec says the pointer must be to the last byte of the JSR
+                // instruction...
+                let data = (*self.program_counter() - 1).bytes();
+
+                for byte in data.into_iter() {
+                    let addr = self.addressable.deref_address(STACK + self.stack_pointer);
+                    *addr = byte;
+                    self.stack_pointer -= 1;
+                }
+
                 *self.program_counter_mut() = addr;
             }
             _ => unimplemented!("{:?}", instr),
@@ -513,7 +547,12 @@ pub enum Instruction {
     /// Sets the program counter to the address specified by the operand.
     JMP,
 
+    /// Jump to Subroutine
+    ///
+    /// The JSR instruction pushes the address (minus one) of the return point on to the stack and
+    /// then sets the program counter to the target memory address.
     JSR,
+
     LDA,
     LDX,
     LDY,
@@ -1235,6 +1274,36 @@ mod tests {
         });
 
         assert_eq!(*cpu.program_counter(), Address(100));
+    }
+
+    #[test]
+    fn instr_jsr_jumps_to_operand() {
+        let cpu = run_instr(mem!(JSR, Address(100)), |cpu| {
+            *cpu.program_counter_mut() = Address(200);
+        });
+
+        assert_eq!(*cpu.program_counter(), Address(100));
+    }
+
+    #[test]
+    fn instr_jsr_writes_program_counter_to_stack_pointer() {
+        let cpu = run_instr(mem!(JSR, Address(100)), |cpu| {
+            *cpu.program_counter_mut() = Address(0x1234);
+            cpu.stack_pointer = 6;
+        });
+
+        // Program counter points to last byte of JSR instruction
+        assert_eq!(cpu.get(STACK + 6u8), 0x12);
+        assert_eq!(cpu.get(STACK + 5u8), 0x36);
+    }
+
+    #[test]
+    fn instr_jsr_decrements_stack_pointer_by_two_bytes() {
+        let cpu = run_instr(mem!(JSR, Address(0x0123)), |cpu| {
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.stack_pointer, 4);
     }
 
     #[test]
