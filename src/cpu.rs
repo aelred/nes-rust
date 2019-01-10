@@ -152,8 +152,18 @@ impl CPU {
                 let value = *self.fetch_by(opcode.addressing_mode());
                 self.set_accumulator(self.accumulator() ^ value);
             }
+            INC => {
+                let addr = self.addressable.fetch_by(opcode.addressing_mode());
+                CPU::increment(&mut self.status, addr);
+            }
             _ => unimplemented!("{:?}", instr),
         }
+    }
+
+    fn increment(status: &mut Status, addr: &mut u8) {
+        let value = addr.wrapping_add(1);
+        *addr = value;
+        status.set_flags(value);
     }
 
     fn decrement(status: &mut Status, addr: &mut u8) {
@@ -463,7 +473,14 @@ pub enum Instruction {
     /// a byte of memory.
     EOR,
 
+    /// Increment Memory
+    ///
+    /// M,Z,N = M+1
+    ///
+    /// Adds one to the value held at a specified memory location setting the zero and negative
+    /// flags as appropriate.
     INC,
+
     INX,
     INY,
     JMP,
@@ -1119,6 +1136,49 @@ mod tests {
         });
 
         assert_eq!(*cpu.accumulator(), 0b0110);
+    }
+
+    #[test]
+    fn instr_inc_increments_operand() {
+        let cpu = run_instr(mem!(INCAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), 45);
+        });
+
+        assert_eq!(cpu.get(Address(100)), 46);
+    }
+
+    #[test]
+    fn instr_inc_sets_zero_flag_based_on_result() {
+        let cpu = run_instr(mem!(INCAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), 45);
+        });
+
+        assert_eq!(cpu.get(Address(100)), 46);
+        assert_eq!(cpu.status.zero, false);
+
+        let cpu = run_instr(mem!(INCAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), -1i8 as u8);
+        });
+
+        assert_eq!(cpu.get(Address(100)), 0);
+        assert_eq!(cpu.status.zero, true);
+    }
+
+    #[test]
+    fn instr_inc_sets_negative_flag_based_on_result() {
+        let cpu = run_instr(mem!(INCAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), 45);
+        });
+
+        assert_eq!(cpu.get(Address(100)), 46);
+        assert_eq!(cpu.status.zero, false);
+
+        let cpu = run_instr(mem!(INCAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), -10i8 as u8);
+        });
+
+        assert_eq!(cpu.get(Address(100)) as i8, -9i8);
+        assert_eq!(cpu.status.negative, true);
     }
 
     #[test]
