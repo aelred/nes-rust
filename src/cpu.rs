@@ -1,3 +1,15 @@
+use crate::addressing_modes::BITAddressingMode;
+use crate::addressing_modes::CompareAddressingMode;
+use crate::addressing_modes::FlexibleAddressingMode;
+use crate::addressing_modes::IncDecAddressingMode;
+use crate::addressing_modes::JumpAddressingMode;
+use crate::addressing_modes::LDXAddressingMode;
+use crate::addressing_modes::LDYAddressingMode;
+use crate::addressing_modes::STXAddressingMode;
+use crate::addressing_modes::STYAddressingMode;
+use crate::addressing_modes::ShiftAddressingMode;
+use crate::addressing_modes::StoreAddressingMode;
+use crate::addressing_modes::ValueAddressingMode;
 use crate::opcodes::OpCode;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
@@ -30,7 +42,7 @@ impl SerializeBytes for OpCode {
 }
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
-struct Address(u16);
+pub struct Address(u16);
 
 impl Address {
     fn from_bytes(higher: u8, lower: u8) -> Self {
@@ -109,13 +121,9 @@ impl CPU {
     fn run_instruction(&mut self) {
         use self::Instruction::*;
 
-        let data = *self.fetch();
-        let opcode = OpCode::from_u8(data).expect("Unrecognised opcode");
-        let instr = opcode.instruction();
-
-        match instr {
-            ADC => {
-                let value = *self.fetch_by(opcode.addressing_mode());
+        match self.addressable.instr() {
+            ADC(addressing_mode) => {
+                let value = *self.fetch(addressing_mode);
 
                 let (result, carry) = self.accumulator().overflowing_add(value);
 
@@ -125,12 +133,12 @@ impl CPU {
                 self.set_accumulator(result);
                 self.status.carry = carry;
             }
-            AND => {
-                let value = *self.fetch_by(opcode.addressing_mode());
+            AND(addressing_mode) => {
+                let value = *self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() & value);
             }
-            ASL => {
-                let addr = self.fetch_by(opcode.addressing_mode());
+            ASL(addressing_mode) => {
+                let addr = self.fetch(addressing_mode);
 
                 let old_value = *addr;
                 *addr <<= 1;
@@ -142,8 +150,8 @@ impl CPU {
             BCC => self.branch_if(!self.status.carry),
             BCS => self.branch_if(self.status.carry),
             BEQ => self.branch_if(self.status.zero),
-            BIT => {
-                let value = *self.fetch_by(opcode.addressing_mode());
+            BIT(addressing_mode) => {
+                let value = *self.fetch(addressing_mode);
                 self.status.zero = (self.accumulator() & value) == 0;
                 self.status.overflow = bit6(value);
                 self.status.negative = bit7(value);
@@ -158,31 +166,31 @@ impl CPU {
             CLD => self.status.decimal = false,
             CLI => self.status.interrupt_disable = false,
             CLV => self.status.overflow = false,
-            CMP => self.compare(*self.accumulator(), opcode),
-            CPX => self.compare(self.x, opcode),
-            CPY => self.compare(self.y, opcode),
-            DEC => {
-                let addr = self.addressable.fetch_by(opcode.addressing_mode());
+            CMP(addressing_mode) => self.compare(*self.accumulator(), addressing_mode),
+            CPX(addressing_mode) => self.compare(self.x, addressing_mode),
+            CPY(addressing_mode) => self.compare(self.y, addressing_mode),
+            DEC(addressing_mode) => {
+                let addr = self.addressable.fetch(addressing_mode);
                 CPU::decrement(&mut self.status, addr);
-            },
+            }
             DEX => CPU::decrement(&mut self.status, &mut self.x),
             DEY => CPU::decrement(&mut self.status, &mut self.y),
-            EOR => {
-                let value = *self.fetch_by(opcode.addressing_mode());
+            EOR(addressing_mode) => {
+                let value = *self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() ^ value);
             }
-            INC => {
-                let addr = self.addressable.fetch_by(opcode.addressing_mode());
+            INC(addressing_mode) => {
+                let addr = self.addressable.fetch(addressing_mode);
                 CPU::increment(&mut self.status, addr);
             }
             INX => CPU::increment(&mut self.status, &mut self.x),
             INY => CPU::increment(&mut self.status, &mut self.y),
-            JMP => {
-                let addr = self.addressable.fetch_address(opcode.addressing_mode());
+            JMP(addressing_mode) => {
+                let addr = addressing_mode.fetch_address(&mut self.addressable);
                 *self.program_counter_mut() = addr;
             }
             JSR => {
-                let addr = self.addressable.fetch_address(opcode.addressing_mode());
+                let addr = self.addressable.absolute_address();
 
                 // For some reason the spec says the pointer must be to the last byte of the JSR
                 // instruction...
@@ -196,7 +204,7 @@ impl CPU {
 
                 *self.program_counter_mut() = addr;
             }
-            _ => unimplemented!("{:?}", instr),
+            instr => unimplemented!("{:?}", instr),
         }
     }
 
@@ -228,8 +236,8 @@ impl CPU {
         &mut self.addressable.program_counter
     }
 
-    fn compare(&mut self, register: u8, opcode: OpCode) {
-        let value = *self.fetch_by(opcode.addressing_mode());
+    fn compare<T: ValueAddressingMode>(&mut self, register: u8, addressing_mode: T) {
+        let value = *self.fetch(addressing_mode);
         let (result, carry) = register.overflowing_sub(value);
         self.status.carry = !carry;
         self.set_flags(result);
@@ -245,18 +253,14 @@ impl CPU {
     }
 
     fn branch_if(&mut self, cond: bool) {
-        let offset = *self.fetch() as i8;
+        let offset = self.addressable.relative();
         if cond {
             *self.program_counter_mut() += offset;
         }
     }
 
-    fn fetch_by(&mut self, addressing_mode: AddressingMode) -> &mut u8 {
-        self.addressable.fetch_by(addressing_mode)
-    }
-
-    fn fetch(&mut self) -> &mut u8 {
-        self.addressable.fetch()
+    fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> &mut u8 {
+        self.addressable.fetch(addressing_mode)
     }
 }
 
@@ -283,7 +287,7 @@ impl Default for CPU {
     }
 }
 
-struct Addressable {
+pub struct Addressable {
     /// 2KB of internal RAM, plus more mapped space
     memory: [u8; 0xffff],
     /// A
@@ -293,39 +297,79 @@ struct Addressable {
 }
 
 impl Addressable {
-    fn fetch_address(&mut self, addressing_mode: AddressingMode) -> Address {
-        match addressing_mode {
-            AddressingMode::Implied | AddressingMode::Relative | AddressingMode::Immediate | AddressingMode::Accumulator => {
-                panic!("{:?} does not provide an address", addressing_mode)
-            }
-            AddressingMode::Absolute => {
-                let higher = *self.fetch();
-                let lower = *self.fetch();
-                Address::from_bytes(higher, lower)
-            }
-            _ => unimplemented!("{:?}", addressing_mode),
-        }
+    pub fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> &mut u8 {
+        addressing_mode.fetch(self)
     }
 
-    fn fetch_by(&mut self, addressing_mode: AddressingMode) -> &mut u8 {
-        match addressing_mode {
-            AddressingMode::Immediate => self.fetch(),
-            AddressingMode::Accumulator => &mut self.accumulator,
-            mode => {
-                let address = self.fetch_address(mode);
-                self.deref_address(address)
-            }
-        }
+    pub fn accumulator(&mut self) -> &mut u8 {
+        &mut self.accumulator
     }
 
-    fn fetch(&mut self) -> &mut u8 {
+    pub fn immediate(&mut self) -> &mut u8 {
+        self.fetch_at_program_counter()
+    }
+
+    pub fn zero_page(&mut self) -> &mut u8 {
+        unimplemented!();
+    }
+
+    pub fn zero_page_x(&mut self) -> &mut u8 {
+        unimplemented!();
+    }
+
+    pub fn zero_page_y(&mut self) -> &mut u8 {
+        unimplemented!();
+    }
+
+    pub fn relative(&mut self) -> i8 {
+        *self.fetch_at_program_counter() as i8
+    }
+
+    pub fn absolute(&mut self) -> &mut u8 {
+        let address = self.absolute_address();
+        self.deref_address(address)
+    }
+
+    pub fn absolute_address(&mut self) -> Address {
+        let higher = *self.fetch_at_program_counter();
+        let lower = *self.fetch_at_program_counter();
+        Address::from_bytes(higher, lower)
+    }
+
+    pub fn absolute_x(&mut self) -> &mut u8 {
+        unimplemented!();
+    }
+
+    pub fn absolute_y(&mut self) -> &mut u8 {
+        unimplemented!();
+    }
+
+    pub fn indirect_address(&mut self) -> Address {
+        unimplemented!();
+    }
+
+    pub fn indirect_indexed(&mut self) -> &mut u8 {
+        unimplemented!();
+    }
+
+    pub fn indexed_indirect(&mut self) -> &mut u8 {
+        unimplemented!();
+    }
+
+    fn instr(&mut self) -> Instruction {
+        let data = *self.fetch_at_program_counter();
+        let opcode = OpCode::from_u8(data).expect("Unrecognised opcode");
+        opcode.instruction()
+    }
+
+    pub fn deref_address(&mut self, address: Address) -> &mut u8 {
+        &mut self.memory[address.0 as usize]
+    }
+
+    fn fetch_at_program_counter(&mut self) -> &mut u8 {
         let old_program_counter = self.program_counter;
         self.program_counter += 1u16;
         self.deref_address(old_program_counter)
-    }
-
-    fn deref_address(&mut self, address: Address) -> &mut u8 {
-        &mut self.memory[address.0 as usize]
     }
 }
 
@@ -354,7 +398,7 @@ pub enum Instruction {
     /// This instruction adds the contents of a memory location to the accumulator together with the
     /// carry bit. If overflow occurs the carry bit is set, this enables multiple byte addition to
     /// be performed.
-    ADC,
+    ADC(FlexibleAddressingMode),
 
     /// Logical AND
     ///
@@ -362,7 +406,7 @@ pub enum Instruction {
     ///
     /// A logical AND is performed, bit by bit, on the accumulator contents using the contents of a
     /// byte of memory.
-    AND,
+    AND(FlexibleAddressingMode),
 
     /// Arithmetic Shift Left
     ///
@@ -372,7 +416,7 @@ pub enum Instruction {
     /// is set to 0 and bit 7 is placed in the carry flag. The effect of this operation is to
     /// multiply the memory contents by 2 (ignoring 2's complement considerations), setting the
     /// carry if the result will not fit in 8 bits.
-    ASL,
+    ASL(ShiftAddressingMode),
 
     /// Branch if Carry Clear
     ///
@@ -400,7 +444,7 @@ pub enum Instruction {
     /// The mask pattern in A is ANDed with the value in memory to set or clear the zero flag, but
     /// the result is not kept. Bits 7 and 6 of the value from memory are copied into the N and V
     /// flags.
-    BIT,
+    BIT(BITAddressingMode),
 
     /// Branch if Minus
     ///
@@ -473,7 +517,7 @@ pub enum Instruction {
     ///
     /// This instruction compares the contents of the accumulator with another memory held value and
     /// sets the zero and carry flags as appropriate.
-    CMP,
+    CMP(FlexibleAddressingMode),
 
     /// Compare X Register
     ///
@@ -481,7 +525,7 @@ pub enum Instruction {
     ///
     /// This instruction compares the contents of the X register with another memory held value and
     /// sets the zero and carry flags as appropriate.
-    CPX,
+    CPX(CompareAddressingMode),
 
     /// Compare Y Register
     ///
@@ -489,7 +533,7 @@ pub enum Instruction {
     ///
     /// This instruction compares the contents of the Y register with another memory held value and
     /// sets the zero and carry flags as appropriate.
-    CPY,
+    CPY(CompareAddressingMode),
 
     /// Decrement Memory
     ///
@@ -497,7 +541,7 @@ pub enum Instruction {
     ///
     /// Subtracts one from the value held at a specified memory location setting the zero and
     /// negative flags as appropriate.
-    DEC,
+    DEC(IncDecAddressingMode),
 
     /// Decrement X Register
     ///
@@ -519,7 +563,7 @@ pub enum Instruction {
     ///
     /// An exclusive OR is performed, bit by bit, on the accumulator contents using the contents of
     /// a byte of memory.
-    EOR,
+    EOR(FlexibleAddressingMode),
 
     /// Increment Memory
     ///
@@ -527,7 +571,7 @@ pub enum Instruction {
     ///
     /// Adds one to the value held at a specified memory location setting the zero and negative
     /// flags as appropriate.
-    INC,
+    INC(IncDecAddressingMode),
 
     /// Increment X Register
     ///
@@ -545,7 +589,7 @@ pub enum Instruction {
     /// Jump
     ///
     /// Sets the program counter to the address specified by the operand.
-    JMP,
+    JMP(JumpAddressingMode),
 
     /// Jump to Subroutine
     ///
@@ -553,50 +597,33 @@ pub enum Instruction {
     /// then sets the program counter to the target memory address.
     JSR,
 
-    LDA,
-    LDX,
-    LDY,
-    LSR,
+    LDA(FlexibleAddressingMode),
+    LDX(LDXAddressingMode),
+    LDY(LDYAddressingMode),
+    LSR(ShiftAddressingMode),
     NOP,
-    ORA,
+    ORA(FlexibleAddressingMode),
     PHA,
     PHP,
     PLA,
     PLP,
-    ROL,
-    ROR,
+    ROL(ShiftAddressingMode),
+    ROR(ShiftAddressingMode),
     RTI,
     RTS,
-    SBC,
+    SBC(FlexibleAddressingMode),
     SEC,
     SED,
     SEI,
-    STA,
-    STX,
-    STY,
+    STA(StoreAddressingMode),
+    STX(STXAddressingMode),
+    STY(STYAddressingMode),
     TAX,
     TAY,
     TSX,
     TXA,
     TXS,
     TYA,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum AddressingMode {
-    Implied,
-    Immediate,
-    Accumulator,
-    Relative,
-    ZeroPage,
-    ZeroPageX,
-    ZeroPageY,
-    Absolute,
-    AbsoluteX,
-    AbsoluteY,
-    Indirect,
-    IndexedIndirect,
-    IndirectIndexed,
 }
 
 #[cfg(test)]
@@ -1307,31 +1334,17 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn implied_addressing_mode_does_not_fetch() {
-        let mut cpu = CPU::default();
-        cpu.fetch_by(AddressingMode::Implied);
-    }
-
-    #[test]
     fn immediate_addressing_mode_fetches_given_value() {
         let mut cpu = CPU::default();
         cpu.set(*cpu.program_counter(), 56);
-        assert_eq!(*cpu.fetch_by(AddressingMode::Immediate), 56);
+        assert_eq!(*cpu.addressable.immediate(), 56);
     }
 
     #[test]
     fn accumulator_addressing_mode_fetches_accumulator_value() {
         let mut cpu = CPU::default();
         *cpu.accumulator_mut() = 76;
-        assert_eq!(*cpu.fetch_by(AddressingMode::Accumulator), 76);
-    }
-
-    #[test]
-    #[should_panic]
-    fn relative_addressing_mode_does_not_fetch() {
-        let mut cpu = CPU::default();
-        cpu.fetch_by(AddressingMode::Relative);
+        assert_eq!(*cpu.addressable.accumulator(), 76);
     }
 
     #[test]
@@ -1341,7 +1354,7 @@ mod tests {
         cpu.set(*cpu.program_counter(), higher);
         cpu.set(*cpu.program_counter() + 1u16, lower);
         cpu.set(Address(432), 35);
-        assert_eq!(*cpu.fetch_by(AddressingMode::Absolute), 35);
+        assert_eq!(*cpu.addressable.absolute(), 35);
     }
 
     #[test]
