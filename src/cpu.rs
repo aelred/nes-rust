@@ -127,6 +127,7 @@ impl CPU {
             BNE => self.branch_if(!self.status.zero),
             BPL => self.branch_if(!self.status.negative),
             BRK => unimplemented!("BRK"), // TODO
+            BVC => self.branch_if(!self.status.overflow),
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -262,7 +263,10 @@ pub enum Instruction {
     /// into the PC and the break flag in the status set to one.
     BRK,
 
+    /// If the overflow flag is clear then add the relative displacement to the program counter to
+    /// cause a branch to a new location.
     BVC,
+
     BVS,
     CLC,
     CLD,
@@ -586,6 +590,27 @@ mod tests {
         let cpu = run_instr(mem!(BPL, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.negative = true;
+        });
+
+        assert_eq!(cpu.program_counter, Address(92));
+    }
+
+    #[test]
+    fn instr_bvc_branches_when_overflow_flag_clear() {
+        let cpu = run_instr(mem!(BVC, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.overflow = false;
+        });
+
+        // 2 steps ahead because PC also automatically increments
+        assert_eq!(cpu.program_counter, Address(82));
+    }
+
+    #[test]
+    fn instr_bvc_does_not_branch_when_overflow_flag_set() {
+        let cpu = run_instr(mem!(BVC, -10i8), |cpu| {
+            cpu.program_counter = Address(90);
+            cpu.status.overflow = true;
         });
 
         assert_eq!(cpu.program_counter, Address(92));
