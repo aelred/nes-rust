@@ -117,10 +117,15 @@ impl CPU {
                 self.set_accumulator(self.accumulator & value);
             }
             ASL => {
-                let value = *self.fetch_by(opcode.addressing_mode());
+                let addr = self.fetch_by(opcode.addressing_mode());
 
-                self.status.carry = bit7(value);
-                self.set_accumulator(value << 1);
+                let old_value = *addr;
+                *addr <<= 1;
+                let new_value = *addr;
+
+                self.status.carry = bit7(old_value);
+                self.status.zero = new_value == 0;
+                self.status.negative = bit7(new_value);
             }
             BCC => self.branch_if(!self.status.carry),
             BCS => self.branch_if(self.status.carry),
@@ -515,6 +520,15 @@ mod tests {
 
         assert_eq!(cpu.accumulator, 0b01010100);
         assert_eq!(cpu.status.carry, true);
+    }
+
+    #[test]
+    fn instr_asl_can_operate_on_memory() {
+        let cpu = run_instr(mem!(ASLAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), 0b100);
+        });
+
+        assert_eq!(cpu.get(Address(100)), 0b1000);
     }
 
     #[test]
@@ -1015,6 +1029,10 @@ mod tests {
     impl CPU {
         fn set(&mut self, address: Address, byte: u8) {
             self.memory[address.0 as usize] = byte;
+        }
+
+        fn get(&self, address: Address) -> u8 {
+            self.memory[address.0 as usize]
         }
     }
 }
