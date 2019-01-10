@@ -132,6 +132,7 @@ impl CPU {
             CLC => self.status.carry = false,
             CLD => self.status.decimal = false,
             CLI => self.status.interrupt_disable = false,
+            CLV => self.status.overflow = false,
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -290,7 +291,11 @@ pub enum Instruction {
     /// Clears the interrupt disable flag allowing normal interrupt requests to be serviced.
     CLI,
 
+    /// V = 0
+    ///
+    /// Clears the overflow flag.
     CLV,
+
     CMP,
     CPX,
     CPY,
@@ -681,6 +686,15 @@ mod tests {
         });
 
         assert_eq!(cpu.status.interrupt_disable, false);
+    }
+
+    #[test]
+    fn instr_clv_clears_overflow_flag() {
+        let cpu = run_instr(mem!(CLV), |cpu| {
+            cpu.status.overflow = true;
+        });
+
+        assert_eq!(cpu.status.overflow, false);
     }
 
     #[test]
