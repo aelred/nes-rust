@@ -337,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_adc_without_overflow() {
+    fn instr_adc_adds_numbers() {
         let cpu = run_instr(mem!(ADCImmediate, 10u8), |cpu| {
             cpu.accumulator = 42;
         });
@@ -348,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_adc_with_unsigned_overflow() {
+    fn instr_adc_sets_carry_flag_on_unsigned_overflow() {
         let cpu = run_instr(mem!(ADCImmediate, 255u8), |cpu| {
             cpu.accumulator = 42;
         });
@@ -359,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_adc_with_signed_overflow() {
+    fn instr_adc_sets_overflow_flag_on_signed_overflow() {
         let cpu = run_instr(mem!(ADCImmediate, 127i8), |cpu| {
             cpu.accumulator = 42i8 as u8;
         });
@@ -370,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_and() {
+    fn instr_and_performs_bitwise_and() {
         let cpu = run_instr(mem!(ANDImmediate, 0b1100u8), |cpu| {
             cpu.accumulator = 0b1010;
         });
@@ -379,7 +379,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_asl_without_carry() {
+    fn instr_asl_shifts_left() {
         let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
             cpu.accumulator = 0b100;
         });
@@ -389,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_asl_with_carry() {
+    fn instr_asl_sets_carry_flag_on_overflow() {
         let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
             cpu.accumulator = 0b10101010;
         });
@@ -399,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_bcc_when_carry_clear() {
+    fn instr_bcc_branches_when_carry_flag_clear() {
         let cpu = run_instr(mem!(BCC, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.carry = false;
@@ -410,7 +410,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_bcc_when_carry_set() {
+    fn instr_bcc_does_not_branch_when_carry_flag_set() {
         let cpu = run_instr(mem!(BCC, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.carry = true;
@@ -420,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_bcs_when_carry_clear() {
+    fn instr_bcs_does_not_branch_when_carry_flag_clear() {
         let cpu = run_instr(mem!(BCS, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.carry = false;
@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_bcs_when_carry_set() {
+    fn instr_bcs_branches_when_carry_flag_set() {
         let cpu = run_instr(mem!(BCS, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.carry = true;
@@ -441,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_beq_when_zero_not_set() {
+    fn instr_beq_does_not_branch_when_zero_flag_clear() {
         let cpu = run_instr(mem!(BEQ, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.zero = false;
@@ -451,7 +451,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_beq_when_zero_set() {
+    fn instr_beq_branches_when_zero_flag_set() {
         let cpu = run_instr(mem!(BEQ, -10i8), |cpu| {
             cpu.program_counter = Address(90);
             cpu.status.zero = true;
@@ -462,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_bit_when_result_is_zero() {
+    fn instr_bit_sets_zero_flag_when_bitwise_and_is_zero() {
         let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
             cpu.accumulator = 0b11110000u8;
             cpu.set(Address(654), 0b00001111u8);
@@ -472,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_bit_when_result_is_non_zero() {
+    fn instr_bit_clears_zero_flag_when_bitwise_and_is_not_zero() {
         let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
             cpu.accumulator = 0b11111100u8;
             cpu.set(Address(654), 0b00111111u8);
@@ -482,7 +482,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_bit_and_set_overflow_bit() {
+    fn instr_bit_sets_overflow_bit_based_on_bit_6_of_operand() {
         let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
             cpu.set(Address(654), 0u8);
         });
@@ -497,7 +497,7 @@ mod tests {
     }
 
     #[test]
-    fn can_exec_bit_and_set_negative_bit() {
+    fn instr_bit_sets_negative_bit_based_on_bit_7_of_operand() {
         let cpu = run_instr(mem!(BITAbsolute, Address(654)), |cpu| {
             cpu.set(Address(654), 0u8);
         });
