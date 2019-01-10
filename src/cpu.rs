@@ -124,8 +124,7 @@ impl CPU {
                 let new_value = *addr;
 
                 self.status.carry = bit7(old_value);
-                self.status.zero = new_value == 0;
-                self.status.negative = bit7(new_value);
+                self.set_flags(new_value);
             }
             BCC => self.branch_if(!self.status.carry),
             BCS => self.branch_if(self.status.carry),
@@ -149,6 +148,12 @@ impl CPU {
             CMP => self.compare(self.accumulator, opcode),
             CPX => self.compare(self.x, opcode),
             CPY => self.compare(self.y, opcode),
+            DEC => {
+                let addr = self.fetch_by(opcode.addressing_mode());
+                let (value, carry) = addr.overflowing_sub(1);
+                *addr = value;
+                self.set_flags(value);
+            },
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -157,14 +162,17 @@ impl CPU {
         let value = *self.fetch_by(opcode.addressing_mode());
         let (result, carry) = register.overflowing_sub(value);
         self.status.carry = !carry;
-        self.status.zero = result == 0;
-        self.status.negative = bit7(result);
+        self.set_flags(result);
+    }
+
+    fn set_flags(&mut self, value: u8) {
+        self.status.zero = value == 0;
+        self.status.negative = bit7(value);
     }
 
     fn set_accumulator(&mut self, value: u8) {
         self.accumulator = value;
-        self.status.zero = value == 0;
-        self.status.negative = bit7(value);
+        self.set_flags(value);
     }
 
     fn branch_if(&mut self, cond: bool) {
@@ -378,7 +386,13 @@ pub enum Instruction {
     /// sets the zero and carry flags as appropriate.
     CPY,
 
+    /// Decrement Memory
+    /// M,Z,N = M-1
+    ///
+    /// Subtracts one from the value held at a specified memory location setting the zero and
+    /// negative flags as appropriate.
     DEC,
+    
     DEX,
     DEY,
     EOR,
@@ -900,6 +914,49 @@ mod tests {
         assert_eq!(cpu.status.carry, true);
         assert_eq!(cpu.status.zero, false);
         assert_eq!(cpu.status.negative, false);
+    }
+    
+    #[test]
+    fn instr_dec_decrements_operand() {
+        let cpu = run_instr(mem!(DECAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), 45);
+        });
+
+        assert_eq!(cpu.get(Address(100)), 44);
+    }
+
+    #[test]
+    fn instr_dec_sets_zero_flag_based_on_result() {
+        let cpu = run_instr(mem!(DECAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), 45);
+        });
+
+        assert_eq!(cpu.get(Address(100)), 44);
+        assert_eq!(cpu.status.zero, false);
+
+        let cpu = run_instr(mem!(DECAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), 1);
+        });
+
+        assert_eq!(cpu.get(Address(100)), 0);
+        assert_eq!(cpu.status.zero, true);
+    }
+
+    #[test]
+    fn instr_dec_sets_negative_flag_based_on_result() {
+        let cpu = run_instr(mem!(DECAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), 45);
+        });
+
+        assert_eq!(cpu.get(Address(100)), 44);
+        assert_eq!(cpu.status.zero, false);
+
+        let cpu = run_instr(mem!(DECAbsolute, Address(100)), |cpu| {
+            cpu.set(Address(100), 0);
+        });
+
+        assert_eq!(cpu.get(Address(100)) as i8, -1i8);
+        assert_eq!(cpu.status.negative, true);
     }
 
     #[test]
