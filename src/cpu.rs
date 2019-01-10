@@ -440,12 +440,13 @@ pub enum Instruction {
 
     /// Decrement X Register
     ///
-    ///X,Z,N = X-1
+    /// X,Z,N = X-1
     ///
     /// Subtracts one from the X register setting the zero and negative flags as appropriate.
     DEX,
 
     /// Decrement Y Register
+    ///
     /// Y,Z,N = Y-1
     ///
     /// Subtracts one from the Y register setting the zero and negative flags as appropriate.
