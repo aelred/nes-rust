@@ -135,6 +135,7 @@ impl CPU {
             CLV => self.status.overflow = false,
             CMP => self.compare(self.accumulator, opcode),
             CPX => self.compare(self.x, opcode),
+            CPY => self.compare(self.y, opcode),
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -356,7 +357,14 @@ pub enum Instruction {
     /// sets the zero and carry flags as appropriate.
     CPX,
 
+    /// Compare Y Register
+    ///
+    ///Z,C,N = Y-M
+    ///
+    /// This instruction compares the contents of the Y register with another memory held value and
+    /// sets the zero and carry flags as appropriate.
     CPY,
+
     DEC,
     DEX,
     DEY,
@@ -838,6 +846,33 @@ mod tests {
 
         let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
             cpu.x = 100;
+        });
+
+        assert_eq!(cpu.status.carry, true);
+        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.negative, false);
+    }
+
+    #[test]
+    fn instr_cpy_compares_using_y_register() {
+        let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
+            cpu.y = 1;
+        });
+
+        assert_eq!(cpu.status.carry, false);
+        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.negative, true);
+
+        let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
+            cpu.y = 10;
+        });
+
+        assert_eq!(cpu.status.carry, true);
+        assert_eq!(cpu.status.zero, true);
+        assert_eq!(cpu.status.negative, false);
+
+        let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
+            cpu.y = 100;
         });
 
         assert_eq!(cpu.status.carry, true);
