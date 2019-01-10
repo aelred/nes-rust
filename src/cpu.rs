@@ -95,13 +95,13 @@ impl CPU {
     fn run_instruction(&mut self) {
         use self::Instruction::*;
 
-        let data = self.fetch();
+        let data = *self.fetch();
         let opcode = OpCode::from_u8(data).expect("Unrecognised opcode");
         let instr = opcode.instruction();
 
         match instr {
             ADC => {
-                let value = self.fetch_by(opcode.addressing_mode());
+                let value = *self.fetch_by(opcode.addressing_mode());
 
                 let (result, carry) = self.accumulator.overflowing_add(value);
 
@@ -112,12 +112,12 @@ impl CPU {
                 self.status.carry = carry;
             }
             AND => {
-                let value = self.fetch_by(opcode.addressing_mode());
+                let value = *self.fetch_by(opcode.addressing_mode());
 
                 self.set_accumulator(self.accumulator & value);
             }
             ASL => {
-                let value = self.fetch_by(opcode.addressing_mode());
+                let value = *self.fetch_by(opcode.addressing_mode());
 
                 self.status.carry = bit7(value);
                 self.set_accumulator(value << 1);
@@ -126,7 +126,7 @@ impl CPU {
             BCS => self.branch_if(self.status.carry),
             BEQ => self.branch_if(self.status.zero),
             BIT => {
-                let value = self.fetch_by(opcode.addressing_mode());
+                let value = *self.fetch_by(opcode.addressing_mode());
                 self.status.zero = (self.accumulator & value) == 0;
                 self.status.overflow = bit6(value);
                 self.status.negative = bit7(value);
@@ -149,7 +149,7 @@ impl CPU {
     }
 
     fn compare(&mut self, register: u8, opcode: OpCode) {
-        let value = self.fetch_by(opcode.addressing_mode());
+        let value = *self.fetch_by(opcode.addressing_mode());
         let (result, carry) = register.overflowing_sub(value);
         self.status.carry = !carry;
         self.status.zero = result == 0;
@@ -163,22 +163,22 @@ impl CPU {
     }
 
     fn branch_if(&mut self, cond: bool) {
-        let offset = self.fetch() as i8;
+        let offset = *self.fetch() as i8;
         if cond {
             self.program_counter += offset;
         }
     }
 
-    fn fetch_by(&mut self, addressing_mode: AddressingMode) -> u8 {
+    fn fetch_by(&mut self, addressing_mode: AddressingMode) -> &mut u8 {
         match addressing_mode {
             AddressingMode::Implied | AddressingMode::Relative => {
                 panic!("{:?} does not provide a value", addressing_mode)
             }
             AddressingMode::Immediate => self.fetch(),
-            AddressingMode::Accumulator => self.accumulator,
+            AddressingMode::Accumulator => &mut self.accumulator,
             AddressingMode::Absolute => {
-                let lower = self.fetch();
-                let higher = self.fetch();
+                let lower = *self.fetch();
+                let higher = *self.fetch();
                 let address = Address::from_bytes(lower, higher);
                 self.deref_address(address)
             }
@@ -186,14 +186,14 @@ impl CPU {
         }
     }
 
-    fn deref_address(&self, address: Address) -> u8 {
-        self.memory[address.0 as usize]
+    fn deref_address(&mut self, address: Address) -> &mut u8 {
+        &mut self.memory[address.0 as usize]
     }
 
-    fn fetch(&mut self) -> u8 {
-        let value = self.deref_address(self.program_counter);
+    fn fetch(&mut self) -> &mut u8 {
+        let old_program_counter = self.program_counter;
         self.program_counter += 1u16;
-        value
+        self.deref_address(old_program_counter)
     }
 }
 
@@ -899,14 +899,14 @@ mod tests {
     fn immediate_addressing_mode_fetches_given_value() {
         let mut cpu = CPU::default();
         cpu.set(cpu.program_counter, 56);
-        assert_eq!(cpu.fetch_by(AddressingMode::Immediate), 56);
+        assert_eq!(*cpu.fetch_by(AddressingMode::Immediate), 56);
     }
 
     #[test]
     fn accumulator_addressing_mode_fetches_accumulator_value() {
         let mut cpu = CPU::default();
         cpu.accumulator = 76;
-        assert_eq!(cpu.fetch_by(AddressingMode::Accumulator), 76);
+        assert_eq!(*cpu.fetch_by(AddressingMode::Accumulator), 76);
     }
 
     #[test]
@@ -923,7 +923,7 @@ mod tests {
         cpu.set(cpu.program_counter, lower);
         cpu.set(cpu.program_counter + 1u16, higher);
         cpu.set(Address(432), 35);
-        assert_eq!(cpu.fetch_by(AddressingMode::Absolute), 35);
+        assert_eq!(*cpu.fetch_by(AddressingMode::Absolute), 35);
     }
 
     #[test]
