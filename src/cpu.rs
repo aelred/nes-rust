@@ -157,6 +157,7 @@ impl CPU {
                 CPU::increment(&mut self.status, addr);
             }
             INX => CPU::increment(&mut self.status, &mut self.x),
+            INY => CPU::increment(&mut self.status, &mut self.y),
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -489,8 +490,12 @@ pub enum Instruction {
     /// Adds one to the X register setting the zero and negative flags as appropriate.
     INX,
 
+    /// Increment Y Register
+    /// Y,Z,N = Y+1
+    ///
+    /// Adds one to the Y register setting the zero and negative flags as appropriate.
     INY,
-    JMP,
+
     JSR,
     LDA,
     LDX,
@@ -1195,6 +1200,15 @@ mod tests {
         });
 
         assert_eq!(cpu.x, 46);
+    }
+
+    #[test]
+    fn instr_iny_increments_y_register() {
+        let cpu = run_instr(mem!(INY), |cpu| {
+            cpu.y = 45;
+        });
+
+        assert_eq!(cpu.y, 46);
     }
 
     #[test]
