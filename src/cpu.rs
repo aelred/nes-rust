@@ -130,6 +130,7 @@ impl CPU {
             BVC => self.branch_if(!self.status.overflow),
             BVS => self.branch_if(self.status.overflow),
             CLC => self.status.carry = false,
+            CLD => self.status.decimal = false,
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -278,7 +279,11 @@ pub enum Instruction {
     /// Set the carry flag to zero.
     CLC,
 
+    /// D = 0
+    ///
+    /// Sets the decimal mode flag to zero.
     CLD,
+
     CLI,
     CLV,
     CMP,
@@ -653,6 +658,15 @@ mod tests {
         });
 
         assert_eq!(cpu.status.carry, false);
+    }
+
+    #[test]
+    fn instr_cld_clears_decimal_flag() {
+        let cpu = run_instr(mem!(CLD), |cpu| {
+            cpu.status.decimal = true;
+        });
+
+        assert_eq!(cpu.status.decimal, false);
     }
 
     #[test]
