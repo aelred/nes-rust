@@ -158,6 +158,10 @@ impl CPU {
             }
             INX => CPU::increment(&mut self.status, &mut self.x),
             INY => CPU::increment(&mut self.status, &mut self.y),
+            JMP => {
+                let addr = self.addressable.fetch_address(opcode.addressing_mode());
+                *self.program_counter_mut() = addr;
+            }
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -255,20 +259,28 @@ struct Addressable {
 }
 
 impl Addressable {
-    fn fetch_by(&mut self, addressing_mode: AddressingMode) -> &mut u8 {
+    fn fetch_address(&mut self, addressing_mode: AddressingMode) -> Address {
         match addressing_mode {
-            AddressingMode::Implied | AddressingMode::Relative => {
-                panic!("{:?} does not provide a value", addressing_mode)
+            AddressingMode::Implied | AddressingMode::Relative | AddressingMode::Immediate | AddressingMode::Accumulator => {
+                panic!("{:?} does not provide an address", addressing_mode)
             }
-            AddressingMode::Immediate => self.fetch(),
-            AddressingMode::Accumulator => &mut self.accumulator,
             AddressingMode::Absolute => {
                 let lower = *self.fetch();
                 let higher = *self.fetch();
-                let address = Address::from_bytes(lower, higher);
-                self.deref_address(address)
+                Address::from_bytes(lower, higher)
             }
             _ => unimplemented!("{:?}", addressing_mode),
+        }
+    }
+
+    fn fetch_by(&mut self, addressing_mode: AddressingMode) -> &mut u8 {
+        match addressing_mode {
+            AddressingMode::Immediate => self.fetch(),
+            AddressingMode::Accumulator => &mut self.accumulator,
+            mode => {
+                let address = self.fetch_address(mode);
+                self.deref_address(address)
+            }
         }
     }
 
@@ -495,6 +507,11 @@ pub enum Instruction {
     ///
     /// Adds one to the Y register setting the zero and negative flags as appropriate.
     INY,
+
+    /// Jump
+    ///
+    /// Sets the program counter to the address specified by the operand.
+    JMP,
 
     JSR,
     LDA,
@@ -1209,6 +1226,15 @@ mod tests {
         });
 
         assert_eq!(cpu.y, 46);
+    }
+
+    #[test]
+    fn instr_jmp_jumps_to_operand() {
+        let cpu = run_instr(mem!(JMPAbsolute, Address(100)), |cpu| {
+            *cpu.program_counter_mut() = Address(200);
+        });
+
+        assert_eq!(*cpu.program_counter(), Address(100));
     }
 
     #[test]
