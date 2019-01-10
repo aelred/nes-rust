@@ -133,6 +133,13 @@ impl CPU {
             CLD => self.status.decimal = false,
             CLI => self.status.interrupt_disable = false,
             CLV => self.status.overflow = false,
+            CMP => {
+                let value = self.fetch_by(opcode.addressing_mode());
+                let (result, carry) = self.accumulator.overflowing_sub(value);
+                self.status.carry = !carry;
+                self.status.zero = result == 0;
+                self.status.negative = result & (1 << 7) != 0;
+            },
             _ => unimplemented!("{:?}", instr),
         }
     }
@@ -330,6 +337,12 @@ pub enum Instruction {
     /// Clears the overflow flag.
     CLV,
 
+    /// Compare
+    ///
+    /// Z,C,N = A-M
+    ///
+    /// This instruction compares the contents of the accumulator with another memory held value and
+    /// sets the zero and carry flags as appropriate.
     CMP,
     CPX,
     CPY,
@@ -729,6 +742,69 @@ mod tests {
         });
 
         assert_eq!(cpu.status.overflow, false);
+    }
+    
+    #[test]
+    fn instr_cmp_sets_carry_flag_if_accumulator_greater_or_equal_to_operand() {
+        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+            cpu.accumulator = 1;
+        });
+
+        assert_eq!(cpu.status.carry, false);
+
+        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+            cpu.accumulator = 10;
+        });
+
+        assert_eq!(cpu.status.carry, true);
+
+        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+            cpu.accumulator = 100;
+        });
+
+        assert_eq!(cpu.status.carry, true);
+    }
+
+    #[test]
+    fn instr_cmp_sets_zero_flag_if_accumulator_equals_operand() {
+        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+            cpu.accumulator = 1;
+        });
+
+        assert_eq!(cpu.status.zero, false);
+
+        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+            cpu.accumulator = 10;
+        });
+
+        assert_eq!(cpu.status.zero, true);
+
+        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+            cpu.accumulator = 100;
+        });
+
+        assert_eq!(cpu.status.zero, false);
+    }
+
+    #[test]
+    fn instr_cmp_sets_negative_flag_if_bit_7_of_accumulator_sub_operand_is_set() {
+        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+            cpu.accumulator = 1;
+        });
+
+        assert_eq!(cpu.status.negative, true);
+
+        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+            cpu.accumulator = 10;
+        });
+
+        assert_eq!(cpu.status.negative, false);
+
+        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+            cpu.accumulator = 100;
+        });
+
+        assert_eq!(cpu.status.negative, false);
     }
 
     #[test]
