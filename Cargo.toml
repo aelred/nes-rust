@@ -5,3 +5,5 @@ authors = ["Felix Chapman <aelred717@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+enum-primitive-derive = "0.1.2"
+num-traits = "0.2.6"
