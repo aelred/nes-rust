@@ -11,10 +11,6 @@ impl Address {
         Address(value)
     }
 
-    pub fn from_bytes(higher: u8, lower: u8) -> Self {
-        Address((u16::from(higher) << 8) + u16::from(lower))
-    }
-
     pub fn index(self) -> usize {
         self.0 as usize
     }
@@ -25,15 +21,30 @@ impl Address {
 }
 
 impl SerializeBytes for Address {
-    fn bytes(self) -> Vec<u8> {
+    const SIZE: u8 = 2;
+
+    fn serialize(self, dest: &mut [u8]) {
         let (higher, lower) = self.split();
-        vec![higher, lower]
+        dest[0] = lower;
+        dest[1] = higher;
+    }
+
+    fn deserialize(source: &[u8]) -> Self {
+        let higher = source[1];
+        let lower = source[0];
+        Address((u16::from(higher) << 8) + u16::from(lower))
     }
 }
 
 impl AddAssign<i8> for Address {
     fn add_assign(&mut self, rhs: i8) {
         self.0 = self.0.wrapping_add(rhs as u16);
+    }
+}
+
+impl AddAssign<u8> for Address {
+    fn add_assign(&mut self, rhs: u8) {
+        self.0 = self.0.wrapping_add(u16::from(rhs));
     }
 }
 

@@ -1,9 +1,9 @@
 use crate::address::Address;
+use crate::addressing_modes::ReferenceAddressingMode;
 use crate::addressing_modes::ValueAddressingMode;
 use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
 use crate::SerializeBytes;
-use num_traits::FromPrimitive;
 
 const STACK: Address = Address::new(0x0100);
 
@@ -54,7 +54,7 @@ impl CPU {
 
         match self.addressable.instr() {
             ADC(addressing_mode) => {
-                let value = *self.fetch(addressing_mode);
+                let value = self.fetch(addressing_mode);
 
                 let (result, carry) = self.accumulator().overflowing_add(value);
 
@@ -66,11 +66,11 @@ impl CPU {
                 self.status.set_to(Flag::Carry, carry);
             }
             AND(addressing_mode) => {
-                let value = *self.fetch(addressing_mode);
+                let value = self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() & value);
             }
             ASL(addressing_mode) => {
-                let addr = self.fetch(addressing_mode);
+                let addr = self.fetch_ref(addressing_mode);
 
                 let old_value = *addr;
                 *addr <<= 1;
@@ -83,7 +83,7 @@ impl CPU {
             BCS => self.branch_if(self.status.get(Flag::Carry)),
             BEQ => self.branch_if(self.status.get(Flag::Zero)),
             BIT(addressing_mode) => {
-                let value = *self.fetch(addressing_mode);
+                let value = self.fetch(addressing_mode);
                 let zero = (self.accumulator() & value) == 0;
                 self.status.set_to(Flag::Zero, zero);
                 self.status.set_to(Flag::Overflow, bit6(value));
@@ -103,17 +103,17 @@ impl CPU {
             CPX(addressing_mode) => self.compare(self.x, addressing_mode),
             CPY(addressing_mode) => self.compare(self.y, addressing_mode),
             DEC(addressing_mode) => {
-                let addr = self.addressable.fetch(addressing_mode);
+                let addr = self.fetch_ref(addressing_mode);
                 CPU::decrement(&mut self.status, addr);
             }
             DEX => CPU::decrement(&mut self.status, &mut self.x),
             DEY => CPU::decrement(&mut self.status, &mut self.y),
             EOR(addressing_mode) => {
-                let value = *self.fetch(addressing_mode);
+                let value = self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() ^ value);
             }
             INC(addressing_mode) => {
-                let addr = self.addressable.fetch(addressing_mode);
+                let addr = self.fetch_ref(addressing_mode);
                 CPU::increment(&mut self.status, addr);
             }
             INX => CPU::increment(&mut self.status, &mut self.x),
@@ -133,21 +133,21 @@ impl CPU {
                 *self.program_counter_mut() = addr;
             }
             LDA(addressing_mode) => {
-                let value = *self.fetch(addressing_mode);
+                let value = self.fetch(addressing_mode);
                 self.set_accumulator(value);
             }
             LDX(addressing_mode) => {
-                let value = *self.fetch(addressing_mode);
+                let value = self.fetch(addressing_mode);
                 self.x = value;
                 self.set_flags(value);
             }
             LDY(addressing_mode) => {
-                let value = *self.fetch(addressing_mode);
+                let value = self.fetch(addressing_mode);
                 self.y = value;
                 self.set_flags(value);
             }
             LSR(addressing_mode) => {
-                let addr = self.fetch(addressing_mode);
+                let addr = self.fetch_ref(addressing_mode);
 
                 let old_value = *addr;
                 *addr >>= 1;
@@ -158,7 +158,7 @@ impl CPU {
             }
             NOP => {}
             ORA(addressing_mode) => {
-                let value = *self.fetch(addressing_mode);
+                let value = self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() | value);
             }
             PHA => self.push_stack(self.accumulator()),
@@ -174,12 +174,10 @@ impl CPU {
     }
 
     fn push_stack<T: SerializeBytes>(&mut self, data: T) {
-        for byte in data.bytes().into_iter() {
-            let stack_address = STACK + self.stack_pointer;
-            let location = self.addressable.deref_address_mut(stack_address);
-            *location = byte;
-            self.stack_pointer -= 1;
-        }
+        self.stack_pointer -= T::SIZE;
+        let stack_address = STACK + self.stack_pointer;
+        let location = self.addressable.deref_address_mut(stack_address + 1u8);
+        data.serialize(location);
     }
 
     fn increment(status: &mut Status, addr: &mut u8) {
@@ -207,7 +205,7 @@ impl CPU {
     }
 
     fn compare<T: ValueAddressingMode>(&mut self, register: u8, addressing_mode: T) {
-        let value = *self.fetch(addressing_mode);
+        let value = self.fetch(addressing_mode);
         let (result, carry) = register.overflowing_sub(value);
         self.status.set_to(Flag::Carry, !carry);
         self.set_flags(result);
@@ -229,7 +227,11 @@ impl CPU {
         }
     }
 
-    fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> &mut u8 {
+    fn fetch_ref<T: ReferenceAddressingMode>(&mut self, addressing_mode: T) -> &mut u8 {
+        self.addressable.fetch_ref(addressing_mode)
+    }
+
+    pub fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> u8 {
         self.addressable.fetch(addressing_mode)
     }
 }
@@ -260,7 +262,11 @@ pub struct Addressable {
 }
 
 impl Addressable {
-    pub fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> &mut u8 {
+    pub fn fetch_ref<T: ReferenceAddressingMode>(&mut self, addressing_mode: T) -> &mut u8 {
+        addressing_mode.fetch_ref(self)
+    }
+
+    pub fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> u8 {
         addressing_mode.fetch(self)
     }
 
@@ -268,7 +274,7 @@ impl Addressable {
         &mut self.accumulator
     }
 
-    pub fn immediate(&mut self) -> &mut u8 {
+    pub fn immediate(&mut self) -> u8 {
         self.fetch_at_program_counter()
     }
 
@@ -285,18 +291,16 @@ impl Addressable {
     }
 
     pub fn relative(&mut self) -> i8 {
-        *self.fetch_at_program_counter() as i8
+        self.fetch_at_program_counter()
     }
 
     pub fn absolute(&mut self) -> &mut u8 {
         let address = self.absolute_address();
-        self.deref_address_mut(address)
+        &mut self.deref_address_mut(address)[0]
     }
 
     pub fn absolute_address(&mut self) -> Address {
-        let higher = *self.fetch_at_program_counter();
-        let lower = *self.fetch_at_program_counter();
-        Address::from_bytes(higher, lower)
+        self.fetch_at_program_counter()
     }
 
     pub fn absolute_x(&mut self) -> &mut u8 {
@@ -320,8 +324,7 @@ impl Addressable {
     }
 
     fn instr(&mut self) -> Instruction {
-        let data = *self.fetch_at_program_counter();
-        let opcode = OpCode::from_u8(data).expect("Unrecognised opcode");
+        let opcode: OpCode = self.fetch_at_program_counter();
         opcode.instruction()
     }
 
@@ -329,14 +332,15 @@ impl Addressable {
         self.memory[address.index()]
     }
 
-    pub fn deref_address_mut(&mut self, address: Address) -> &mut u8 {
-        &mut self.memory[address.index()]
+    pub fn deref_address_mut(&mut self, address: Address) -> &mut [u8] {
+        &mut self.memory[address.index()..]
     }
 
-    fn fetch_at_program_counter(&mut self) -> &mut u8 {
-        let old_program_counter = self.program_counter;
-        self.program_counter += 1u16;
-        self.deref_address_mut(old_program_counter)
+    fn fetch_at_program_counter<T: SerializeBytes>(&mut self) -> T {
+        let slice = self.deref_address_mut(self.program_counter);
+        let data = T::deserialize(slice);
+        self.program_counter += T::SIZE;
+        data
     }
 }
 
@@ -371,8 +375,14 @@ impl Status {
 }
 
 impl SerializeBytes for Status {
-    fn bytes(self) -> Vec<u8> {
-        self.0.bytes()
+    const SIZE: u8 = u8::SIZE;
+
+    fn serialize(self, dest: &mut [u8]) {
+        self.0.serialize(dest);
+    }
+
+    fn deserialize(source: &[u8]) -> Self {
+        Status(SerializeBytes::deserialize(source))
     }
 }
 
@@ -1202,7 +1212,7 @@ mod tests {
     fn immediate_addressing_mode_fetches_given_value() {
         let mut cpu = CPU::default();
         cpu.set(*cpu.program_counter(), 56);
-        assert_eq!(*cpu.addressable.immediate(), 56);
+        assert_eq!(cpu.addressable.immediate(), 56);
     }
 
     #[test]

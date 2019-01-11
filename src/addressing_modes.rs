@@ -1,8 +1,12 @@
 use crate::address::Address;
 use crate::cpu::Addressable;
 
+pub trait ReferenceAddressingMode {
+    fn fetch_ref(self, addressable: &mut Addressable) -> &mut u8;
+}
+
 pub trait ValueAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8;
+    fn fetch(self, addressable: &mut Addressable) -> u8;
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -18,16 +22,16 @@ pub enum FlexibleAddressingMode {
 }
 
 impl ValueAddressingMode for FlexibleAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+    fn fetch(self, addressable: &mut Addressable) -> u8 {
         match self {
             FlexibleAddressingMode::Immediate => addressable.immediate(),
-            FlexibleAddressingMode::ZeroPage => addressable.zero_page(),
-            FlexibleAddressingMode::ZeroPageX => addressable.zero_page_x(),
-            FlexibleAddressingMode::Absolute => addressable.absolute(),
-            FlexibleAddressingMode::AbsoluteX => addressable.absolute_x(),
-            FlexibleAddressingMode::AbsoluteY => addressable.absolute_y(),
-            FlexibleAddressingMode::IndexedIndirect => addressable.indexed_indirect(),
-            FlexibleAddressingMode::IndirectIndexed => addressable.indirect_indexed(),
+            FlexibleAddressingMode::ZeroPage => *addressable.zero_page(),
+            FlexibleAddressingMode::ZeroPageX => *addressable.zero_page_x(),
+            FlexibleAddressingMode::Absolute => *addressable.absolute(),
+            FlexibleAddressingMode::AbsoluteX => *addressable.absolute_x(),
+            FlexibleAddressingMode::AbsoluteY => *addressable.absolute_y(),
+            FlexibleAddressingMode::IndexedIndirect => *addressable.indexed_indirect(),
+            FlexibleAddressingMode::IndirectIndexed => *addressable.indirect_indexed(),
         }
     }
 }
@@ -43,8 +47,8 @@ pub enum StoreAddressingMode {
     IndirectIndexed,
 }
 
-impl ValueAddressingMode for StoreAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+impl ReferenceAddressingMode for StoreAddressingMode {
+    fn fetch_ref(self, addressable: &mut Addressable) -> &mut u8 {
         match self {
             StoreAddressingMode::ZeroPage => addressable.zero_page(),
             StoreAddressingMode::ZeroPageX => addressable.zero_page_x(),
@@ -66,8 +70,8 @@ pub enum ShiftAddressingMode {
     AbsoluteX,
 }
 
-impl ValueAddressingMode for ShiftAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+impl ReferenceAddressingMode for ShiftAddressingMode {
+    fn fetch_ref(self, addressable: &mut Addressable) -> &mut u8 {
         match self {
             ShiftAddressingMode::Accumulator => addressable.accumulator(),
             ShiftAddressingMode::ZeroPage => addressable.zero_page(),
@@ -85,10 +89,10 @@ pub enum BITAddressingMode {
 }
 
 impl ValueAddressingMode for BITAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+    fn fetch(self, addressable: &mut Addressable) -> u8 {
         match self {
-            BITAddressingMode::ZeroPage => addressable.zero_page(),
-            BITAddressingMode::Absolute => addressable.absolute(),
+            BITAddressingMode::ZeroPage => *addressable.zero_page(),
+            BITAddressingMode::Absolute => *addressable.absolute(),
         }
     }
 }
@@ -101,11 +105,11 @@ pub enum CompareAddressingMode {
 }
 
 impl ValueAddressingMode for CompareAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+    fn fetch(self, addressable: &mut Addressable) -> u8 {
         match self {
             CompareAddressingMode::Immediate => addressable.immediate(),
-            CompareAddressingMode::ZeroPage => addressable.zero_page(),
-            CompareAddressingMode::Absolute => addressable.absolute(),
+            CompareAddressingMode::ZeroPage => *addressable.zero_page(),
+            CompareAddressingMode::Absolute => *addressable.absolute(),
         }
     }
 }
@@ -118,8 +122,8 @@ pub enum IncDecAddressingMode {
     AbsoluteX,
 }
 
-impl ValueAddressingMode for IncDecAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+impl ReferenceAddressingMode for IncDecAddressingMode {
+    fn fetch_ref(self, addressable: &mut Addressable) -> &mut u8 {
         match self {
             IncDecAddressingMode::ZeroPage => addressable.zero_page(),
             IncDecAddressingMode::ZeroPageX => addressable.zero_page_x(),
@@ -144,10 +148,10 @@ impl JumpAddressingMode {
     }
 }
 
-impl ValueAddressingMode for JumpAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+impl ReferenceAddressingMode for JumpAddressingMode {
+    fn fetch_ref(self, addressable: &mut Addressable) -> &mut u8 {
         let address = self.fetch_address(addressable);
-        addressable.deref_address_mut(address)
+        &mut addressable.deref_address_mut(address)[0]
     }
 }
 
@@ -161,13 +165,13 @@ pub enum LDXAddressingMode {
 }
 
 impl ValueAddressingMode for LDXAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+    fn fetch(self, addressable: &mut Addressable) -> u8 {
         match self {
             LDXAddressingMode::Immediate => addressable.immediate(),
-            LDXAddressingMode::ZeroPage => addressable.zero_page(),
-            LDXAddressingMode::ZeroPageY => addressable.zero_page_y(),
-            LDXAddressingMode::Absolute => addressable.absolute(),
-            LDXAddressingMode::AbsoluteY => addressable.absolute_y(),
+            LDXAddressingMode::ZeroPage => *addressable.zero_page(),
+            LDXAddressingMode::ZeroPageY => *addressable.zero_page_y(),
+            LDXAddressingMode::Absolute => *addressable.absolute(),
+            LDXAddressingMode::AbsoluteY => *addressable.absolute_y(),
         }
     }
 }
@@ -182,13 +186,13 @@ pub enum LDYAddressingMode {
 }
 
 impl ValueAddressingMode for LDYAddressingMode {
-    fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
+    fn fetch(self, addressable: &mut Addressable) -> u8 {
         match self {
             LDYAddressingMode::Immediate => addressable.immediate(),
-            LDYAddressingMode::ZeroPage => addressable.zero_page(),
-            LDYAddressingMode::ZeroPageX => addressable.zero_page_x(),
-            LDYAddressingMode::Absolute => addressable.absolute(),
-            LDYAddressingMode::AbsoluteX => addressable.absolute_x(),
+            LDYAddressingMode::ZeroPage => *addressable.zero_page(),
+            LDYAddressingMode::ZeroPageX => *addressable.zero_page_x(),
+            LDYAddressingMode::Absolute => *addressable.absolute(),
+            LDYAddressingMode::AbsoluteX => *addressable.absolute_x(),
         }
     }
 }
