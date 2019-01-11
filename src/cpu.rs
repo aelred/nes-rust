@@ -59,10 +59,11 @@ impl CPU {
                 let (result, carry) = self.accumulator().overflowing_add(value);
 
                 // Perform the operation again, but signed, to check for signed overflow
-                self.status.overflow = (self.accumulator() as i8).overflowing_add(value as i8).1;
+                let overflow = (self.accumulator() as i8).overflowing_add(value as i8).1;
+                self.status.set_to(Flag::Overflow, overflow);
 
                 self.set_accumulator(result);
-                self.status.carry = carry;
+                self.status.set_to(Flag::Carry, carry);
             }
             AND(addressing_mode) => {
                 let value = *self.fetch(addressing_mode);
@@ -75,28 +76,29 @@ impl CPU {
                 *addr <<= 1;
                 let new_value = *addr;
 
-                self.status.carry = bit7(old_value);
+                self.status.set_to(Flag::Carry, bit7(old_value));
                 self.set_flags(new_value);
             }
-            BCC => self.branch_if(!self.status.carry),
-            BCS => self.branch_if(self.status.carry),
-            BEQ => self.branch_if(self.status.zero),
+            BCC => self.branch_if(!self.status.get(Flag::Carry)),
+            BCS => self.branch_if(self.status.get(Flag::Carry)),
+            BEQ => self.branch_if(self.status.get(Flag::Zero)),
             BIT(addressing_mode) => {
                 let value = *self.fetch(addressing_mode);
-                self.status.zero = (self.accumulator() & value) == 0;
-                self.status.overflow = bit6(value);
-                self.status.negative = bit7(value);
+                let zero = (self.accumulator() & value) == 0;
+                self.status.set_to(Flag::Zero, zero);
+                self.status.set_to(Flag::Overflow, bit6(value));
+                self.status.set_to(Flag::Negative, bit7(value));
             }
-            BMI => self.branch_if(self.status.negative),
-            BNE => self.branch_if(!self.status.zero),
-            BPL => self.branch_if(!self.status.negative),
+            BMI => self.branch_if(self.status.get(Flag::Negative)),
+            BNE => self.branch_if(!self.status.get(Flag::Zero)),
+            BPL => self.branch_if(!self.status.get(Flag::Negative)),
             BRK => unimplemented!("BRK"), // TODO
-            BVC => self.branch_if(!self.status.overflow),
-            BVS => self.branch_if(self.status.overflow),
-            CLC => self.status.carry = false,
-            CLD => self.status.decimal = false,
-            CLI => self.status.interrupt_disable = false,
-            CLV => self.status.overflow = false,
+            BVC => self.branch_if(!self.status.get(Flag::Overflow)),
+            BVS => self.branch_if(self.status.get(Flag::Overflow)),
+            CLC => self.status.clear(Flag::Carry),
+            CLD => self.status.clear(Flag::Decimal),
+            CLI => self.status.clear(Flag::InterruptDisable),
+            CLV => self.status.clear(Flag::Overflow),
             CMP(addressing_mode) => self.compare(self.accumulator(), addressing_mode),
             CPX(addressing_mode) => self.compare(self.x, addressing_mode),
             CPY(addressing_mode) => self.compare(self.y, addressing_mode),
@@ -158,17 +160,19 @@ impl CPU {
                 *addr >>= 1;
                 let new_value = *addr;
 
-                self.status.carry = bit0(old_value);
+                self.status.set_to(Flag::Carry, bit0(old_value));
                 self.set_flags(new_value);
             }
-            NOP => { }
+            NOP => {}
             ORA(addressing_mode) => {
                 let value = *self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() | value);
             }
             PHA => {
                 let accumulator = self.accumulator();
-                let addr = self.addressable.deref_address_mut(STACK + self.stack_pointer);
+                let addr = self
+                    .addressable
+                    .deref_address_mut(STACK + self.stack_pointer);
                 *addr = accumulator;
                 self.stack_pointer -= 1;
             }
@@ -203,7 +207,7 @@ impl CPU {
     fn compare<T: ValueAddressingMode>(&mut self, register: u8, addressing_mode: T) {
         let value = *self.fetch(addressing_mode);
         let (result, carry) = register.overflowing_sub(value);
-        self.status.carry = !carry;
+        self.status.set_to(Flag::Carry, !carry);
         self.set_flags(result);
     }
 
@@ -239,14 +243,7 @@ impl Default for CPU {
             x: 0,
             y: 0,
             stack_pointer: 0xFF,
-            status: Status {
-                negative: false,
-                overflow: false,
-                decimal: false,
-                interrupt_disable: false,
-                zero: false,
-                carry: false,
-            },
+            status: Status(0),
         }
     }
 }
@@ -341,20 +338,42 @@ impl Addressable {
     }
 }
 
-struct Status {
-    negative: bool,
-    overflow: bool,
-    decimal: bool,
-    interrupt_disable: bool,
-    zero: bool,
-    carry: bool,
-}
+struct Status(u8);
 
 impl Status {
-    fn set_flags(&mut self, value: u8) {
-        self.zero = value == 0;
-        self.negative = bit7(value);
+    fn get(&self, flag: Flag) -> bool {
+        (self.0 & flag as u8) != 0
     }
+
+    fn set(&mut self, flag: Flag) {
+        self.0 |= flag as u8;
+    }
+
+    fn clear(&mut self, flag: Flag) {
+        self.0 &= !(flag as u8);
+    }
+
+    fn set_to(&mut self, flag: Flag, value: bool) {
+        if value {
+            self.set(flag);
+        } else {
+            self.clear(flag);
+        }
+    }
+
+    fn set_flags(&mut self, value: u8) {
+        self.set_to(Flag::Zero, value == 0);
+        self.set_to(Flag::Negative, bit7(value));
+    }
+}
+
+enum Flag {
+    Negative = 0b10000000,
+    Overflow = 0b01000000,
+    Decimal = 0b00001000,
+    InterruptDisable = 0b00000100,
+    Zero = 0b00000010,
+    Carry = 0b00000001,
 }
 
 #[cfg(test)]
@@ -381,8 +400,8 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 52);
-        assert_eq!(cpu.status.overflow, false);
-        assert_eq!(cpu.status.carry, false);
+        assert_eq!(cpu.status.get(Flag::Overflow), false);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
     }
 
     #[test]
@@ -392,8 +411,8 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 41);
-        assert_eq!(cpu.status.overflow, false);
-        assert_eq!(cpu.status.carry, true);
+        assert_eq!(cpu.status.get(Flag::Overflow), false);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
     }
 
     #[test]
@@ -403,8 +422,8 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator() as i8, -87i8);
-        assert_eq!(cpu.status.overflow, true);
-        assert_eq!(cpu.status.carry, false);
+        assert_eq!(cpu.status.get(Flag::Overflow), true);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
     }
 
     #[test]
@@ -423,7 +442,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 0b1000);
-        assert_eq!(cpu.status.carry, false);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
     }
 
     #[test]
@@ -433,7 +452,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 0b01010100);
-        assert_eq!(cpu.status.carry, true);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
     }
 
     #[test]
@@ -449,7 +468,7 @@ mod tests {
     fn instr_bcc_branches_when_carry_flag_clear() {
         let cpu = run_instr(mem!(BCC, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.carry = false;
+            cpu.status.clear(Flag::Carry);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -460,7 +479,7 @@ mod tests {
     fn instr_bcc_does_not_branch_when_carry_flag_set() {
         let cpu = run_instr(mem!(BCC, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.carry = true;
+            cpu.status.set(Flag::Carry);
         });
 
         assert_eq!(*cpu.program_counter(), Address::new(92));
@@ -470,7 +489,7 @@ mod tests {
     fn instr_bcs_does_not_branch_when_carry_flag_clear() {
         let cpu = run_instr(mem!(BCS, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.carry = false;
+            cpu.status.clear(Flag::Carry);
         });
 
         assert_eq!(*cpu.program_counter(), Address::new(92));
@@ -480,7 +499,7 @@ mod tests {
     fn instr_bcs_branches_when_carry_flag_set() {
         let cpu = run_instr(mem!(BCS, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.carry = true;
+            cpu.status.set(Flag::Carry);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -491,7 +510,7 @@ mod tests {
     fn instr_beq_does_not_branch_when_zero_flag_clear() {
         let cpu = run_instr(mem!(BEQ, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.zero = false;
+            cpu.status.clear(Flag::Zero);
         });
 
         assert_eq!(*cpu.program_counter(), Address::new(92));
@@ -501,7 +520,7 @@ mod tests {
     fn instr_beq_branches_when_zero_flag_set() {
         let cpu = run_instr(mem!(BEQ, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.zero = true;
+            cpu.status.set(Flag::Zero);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -515,7 +534,7 @@ mod tests {
             cpu.set(Address::new(654), 0b00001111u8);
         });
 
-        assert_eq!(cpu.status.zero, true);
+        assert_eq!(cpu.status.get(Flag::Zero), true);
     }
 
     #[test]
@@ -525,7 +544,7 @@ mod tests {
             cpu.set(Address::new(654), 0b00111111u8);
         });
 
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
     }
 
     #[test]
@@ -534,13 +553,13 @@ mod tests {
             cpu.set(Address::new(654), 0u8);
         });
 
-        assert_eq!(cpu.status.overflow, false);
+        assert_eq!(cpu.status.get(Flag::Overflow), false);
 
         let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
             cpu.set(Address::new(654), 0b01000000u8);
         });
 
-        assert_eq!(cpu.status.overflow, true);
+        assert_eq!(cpu.status.get(Flag::Overflow), true);
     }
 
     #[test]
@@ -549,20 +568,20 @@ mod tests {
             cpu.set(Address::new(654), 0u8);
         });
 
-        assert_eq!(cpu.status.negative, false);
+        assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
             cpu.set(Address::new(654), 0b10000000u8);
         });
 
-        assert_eq!(cpu.status.negative, true);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
     }
 
     #[test]
     fn instr_bmi_does_not_branch_when_negative_flag_clear() {
         let cpu = run_instr(mem!(BMI, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.negative = false;
+            cpu.status.clear(Flag::Negative);
         });
 
         assert_eq!(*cpu.program_counter(), Address::new(92));
@@ -572,7 +591,7 @@ mod tests {
     fn instr_bmi_branches_when_negative_flag_set() {
         let cpu = run_instr(mem!(BMI, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.negative = true;
+            cpu.status.set(Flag::Negative);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -583,7 +602,7 @@ mod tests {
     fn instr_bne_branches_when_zero_flag_clear() {
         let cpu = run_instr(mem!(BNE, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.zero = false;
+            cpu.status.clear(Flag::Zero);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -594,7 +613,7 @@ mod tests {
     fn instr_bne_does_not_branch_when_zero_flag_set() {
         let cpu = run_instr(mem!(BNE, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.zero = true;
+            cpu.status.set(Flag::Zero);
         });
 
         assert_eq!(*cpu.program_counter(), Address::new(92));
@@ -604,7 +623,7 @@ mod tests {
     fn instr_bpl_branches_when_negative_flag_clear() {
         let cpu = run_instr(mem!(BPL, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.negative = false;
+            cpu.status.clear(Flag::Negative);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -615,7 +634,7 @@ mod tests {
     fn instr_bpl_does_not_branch_when_negative_flag_set() {
         let cpu = run_instr(mem!(BPL, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.negative = true;
+            cpu.status.set(Flag::Negative);
         });
 
         assert_eq!(*cpu.program_counter(), Address::new(92));
@@ -625,7 +644,7 @@ mod tests {
     fn instr_bvc_branches_when_overflow_flag_clear() {
         let cpu = run_instr(mem!(BVC, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.overflow = false;
+            cpu.status.clear(Flag::Overflow);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -636,7 +655,7 @@ mod tests {
     fn instr_bvc_does_not_branch_when_overflow_flag_set() {
         let cpu = run_instr(mem!(BVC, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.overflow = true;
+            cpu.status.set(Flag::Overflow);
         });
 
         assert_eq!(*cpu.program_counter(), Address::new(92));
@@ -646,7 +665,7 @@ mod tests {
     fn instr_bvs_does_not_branch_when_carry_flag_clear() {
         let cpu = run_instr(mem!(BVS, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.overflow = false;
+            cpu.status.clear(Flag::Overflow);
         });
 
         assert_eq!(*cpu.program_counter(), Address::new(92));
@@ -656,7 +675,7 @@ mod tests {
     fn instr_bvs_branches_when_carry_flag_set() {
         let cpu = run_instr(mem!(BVS, -10i8), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
-            cpu.status.overflow = true;
+            cpu.status.set(Flag::Overflow);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -666,37 +685,37 @@ mod tests {
     #[test]
     fn instr_clc_clears_carry_flag() {
         let cpu = run_instr(mem!(CLC), |cpu| {
-            cpu.status.carry = true;
+            cpu.status.set(Flag::Carry);
         });
 
-        assert_eq!(cpu.status.carry, false);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
     }
 
     #[test]
     fn instr_cld_clears_decimal_flag() {
         let cpu = run_instr(mem!(CLD), |cpu| {
-            cpu.status.decimal = true;
+            cpu.status.set(Flag::Decimal);
         });
 
-        assert_eq!(cpu.status.decimal, false);
+        assert_eq!(cpu.status.get(Flag::Decimal), false);
     }
 
     #[test]
     fn instr_cli_clears_interrupt_disable_flag() {
         let cpu = run_instr(mem!(CLI), |cpu| {
-            cpu.status.interrupt_disable = true;
+            cpu.status.set(Flag::InterruptDisable);
         });
 
-        assert_eq!(cpu.status.interrupt_disable, false);
+        assert_eq!(cpu.status.get(Flag::InterruptDisable), false);
     }
 
     #[test]
     fn instr_clv_clears_overflow_flag() {
         let cpu = run_instr(mem!(CLV), |cpu| {
-            cpu.status.overflow = true;
+            cpu.status.set(Flag::Overflow);
         });
 
-        assert_eq!(cpu.status.overflow, false);
+        assert_eq!(cpu.status.get(Flag::Overflow), false);
     }
 
     #[test]
@@ -705,19 +724,19 @@ mod tests {
             *cpu.accumulator_mut() = 1;
         });
 
-        assert_eq!(cpu.status.carry, false);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
             *cpu.accumulator_mut() = 10;
         });
 
-        assert_eq!(cpu.status.carry, true);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
             *cpu.accumulator_mut() = 100;
         });
 
-        assert_eq!(cpu.status.carry, true);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
     }
 
     #[test]
@@ -726,19 +745,19 @@ mod tests {
             *cpu.accumulator_mut() = 1;
         });
 
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
             *cpu.accumulator_mut() = 10;
         });
 
-        assert_eq!(cpu.status.zero, true);
+        assert_eq!(cpu.status.get(Flag::Zero), true);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
             *cpu.accumulator_mut() = 100;
         });
 
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
     }
 
     #[test]
@@ -747,19 +766,19 @@ mod tests {
             *cpu.accumulator_mut() = 1;
         });
 
-        assert_eq!(cpu.status.negative, true);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
             *cpu.accumulator_mut() = 10;
         });
 
-        assert_eq!(cpu.status.negative, false);
+        assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
             *cpu.accumulator_mut() = 100;
         });
 
-        assert_eq!(cpu.status.negative, false);
+        assert_eq!(cpu.status.get(Flag::Negative), false);
     }
 
     #[test]
@@ -768,25 +787,25 @@ mod tests {
             cpu.x = 1;
         });
 
-        assert_eq!(cpu.status.carry, false);
-        assert_eq!(cpu.status.zero, false);
-        assert_eq!(cpu.status.negative, true);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
 
         let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
             cpu.x = 10;
         });
 
-        assert_eq!(cpu.status.carry, true);
-        assert_eq!(cpu.status.zero, true);
-        assert_eq!(cpu.status.negative, false);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
+        assert_eq!(cpu.status.get(Flag::Zero), true);
+        assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
             cpu.x = 100;
         });
 
-        assert_eq!(cpu.status.carry, true);
-        assert_eq!(cpu.status.zero, false);
-        assert_eq!(cpu.status.negative, false);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
+        assert_eq!(cpu.status.get(Flag::Negative), false);
     }
 
     #[test]
@@ -795,25 +814,25 @@ mod tests {
             cpu.y = 1;
         });
 
-        assert_eq!(cpu.status.carry, false);
-        assert_eq!(cpu.status.zero, false);
-        assert_eq!(cpu.status.negative, true);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
 
         let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
             cpu.y = 10;
         });
 
-        assert_eq!(cpu.status.carry, true);
-        assert_eq!(cpu.status.zero, true);
-        assert_eq!(cpu.status.negative, false);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
+        assert_eq!(cpu.status.get(Flag::Zero), true);
+        assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
             cpu.y = 100;
         });
 
-        assert_eq!(cpu.status.carry, true);
-        assert_eq!(cpu.status.zero, false);
-        assert_eq!(cpu.status.negative, false);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
+        assert_eq!(cpu.status.get(Flag::Negative), false);
     }
 
     #[test]
@@ -832,14 +851,14 @@ mod tests {
         });
 
         assert_eq!(cpu.get(Address::new(100)), 44);
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DECAbsolute, Address::new(100)), |cpu| {
             cpu.set(Address::new(100), 1);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 0);
-        assert_eq!(cpu.status.zero, true);
+        assert_eq!(cpu.status.get(Flag::Zero), true);
     }
 
     #[test]
@@ -849,14 +868,14 @@ mod tests {
         });
 
         assert_eq!(cpu.get(Address::new(100)), 44);
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DECAbsolute, Address::new(100)), |cpu| {
             cpu.set(Address::new(100), 0);
         });
 
         assert_eq!(cpu.get(Address::new(100)) as i8, -1i8);
-        assert_eq!(cpu.status.negative, true);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
     }
 
     #[test]
@@ -875,14 +894,14 @@ mod tests {
         });
 
         assert_eq!(cpu.x, 44);
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEX), |cpu| {
             cpu.x = 1;
         });
 
         assert_eq!(cpu.x, 0);
-        assert_eq!(cpu.status.zero, true);
+        assert_eq!(cpu.status.get(Flag::Zero), true);
     }
 
     #[test]
@@ -892,14 +911,14 @@ mod tests {
         });
 
         assert_eq!(cpu.x, 44);
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEX), |cpu| {
             cpu.x = 0;
         });
 
         assert_eq!(cpu.x as i8, -1i8);
-        assert_eq!(cpu.status.negative, true);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
     }
 
     #[test]
@@ -918,14 +937,14 @@ mod tests {
         });
 
         assert_eq!(cpu.y, 44);
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEY), |cpu| {
             cpu.y = 1;
         });
 
         assert_eq!(cpu.y, 0);
-        assert_eq!(cpu.status.zero, true);
+        assert_eq!(cpu.status.get(Flag::Zero), true);
     }
 
     #[test]
@@ -935,14 +954,14 @@ mod tests {
         });
 
         assert_eq!(cpu.y, 44);
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEY), |cpu| {
             cpu.y = 0;
         });
 
         assert_eq!(cpu.y as i8, -1i8);
-        assert_eq!(cpu.status.negative, true);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
     }
 
     #[test]
@@ -970,14 +989,14 @@ mod tests {
         });
 
         assert_eq!(cpu.get(Address::new(100)), 46);
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(INCAbsolute, Address::new(100)), |cpu| {
             cpu.set(Address::new(100), -1i8 as u8);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 0);
-        assert_eq!(cpu.status.zero, true);
+        assert_eq!(cpu.status.get(Flag::Zero), true);
     }
 
     #[test]
@@ -987,14 +1006,14 @@ mod tests {
         });
 
         assert_eq!(cpu.get(Address::new(100)), 46);
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(INCAbsolute, Address::new(100)), |cpu| {
             cpu.set(Address::new(100), -10i8 as u8);
         });
 
         assert_eq!(cpu.get(Address::new(100)) as i8, -9i8);
-        assert_eq!(cpu.status.negative, true);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
     }
 
     #[test]
@@ -1082,7 +1101,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 0b10);
-        assert_eq!(cpu.status.carry, false);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
     }
 
     #[test]
@@ -1092,7 +1111,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 0b101010);
-        assert_eq!(cpu.status.carry, true);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
     }
 
     #[test]
@@ -1164,7 +1183,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 43);
-        assert_eq!(cpu.status.zero, false);
+        assert_eq!(cpu.status.get(Flag::Zero), false);
     }
 
     #[test]
@@ -1174,7 +1193,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 0);
-        assert_eq!(cpu.status.zero, true);
+        assert_eq!(cpu.status.get(Flag::Zero), true);
     }
 
     #[test]
@@ -1184,7 +1203,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 43);
-        assert_eq!(cpu.status.negative, false);
+        assert_eq!(cpu.status.get(Flag::Negative), false);
     }
 
     #[test]
@@ -1194,7 +1213,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator() as i8, -1i8);
-        assert_eq!(cpu.status.negative, true);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
     }
 
     #[test]
