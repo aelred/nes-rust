@@ -264,7 +264,11 @@ pub enum Instruction {
     /// a byte of memory.
     ORA(FlexibleAddressingMode),
 
+    /// Push Accumulator
+    ///
+    /// Pushes a copy of the accumulator on to the stack.
     PHA,
+
     PHP,
     PLA,
     PLP,

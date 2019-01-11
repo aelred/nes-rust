@@ -166,6 +166,12 @@ impl CPU {
                 let value = *self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() | value);
             }
+            PHA => {
+                let accumulator = self.accumulator();
+                let addr = self.addressable.deref_address_mut(STACK + self.stack_pointer);
+                *addr = accumulator;
+                self.stack_pointer -= 1;
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1105,6 +1111,26 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 0b1110);
+    }
+
+    #[test]
+    fn instr_pha_writes_accumulator_to_stack_pointer() {
+        let cpu = run_instr(mem!(PHA), |cpu| {
+            *cpu.program_counter_mut() = Address::new(0x1234);
+            *cpu.accumulator_mut() = 20;
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.get(STACK + 6u8), 20);
+    }
+
+    #[test]
+    fn instr_pha_decrements_stack_pointer_by_one_byte() {
+        let cpu = run_instr(mem!(PHA), |cpu| {
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.stack_pointer, 5);
     }
 
     #[test]
