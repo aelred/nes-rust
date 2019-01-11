@@ -129,7 +129,7 @@ impl CPU {
 
                 // For some reason the spec says the pointer must be to the last byte of the JSR
                 // instruction...
-                let data = *self.program_counter() - 1;
+                let data = self.program_counter() - 1;
                 self.push_stack(data);
 
                 *self.program_counter_mut() = addr;
@@ -198,8 +198,8 @@ impl CPU {
         &mut self.addressable.accumulator
     }
 
-    fn program_counter(&self) -> &Address {
-        &self.addressable.program_counter
+    fn program_counter(&self) -> Address {
+        self.addressable.program_counter
     }
 
     fn program_counter_mut(&mut self) -> &mut Address {
@@ -407,7 +407,7 @@ mod tests {
     fn default_cpu_is_in_default_state() {
         let cpu = CPU::default();
 
-        assert_eq!(*cpu.program_counter(), Address::new(0x00));
+        assert_eq!(cpu.program_counter(), Address::new(0x00));
         assert_eq!(cpu.accumulator(), 0);
         assert_eq!(cpu.x, 0);
         assert_eq!(cpu.y, 0);
@@ -493,7 +493,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(*cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter(), Address::new(82));
     }
 
     #[test]
@@ -503,7 +503,7 @@ mod tests {
             cpu.status.set(Flag::Carry);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter(), Address::new(92));
     }
 
     #[test]
@@ -513,7 +513,7 @@ mod tests {
             cpu.status.clear(Flag::Carry);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter(), Address::new(92));
     }
 
     #[test]
@@ -524,7 +524,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(*cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter(), Address::new(82));
     }
 
     #[test]
@@ -534,7 +534,7 @@ mod tests {
             cpu.status.clear(Flag::Zero);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter(), Address::new(92));
     }
 
     #[test]
@@ -545,7 +545,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(*cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter(), Address::new(82));
     }
 
     #[test]
@@ -605,7 +605,7 @@ mod tests {
             cpu.status.clear(Flag::Negative);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter(), Address::new(92));
     }
 
     #[test]
@@ -616,7 +616,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(*cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter(), Address::new(82));
     }
 
     #[test]
@@ -627,7 +627,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(*cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter(), Address::new(82));
     }
 
     #[test]
@@ -637,7 +637,7 @@ mod tests {
             cpu.status.set(Flag::Zero);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter(), Address::new(92));
     }
 
     #[test]
@@ -648,7 +648,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(*cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter(), Address::new(82));
     }
 
     #[test]
@@ -658,7 +658,7 @@ mod tests {
             cpu.status.set(Flag::Negative);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter(), Address::new(92));
     }
 
     #[test]
@@ -669,7 +669,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(*cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter(), Address::new(82));
     }
 
     #[test]
@@ -679,7 +679,7 @@ mod tests {
             cpu.status.set(Flag::Overflow);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter(), Address::new(92));
     }
 
     #[test]
@@ -689,7 +689,7 @@ mod tests {
             cpu.status.clear(Flag::Overflow);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter(), Address::new(92));
     }
 
     #[test]
@@ -700,7 +700,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(*cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter(), Address::new(82));
     }
 
     #[test]
@@ -1061,7 +1061,7 @@ mod tests {
             *cpu.program_counter_mut() = Address::new(200);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(100));
+        assert_eq!(cpu.program_counter(), Address::new(100));
     }
 
     #[test]
@@ -1070,7 +1070,7 @@ mod tests {
             *cpu.program_counter_mut() = Address::new(200);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(100));
+        assert_eq!(cpu.program_counter(), Address::new(100));
     }
 
     #[test]
@@ -1141,7 +1141,7 @@ mod tests {
             *cpu.program_counter_mut() = Address::new(20);
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(21));
+        assert_eq!(cpu.program_counter(), Address::new(21));
     }
 
     #[test]
@@ -1213,7 +1213,7 @@ mod tests {
     #[test]
     fn immediate_addressing_mode_fetches_given_value() {
         let mut cpu = CPU::default();
-        cpu.set(*cpu.program_counter(), 56);
+        cpu.set(cpu.program_counter(), 56);
         assert_eq!(cpu.addressable.immediate(), 56);
     }
 
@@ -1228,8 +1228,8 @@ mod tests {
     fn absolute_addressing_mode_fetches_values_at_given_address() {
         let mut cpu = CPU::default();
         let (higher, lower) = Address::new(432).split();
-        cpu.set(*cpu.program_counter(), higher);
-        cpu.set(*cpu.program_counter() + 1u16, lower);
+        cpu.set(cpu.program_counter(), higher);
+        cpu.set(cpu.program_counter() + 1u16, lower);
         cpu.set(Address::new(432), 35);
         assert_eq!(*cpu.addressable.absolute(), 35);
     }
@@ -1280,7 +1280,7 @@ mod tests {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(101));
+        assert_eq!(cpu.program_counter(), Address::new(101));
     }
 
     #[test]
@@ -1289,7 +1289,7 @@ mod tests {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(102));
+        assert_eq!(cpu.program_counter(), Address::new(102));
     }
 
     #[test]
@@ -1298,7 +1298,7 @@ mod tests {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
-        assert_eq!(*cpu.program_counter(), Address::new(103));
+        assert_eq!(cpu.program_counter(), Address::new(103));
     }
 
     fn run_instr<F: FnOnce(&mut CPU)>(data: Vec<u8>, cpu_setup: F) -> CPU {
@@ -1306,7 +1306,7 @@ mod tests {
 
         cpu_setup(&mut cpu);
 
-        let mut pc = *cpu.program_counter();
+        let mut pc = cpu.program_counter();
 
         for byte in data.iter() {
             cpu.set(pc, *byte);
