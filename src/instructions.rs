@@ -292,7 +292,12 @@ pub enum Instruction {
     /// current value of the carry flag whilst the old bit 7 becomes the new carry flag value.
     ROL(ShiftAddressingMode),
 
+    /// Rotate Right
+    ///
+    /// Move each of the bits in either A or M one place to the right. Bit 7 is filled with the
+    /// current value of the carry flag whilst the old bit 0 becomes the new carry flag value.
     ROR(ShiftAddressingMode),
+
     RTI,
     RTS,
     SBC(FlexibleAddressingMode),

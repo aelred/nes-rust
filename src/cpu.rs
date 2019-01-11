@@ -191,6 +191,19 @@ impl CPU {
 
                 self.set_flags(new_value);
             }
+            ROR(addressing_mode) => {
+                let carry = self.status.get(Flag::Carry);
+                let addr = self.fetch_ref(addressing_mode);
+
+                let old_value = *addr;
+                *addr >>= 1;
+                *addr |= (carry as u8) << 7;
+                let new_value = *addr;
+
+                self.status.set_to(Flag::Carry, bit0(old_value));
+
+                self.set_flags(new_value);
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1290,6 +1303,33 @@ mod tests {
         let cpu = run_instr(mem!(ROLAccumulator), |cpu| {
             cpu.status.clear(Flag::Carry);
             *cpu.accumulator_mut() = 0b10000000;
+        });
+
+        assert_eq!(cpu.accumulator(), 0);
+        assert_eq!(cpu.status.get(Flag::Carry), true);
+    }
+
+    #[test]
+    fn instr_ror_rotates_left_with_carry_flag() {
+        let cpu = run_instr(mem!(RORAccumulator), |cpu| {
+            cpu.status.clear(Flag::Carry);
+            *cpu.accumulator_mut() = 0b100;
+        });
+
+        assert_eq!(cpu.accumulator(), 0b10);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
+
+        let cpu = run_instr(mem!(RORAccumulator), |cpu| {
+            cpu.status.set(Flag::Carry);
+            *cpu.accumulator_mut() = 0b100;
+        });
+
+        assert_eq!(cpu.accumulator(), 0b10000010);
+        assert_eq!(cpu.status.get(Flag::Carry), false);
+
+        let cpu = run_instr(mem!(RORAccumulator), |cpu| {
+            cpu.status.clear(Flag::Carry);
+            *cpu.accumulator_mut() = 0b1;
         });
 
         assert_eq!(cpu.accumulator(), 0);
