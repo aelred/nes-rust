@@ -330,8 +330,9 @@ impl Addressable {
         opcode.instruction()
     }
 
-    fn deref_address(&self, address: Address) -> u8 {
-        self.memory[address.index()]
+    fn deref_address<T: SerializeBytes>(&self, address: Address) -> T {
+        let slice = &self.memory[address.index()..];
+        T::deserialize(slice)
     }
 
     pub fn deref_address_mut(&mut self, address: Address) -> &mut [u8] {
@@ -339,8 +340,7 @@ impl Addressable {
     }
 
     fn fetch_at_program_counter<T: SerializeBytes>(&mut self) -> T {
-        let slice = self.deref_address_mut(self.program_counter);
-        let data = T::deserialize(slice);
+        let data = self.deref_address(self.program_counter);
         self.program_counter += T::SIZE;
         data
     }
