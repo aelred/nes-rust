@@ -304,7 +304,12 @@ pub enum Instruction {
     /// processor flags from the stack followed by the program counter.
     RTI,
 
+    /// Return from Subroutine
+    ///
+    /// The RTS instruction is used at the end of a subroutine to return to the calling routine. It
+    /// pulls the program counter (minus one) from the stack.
     RTS,
+
     SBC(FlexibleAddressingMode),
     SEC,
     SED,

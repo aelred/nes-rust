@@ -150,16 +150,11 @@ impl CPU {
             PHA => self.push_stack(self.accumulator()),
             PHP => self.push_stack(self.status),
             PLA => {
-                self.stack_pointer = self.stack_pointer.wrapping_add(1);
-                let stack_address = STACK + self.stack_pointer;
-                let data = self.addressable.deref_address(stack_address);
-                self.set_accumulator(data);
+                let accumulator = self.pull_stack();
+                self.set_accumulator(accumulator);
             }
             PLP => {
-                self.stack_pointer = self.stack_pointer.wrapping_add(1);
-                let stack_address = STACK + self.stack_pointer;
-                let data = self.addressable.deref_address(stack_address);
-                self.status = data;
+                self.status = self.pull_stack();
             }
             ROL(addressing_mode) => {
                 self.shift(addressing_mode, 7, |val, carry| (val << 1) | carry);
@@ -168,6 +163,7 @@ impl CPU {
                 self.shift(addressing_mode, 0, |val, carry| val >> 1 | carry << 7);
             }
             RTI => unimplemented!("RTI"), // TODO
+            RTS => *self.program_counter_mut() = self.pull_stack(),
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -193,6 +189,12 @@ impl CPU {
             *location = byte;
             self.stack_pointer = self.stack_pointer.wrapping_sub(1);
         }
+    }
+
+    fn pull_stack<T: SerializeBytes>(&mut self) -> T {
+        self.stack_pointer = self.stack_pointer.wrapping_add(T::SIZE);
+        let stack_address = STACK + self.stack_pointer;
+        self.addressable.deref_address(stack_address)
     }
 
     fn increment(status: &mut Status, addr: &mut u8) {
@@ -1312,6 +1314,25 @@ mod tests {
 
         assert_eq!(cpu.accumulator(), 0);
         assert_eq!(cpu.status.get(Flag::Carry), true);
+    }
+
+    #[test]
+    fn instr_rts_reads_program_counter_from_stack() {
+        let cpu = run_instr(mem!(RTS), |cpu| {
+            cpu.set(STACK + 2u8, 0x12);
+            cpu.set(STACK + 1u8, 0x34);
+        });
+
+        assert_eq!(cpu.program_counter(), Address::new(0x1234));
+    }
+
+    #[test]
+    fn instr_rts_increments_stack_pointer_by_two_bytes() {
+        let cpu = run_instr(mem!(RTS), |cpu| {
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.stack_pointer, 8);
     }
 
     #[test]
