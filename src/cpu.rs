@@ -2,8 +2,8 @@ use crate::address::Address;
 use crate::addressing_modes::ValueAddressingMode;
 use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
-use num_traits::FromPrimitive;
 use crate::SerializeBytes;
+use num_traits::FromPrimitive;
 
 const STACK: Address = Address::new(0x0100);
 
@@ -28,7 +28,7 @@ fn bit7(value: u8) -> bool {
 }
 
 impl CPU {
-    pub fn with_memory(memory: Vec<u8>) -> Self {
+    pub fn with_memory(memory: &[u8]) -> Self {
         let mut cpu = CPU::default();
 
         let slice = &mut cpu.addressable.memory[..memory.len()];
@@ -124,7 +124,9 @@ impl CPU {
                 let data = (*self.program_counter() - 1).bytes();
 
                 for byte in data.into_iter() {
-                    let addr = self.addressable.deref_address_mut(STACK + self.stack_pointer);
+                    let addr = self
+                        .addressable
+                        .deref_address_mut(STACK + self.stack_pointer);
                     *addr = byte;
                     self.stack_pointer -= 1;
                 }
@@ -333,8 +335,8 @@ impl Status {
 #[cfg(test)]
 mod tests {
     use super::OpCode::*;
-    use crate::mem;
     use super::*;
+    use crate::mem;
 
     #[test]
     fn default_cpu_is_in_default_state() {

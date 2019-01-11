@@ -1,13 +1,13 @@
-use nes_rust::CPU;
 use nes_rust::mem;
-use nes_rust::OpCode::*;
 use nes_rust::Address;
+use nes_rust::OpCode::*;
+use nes_rust::CPU;
 
 const HALT_ADDRESS: Address = Address::new(0xDEAD);
 
 macro_rules! run {
     ($result: expr; $( $expr: expr ),*) => {
-        let mut cpu = CPU::with_memory(mem!($($expr),*));
+        let mut cpu = CPU::with_memory(&mem!($($expr),*));
         let result = run(&mut cpu);
         assert_eq!(result, $result);
     };
