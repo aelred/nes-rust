@@ -192,6 +192,7 @@ impl CPU {
             }
             SEC => self.status.set(Flag::Carry),
             SED => self.status.set(Flag::Decimal),
+            SEI => self.status.set(Flag::InterruptDisable),
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1411,6 +1412,15 @@ mod tests {
         });
 
         assert_eq!(cpu.status.get(Flag::Decimal), true);
+    }
+
+    #[test]
+    fn instr_sei_sets_interrupt_disable_flag() {
+        let cpu = run_instr(mem!(SEI), |cpu| {
+            cpu.status.clear(Flag::InterruptDisable);
+        });
+
+        assert_eq!(cpu.status.get(Flag::InterruptDisable), true);
     }
 
     #[test]

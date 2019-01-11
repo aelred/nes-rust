@@ -333,7 +333,13 @@ pub enum Instruction {
     /// Set the decimal mode flag to one.
     SED,
 
+    /// Set Interrupt Disable
+    ///
+    /// I = 1
+    ///
+    /// Set the interrupt disable flag to one.
     SEI,
+
     STA(StoreAddressingMode),
     STX(STXAddressingMode),
     STY(STYAddressingMode),
