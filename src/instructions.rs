@@ -340,7 +340,13 @@ pub enum Instruction {
     /// Set the interrupt disable flag to one.
     SEI,
 
+    /// Store Accumulator
+    ///
+    /// M = A
+    ///
+    /// Stores the contents of the accumulator into memory.
     STA(StoreAddressingMode),
+
     STX(STXAddressingMode),
     STY(STYAddressingMode),
     TAX,

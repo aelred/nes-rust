@@ -163,6 +163,9 @@ impl CPU {
             SEC => self.status.set(Flag::Carry),
             SED => self.status.set(Flag::Decimal),
             SEI => self.status.set(Flag::InterruptDisable),
+            STA(addressing_mode) => {
+                *self.fetch_ref(addressing_mode) = self.accumulator();
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1411,6 +1414,15 @@ mod tests {
         });
 
         assert_eq!(cpu.status.get(Flag::InterruptDisable), true);
+    }
+
+    #[test]
+    fn instr_sta_stores_accumulator_in_memory() {
+        let cpu = run_instr(mem!(STAAbsolute, Address::new(0x32)), |cpu| {
+            *cpu.accumulator_mut() = 65;
+        });
+
+        assert_eq!(cpu.get(Address::new(0x32)), 65);
     }
 
     #[test]
