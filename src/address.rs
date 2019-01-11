@@ -1,4 +1,4 @@
-use crate::cpu::SerializeBytes;
+use crate::SerializeBytes;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Sub;

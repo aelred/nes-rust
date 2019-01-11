@@ -147,7 +147,7 @@ impl JumpAddressingMode {
 impl ValueAddressingMode for JumpAddressingMode {
     fn fetch(self, addressable: &mut Addressable) -> &mut u8 {
         let address = self.fetch_address(addressable);
-        addressable.deref_address(address)
+        addressable.deref_address_mut(address)
     }
 }
 

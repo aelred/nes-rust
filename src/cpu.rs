@@ -3,30 +3,9 @@ use crate::addressing_modes::ValueAddressingMode;
 use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
 use num_traits::FromPrimitive;
+use crate::SerializeBytes;
 
 const STACK: Address = Address::new(0x0100);
-
-pub trait SerializeBytes {
-    fn bytes(self) -> Vec<u8>;
-}
-
-impl SerializeBytes for i8 {
-    fn bytes(self) -> Vec<u8> {
-        vec![self as u8]
-    }
-}
-
-impl SerializeBytes for u8 {
-    fn bytes(self) -> Vec<u8> {
-        vec![self]
-    }
-}
-
-impl SerializeBytes for OpCode {
-    fn bytes(self) -> Vec<u8> {
-        vec![self as u8]
-    }
-}
 
 pub struct CPU {
     addressable: Addressable,
@@ -49,6 +28,23 @@ fn bit7(value: u8) -> bool {
 }
 
 impl CPU {
+    pub fn with_memory(memory: Vec<u8>) -> Self {
+        let mut cpu = CPU::default();
+
+        let slice = &mut cpu.addressable.memory[..memory.len()];
+        slice.copy_from_slice(&memory);
+
+        cpu
+    }
+
+    pub fn read(&self, address: Address) -> u8 {
+        self.addressable.deref_address(address)
+    }
+
+    pub fn accumulator(&self) -> u8 {
+        self.addressable.accumulator
+    }
+
     pub fn run_instruction(&mut self) {
         use crate::instructions::Instruction::*;
 
@@ -59,7 +55,7 @@ impl CPU {
                 let (result, carry) = self.accumulator().overflowing_add(value);
 
                 // Perform the operation again, but signed, to check for signed overflow
-                self.status.overflow = (*self.accumulator() as i8).overflowing_add(value as i8).1;
+                self.status.overflow = (self.accumulator() as i8).overflowing_add(value as i8).1;
 
                 self.set_accumulator(result);
                 self.status.carry = carry;
@@ -97,7 +93,7 @@ impl CPU {
             CLD => self.status.decimal = false,
             CLI => self.status.interrupt_disable = false,
             CLV => self.status.overflow = false,
-            CMP(addressing_mode) => self.compare(*self.accumulator(), addressing_mode),
+            CMP(addressing_mode) => self.compare(self.accumulator(), addressing_mode),
             CPX(addressing_mode) => self.compare(self.x, addressing_mode),
             CPY(addressing_mode) => self.compare(self.y, addressing_mode),
             DEC(addressing_mode) => {
@@ -128,7 +124,7 @@ impl CPU {
                 let data = (*self.program_counter() - 1).bytes();
 
                 for byte in data.into_iter() {
-                    let addr = self.addressable.deref_address(STACK + self.stack_pointer);
+                    let addr = self.addressable.deref_address_mut(STACK + self.stack_pointer);
                     *addr = byte;
                     self.stack_pointer -= 1;
                 }
@@ -163,10 +159,6 @@ impl CPU {
         let value = addr.wrapping_sub(1);
         *addr = value;
         status.set_flags(value);
-    }
-
-    fn accumulator(&self) -> &u8 {
-        &self.addressable.accumulator
     }
 
     fn accumulator_mut(&mut self) -> &mut u8 {
@@ -272,7 +264,7 @@ impl Addressable {
 
     pub fn absolute(&mut self) -> &mut u8 {
         let address = self.absolute_address();
-        self.deref_address(address)
+        self.deref_address_mut(address)
     }
 
     pub fn absolute_address(&mut self) -> Address {
@@ -307,14 +299,18 @@ impl Addressable {
         opcode.instruction()
     }
 
-    pub fn deref_address(&mut self, address: Address) -> &mut u8 {
+    fn deref_address(&self, address: Address) -> u8 {
+        self.memory[address.index()]
+    }
+
+    pub fn deref_address_mut(&mut self, address: Address) -> &mut u8 {
         &mut self.memory[address.index()]
     }
 
     fn fetch_at_program_counter(&mut self) -> &mut u8 {
         let old_program_counter = self.program_counter;
         self.program_counter += 1u16;
-        self.deref_address(old_program_counter)
+        self.deref_address_mut(old_program_counter)
     }
 }
 
@@ -337,24 +333,15 @@ impl Status {
 #[cfg(test)]
 mod tests {
     use super::OpCode::*;
+    use crate::mem;
     use super::*;
-
-    macro_rules! mem {
-        ($( $data: expr ),*) => {
-            {
-                let mut vec: Vec<u8> = vec![];
-                $(vec.extend(SerializeBytes::bytes($data));)*
-                vec
-            }
-        };
-    }
 
     #[test]
     fn default_cpu_is_in_default_state() {
         let cpu = CPU::default();
 
         assert_eq!(*cpu.program_counter(), Address::new(0x00));
-        assert_eq!(*cpu.accumulator(), 0);
+        assert_eq!(cpu.accumulator(), 0);
         assert_eq!(cpu.x, 0);
         assert_eq!(cpu.y, 0);
         assert_eq!(cpu.stack_pointer, 0xFF);
@@ -366,7 +353,7 @@ mod tests {
             *cpu.accumulator_mut() = 42;
         });
 
-        assert_eq!(*cpu.accumulator(), 52);
+        assert_eq!(cpu.accumulator(), 52);
         assert_eq!(cpu.status.overflow, false);
         assert_eq!(cpu.status.carry, false);
     }
@@ -377,7 +364,7 @@ mod tests {
             *cpu.accumulator_mut() = 42;
         });
 
-        assert_eq!(*cpu.accumulator(), 41);
+        assert_eq!(cpu.accumulator(), 41);
         assert_eq!(cpu.status.overflow, false);
         assert_eq!(cpu.status.carry, true);
     }
@@ -388,7 +375,7 @@ mod tests {
             *cpu.accumulator_mut() = 42i8 as u8;
         });
 
-        assert_eq!(*cpu.accumulator() as i8, -87i8);
+        assert_eq!(cpu.accumulator() as i8, -87i8);
         assert_eq!(cpu.status.overflow, true);
         assert_eq!(cpu.status.carry, false);
     }
@@ -399,7 +386,7 @@ mod tests {
             *cpu.accumulator_mut() = 0b1010;
         });
 
-        assert_eq!(*cpu.accumulator(), 0b1000);
+        assert_eq!(cpu.accumulator(), 0b1000);
     }
 
     #[test]
@@ -408,7 +395,7 @@ mod tests {
             *cpu.accumulator_mut() = 0b100;
         });
 
-        assert_eq!(*cpu.accumulator(), 0b1000);
+        assert_eq!(cpu.accumulator(), 0b1000);
         assert_eq!(cpu.status.carry, false);
     }
 
@@ -418,7 +405,7 @@ mod tests {
             *cpu.accumulator_mut() = 0b10101010;
         });
 
-        assert_eq!(*cpu.accumulator(), 0b01010100);
+        assert_eq!(cpu.accumulator(), 0b01010100);
         assert_eq!(cpu.status.carry, true);
     }
 
@@ -937,7 +924,7 @@ mod tests {
             *cpu.accumulator_mut() = 0b1010;
         });
 
-        assert_eq!(*cpu.accumulator(), 0b0110);
+        assert_eq!(cpu.accumulator(), 0b0110);
     }
 
     #[test]
@@ -1039,12 +1026,12 @@ mod tests {
 
         assert_eq!(cpu.stack_pointer, 4);
     }
-    
+
     #[test]
     fn instr_lda_loads_operand_into_accumulator() {
         let cpu = run_instr(mem!(LDAImmediate, 5u8), |cpu| {});
 
-        assert_eq!(*cpu.accumulator(), 5);
+        assert_eq!(cpu.accumulator(), 5);
     }
 
     #[test]
@@ -1091,7 +1078,7 @@ mod tests {
             *cpu.accumulator_mut() = 42;
         });
 
-        assert_eq!(*cpu.accumulator(), 43);
+        assert_eq!(cpu.accumulator(), 43);
         assert_eq!(cpu.status.zero, false);
     }
 
@@ -1101,7 +1088,7 @@ mod tests {
             *cpu.accumulator_mut() = 42;
         });
 
-        assert_eq!(*cpu.accumulator(), 0);
+        assert_eq!(cpu.accumulator(), 0);
         assert_eq!(cpu.status.zero, true);
     }
 
@@ -1111,7 +1098,7 @@ mod tests {
             *cpu.accumulator_mut() = 42;
         });
 
-        assert_eq!(*cpu.accumulator(), 43);
+        assert_eq!(cpu.accumulator(), 43);
         assert_eq!(cpu.status.negative, false);
     }
 
@@ -1121,7 +1108,7 @@ mod tests {
             *cpu.accumulator_mut() = 0;
         });
 
-        assert_eq!(*cpu.accumulator() as i8, -1i8);
+        assert_eq!(cpu.accumulator() as i8, -1i8);
         assert_eq!(cpu.status.negative, true);
     }
 
