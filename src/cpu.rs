@@ -166,7 +166,7 @@ impl CPU {
             PHA => self.push_stack(self.accumulator()),
             PHP => self.push_stack(self.status),
             PLA => {
-                self.stack_pointer += 1;
+                self.stack_pointer = self.stack_pointer.wrapping_add(1);
                 let stack_address = STACK + self.stack_pointer;
                 let data = self.addressable.deref_address(stack_address);
                 self.set_accumulator(data);
@@ -176,7 +176,7 @@ impl CPU {
     }
 
     fn push_stack<T: SerializeBytes>(&mut self, data: T) {
-        self.stack_pointer -= T::SIZE;
+        self.stack_pointer = self.stack_pointer.wrapping_sub(T::SIZE);
         let stack_address = STACK + self.stack_pointer;
         let location = self.addressable.deref_address_mut(stack_address + 1u8);
         data.serialize(location);
@@ -1299,6 +1299,21 @@ mod tests {
         });
 
         assert_eq!(cpu.program_counter(), Address::new(103));
+    }
+
+    #[test]
+    fn stack_pointer_wraps_on_overflow() {
+        let cpu = run_instr(mem!(PLA), |cpu| {
+            cpu.stack_pointer = 255;
+        });
+
+        assert_eq!(cpu.stack_pointer, 0);
+
+        let cpu = run_instr(mem!(PHA), |cpu| {
+            cpu.stack_pointer = 0;
+        });
+
+        assert_eq!(cpu.stack_pointer, 255);
     }
 
     fn run_instr<F: FnOnce(&mut CPU)>(data: Vec<u8>, cpu_setup: F) -> CPU {
