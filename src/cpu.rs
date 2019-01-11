@@ -56,16 +56,22 @@ impl CPU {
 
         match self.addressable.instr() {
             ADC(addressing_mode) => {
+                let accumulator = self.accumulator();
                 let value = self.fetch(addressing_mode);
 
-                let (result, carry) = self.accumulator().overflowing_add(value);
+                let carry_in = self.status.get(Flag::Carry) as u16;
 
-                // Perform the operation again, but signed, to check for signed overflow
-                let overflow = (self.accumulator() as i8).overflowing_add(value as i8).1;
+                let full_result = accumulator as u16 + value as u16 + carry_in;
+
+                let result = full_result as u8;
+                let carry_out = full_result & (1 << 8) != 0;
+
+                // Check if the sign bit has changed
+                let overflow = bit7((accumulator ^ result) & (value ^ result));
                 self.status.set_to(Flag::Overflow, overflow);
 
                 self.set_accumulator(result);
-                self.status.set_to(Flag::Carry, carry);
+                self.status.set_to(Flag::Carry, carry_out);
             }
             AND(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
@@ -1333,6 +1339,32 @@ mod tests {
         });
 
         assert_eq!(cpu.stack_pointer, 8);
+    }
+
+    #[test]
+    fn addition_behaves_appropriately_across_many_values() {
+        let carry_values = [true, false];
+        let values = [0, 1, 2, 3, 126, 127, 128, 129, 252, 253, 254, 255];
+
+        for x in values.iter() {
+            for y in values.iter() {
+                for carry_in in carry_values.iter() {
+
+                    let cpu = run_instr(mem!(ADCImmediate, *x), |cpu| {
+                        cpu.status.set_to(Flag::Carry, *carry_in);
+                        *cpu.accumulator_mut() = *y;
+                    });
+
+                    let carry_bit = *carry_in as u16;
+                    let expected = *x as u16 + *y as u16 + carry_bit;
+
+                    let carry_out = (cpu.status.get(Flag::Carry) as u16) << 8;
+                    let actual = cpu.accumulator() as u16 + carry_out;
+
+                    assert_eq!(actual, expected, "{} + {} + {} =/= {}", x, y, carry_bit, actual);
+                }
+            }
+        }
     }
 
     #[test]
