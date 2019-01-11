@@ -162,6 +162,10 @@ impl CPU {
                 self.set_flags(new_value);
             }
             NOP => { }
+            ORA(addressing_mode) => {
+                let value = *self.fetch(addressing_mode);
+                self.set_accumulator(self.accumulator() | value);
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1092,6 +1096,15 @@ mod tests {
         });
 
         assert_eq!(*cpu.program_counter(), Address::new(21));
+    }
+
+    #[test]
+    fn instr_ora_performs_bitwise_or() {
+        let cpu = run_instr(mem!(ORAImmediate, 0b1100u8), |cpu| {
+            *cpu.accumulator_mut() = 0b1010;
+        });
+
+        assert_eq!(cpu.accumulator(), 0b1110);
     }
 
     #[test]
