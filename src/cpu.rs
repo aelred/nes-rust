@@ -4,6 +4,7 @@ use crate::addressing_modes::ValueAddressingMode;
 use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
 use crate::SerializeBytes;
+use crate::SerializeByte;
 
 const STACK: Address = Address::new(0x0100);
 
@@ -176,10 +177,12 @@ impl CPU {
     }
 
     fn push_stack<T: SerializeBytes>(&mut self, data: T) {
-        self.stack_pointer = self.stack_pointer.wrapping_sub(T::SIZE);
-        let stack_address = STACK + self.stack_pointer;
-        let location = self.addressable.deref_address_mut(stack_address + 1u8);
-        data.serialize(location);
+        for byte in data.serialize().rev() {
+            let stack_address = STACK + self.stack_pointer;
+            let location = self.addressable.deref_address_mut(stack_address);
+            *location = byte;
+            self.stack_pointer = self.stack_pointer.wrapping_sub(1);
+        }
     }
 
     fn increment(status: &mut Status, addr: &mut u8) {
@@ -242,7 +245,7 @@ impl Default for CPU {
     fn default() -> Self {
         CPU {
             addressable: Addressable {
-                memory: [0; 0xffff],
+                memory: [0; 0x10000],
                 accumulator: 0,
                 program_counter: Address::new(0x00),
             },
@@ -256,7 +259,7 @@ impl Default for CPU {
 
 pub struct Addressable {
     /// 2KB of internal RAM, plus more mapped space
-    memory: [u8; 0xffff],
+    memory: [u8; 0x10000],
     /// A
     accumulator: u8,
     /// PC
@@ -298,7 +301,7 @@ impl Addressable {
 
     pub fn absolute(&mut self) -> &mut u8 {
         let address = self.absolute_address();
-        &mut self.deref_address_mut(address)[0]
+        self.deref_address_mut(address)
     }
 
     pub fn absolute_address(&mut self) -> Address {
@@ -331,18 +334,39 @@ impl Addressable {
     }
 
     fn deref_address<T: SerializeBytes>(&self, address: Address) -> T {
-        let slice = &self.memory[address.index()..];
-        T::deserialize(slice)
+        let iter = MemoryIterator::new(&self.memory, address);
+        T::deserialize(iter)
     }
 
-    pub fn deref_address_mut(&mut self, address: Address) -> &mut [u8] {
-        &mut self.memory[address.index()..]
+    pub fn deref_address_mut(&mut self, address: Address) -> &mut u8 {
+        &mut self.memory[address.index()]
     }
 
     fn fetch_at_program_counter<T: SerializeBytes>(&mut self) -> T {
         let data = self.deref_address(self.program_counter);
         self.program_counter += T::SIZE;
         data
+    }
+}
+
+struct MemoryIterator<'a> {
+    memory: &'a [u8],
+    address: Address
+}
+
+impl<'a> MemoryIterator<'a> {
+    fn new(memory: &'a [u8], address: Address) -> Self {
+        MemoryIterator { memory, address }
+    }
+}
+
+impl<'a> Iterator for MemoryIterator<'a> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<u8> {
+        let byte = self.memory[self.address.index()];
+        self.address += 1u8;
+        Some(byte)
     }
 }
 
@@ -376,15 +400,13 @@ impl Status {
     }
 }
 
-impl SerializeBytes for Status {
-    const SIZE: u8 = u8::SIZE;
-
-    fn serialize(self, dest: &mut [u8]) {
-        self.0.serialize(dest);
+impl SerializeByte for Status {
+    fn to_byte(&self) -> u8 {
+        self.0
     }
 
-    fn deserialize(source: &[u8]) -> Self {
-        Status(SerializeBytes::deserialize(source))
+    fn from_byte(byte: u8) -> Self {
+        Status(byte)
     }
 }
 
@@ -1314,6 +1336,35 @@ mod tests {
         });
 
         assert_eq!(cpu.stack_pointer, 255);
+    }
+
+    #[test]
+    fn stack_operations_wrap_value_on_overflow() {
+        let cpu = run_instr(mem!(JSR, Address::new(100)), |cpu| {
+            cpu.stack_pointer = 0;
+            *cpu.program_counter_mut() = Address::new(0x1234);
+        });
+
+        assert_eq!(cpu.get(STACK), 0x12);
+        assert_eq!(cpu.get(STACK + 0xffu8), 0x36);
+    }
+
+    #[test]
+    fn program_counter_wraps_on_overflow() {
+        let cpu = run_instr(mem!(NOP), |cpu| {
+            *cpu.program_counter_mut() = Address::new(0xffff);
+        });
+
+        assert_eq!(cpu.program_counter(), Address::new(0));
+    }
+
+    #[test]
+    fn instructions_can_wrap_on_program_counter_overflow() {
+        let cpu = run_instr(mem!(JMPAbsolute, Address::new(0x1234)), |cpu| {
+            *cpu.program_counter_mut() = Address::new(0xfffe);
+        });
+
+        assert_eq!(cpu.program_counter(), Address::new(0x1234));
     }
 
     fn run_instr<F: FnOnce(&mut CPU)>(data: Vec<u8>, cpu_setup: F) -> CPU {

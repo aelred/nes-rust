@@ -23,15 +23,16 @@ impl Address {
 impl SerializeBytes for Address {
     const SIZE: u8 = 2;
 
-    fn serialize(self, dest: &mut [u8]) {
+    type Iter = std::vec::IntoIter<u8>;
+
+    fn serialize(self) -> Self::Iter {
         let (higher, lower) = self.split();
-        dest[0] = lower;
-        dest[1] = higher;
+        vec![lower, higher].into_iter()
     }
 
-    fn deserialize(source: &[u8]) -> Self {
-        let higher = source[1];
-        let lower = source[0];
+    fn deserialize(mut source: impl Iterator<Item=u8>) -> Self {
+        let lower = source.next().unwrap();
+        let higher = source.next().unwrap();
         Address((u16::from(higher) << 8) + u16::from(lower))
     }
 }
@@ -52,7 +53,7 @@ impl Add<u8> for Address {
     type Output = Address;
 
     fn add(self, rhs: u8) -> <Self as Add<u8>>::Output {
-        Address(self.0 + u16::from(rhs))
+        Address(self.0.wrapping_add(u16::from(rhs)))
     }
 }
 
@@ -60,7 +61,7 @@ impl Sub<u8> for Address {
     type Output = Address;
 
     fn sub(self, rhs: u8) -> <Self as Sub<u8>>::Output {
-        Address(self.0 - u16::from(rhs))
+        Address(self.0.wrapping_sub(u16::from(rhs)))
     }
 }
 
@@ -74,6 +75,6 @@ impl Add<u16> for Address {
     type Output = Address;
 
     fn add(self, rhs: u16) -> <Self as Add<u16>>::Output {
-        Address(self.0 + rhs)
+        Address(self.0.wrapping_add(rhs))
     }
 }
