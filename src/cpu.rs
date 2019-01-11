@@ -1,10 +1,11 @@
 use crate::address::Address;
 use crate::addressing_modes::ReferenceAddressingMode;
+use crate::addressing_modes::ShiftAddressingMode;
 use crate::addressing_modes::ValueAddressingMode;
 use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
-use crate::SerializeBytes;
 use crate::SerializeByte;
+use crate::SerializeBytes;
 
 const STACK: Address = Address::new(0x0100);
 
@@ -70,16 +71,7 @@ impl CPU {
                 let value = self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() & value);
             }
-            ASL(addressing_mode) => {
-                let addr = self.fetch_ref(addressing_mode);
-
-                let old_value = *addr;
-                *addr <<= 1;
-                let new_value = *addr;
-
-                self.status.set_to(Flag::Carry, bit7(old_value));
-                self.set_flags(new_value);
-            }
+            ASL(addressing_mode) => self.shift(addressing_mode, 7, |val, carry| val << 1),
             BCC => self.branch_if(!self.status.get(Flag::Carry)),
             BCS => self.branch_if(self.status.get(Flag::Carry)),
             BEQ => self.branch_if(self.status.get(Flag::Zero)),
@@ -149,16 +141,7 @@ impl CPU {
                 self.y = value;
                 self.set_flags(value);
             }
-            LSR(addressing_mode) => {
-                let addr = self.fetch_ref(addressing_mode);
-
-                let old_value = *addr;
-                *addr >>= 1;
-                let new_value = *addr;
-
-                self.status.set_to(Flag::Carry, bit0(old_value));
-                self.set_flags(new_value);
-            }
+            LSR(addressing_mode) => self.shift(addressing_mode, 0, |val, carry| val >> 1),
             NOP => {}
             ORA(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
@@ -179,33 +162,27 @@ impl CPU {
                 self.status = data;
             }
             ROL(addressing_mode) => {
-                let carry = self.status.get(Flag::Carry);
-                let addr = self.fetch_ref(addressing_mode);
-
-                let old_value = *addr;
-                *addr <<= 1;
-                *addr |= carry as u8;
-                let new_value = *addr;
-
-                self.status.set_to(Flag::Carry, bit7(old_value));
-
-                self.set_flags(new_value);
+                self.shift(addressing_mode, 7, |val, carry| (val << 1) | carry);
             }
             ROR(addressing_mode) => {
-                let carry = self.status.get(Flag::Carry);
-                let addr = self.fetch_ref(addressing_mode);
-
-                let old_value = *addr;
-                *addr >>= 1;
-                *addr |= (carry as u8) << 7;
-                let new_value = *addr;
-
-                self.status.set_to(Flag::Carry, bit0(old_value));
-
-                self.set_flags(new_value);
+                self.shift(addressing_mode, 0, |val, carry| val >> 1 | carry << 7);
             }
             instr => unimplemented!("{:?}", instr),
         }
+    }
+
+    fn shift(&mut self, mode: ShiftAddressingMode, carry_bit: u8, op: impl FnOnce(u8, u8) -> (u8)) {
+        let carry = self.status.get(Flag::Carry);
+        let addr = self.fetch_ref(mode);
+
+        let old_value = *addr;
+        *addr = op(*addr, carry as u8);
+        let carry = old_value & (1 << carry_bit) != 0;
+        let new_value = *addr;
+
+        self.status.set_to(Flag::Carry, carry);
+
+        self.set_flags(new_value);
     }
 
     fn push_stack<T: SerializeBytes>(&mut self, data: T) {
@@ -383,7 +360,7 @@ impl Addressable {
 
 struct MemoryIterator<'a> {
     memory: &'a [u8],
-    address: Address
+    address: Address,
 }
 
 impl<'a> MemoryIterator<'a> {

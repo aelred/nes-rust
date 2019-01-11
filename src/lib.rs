@@ -13,11 +13,11 @@ use num_traits::FromPrimitive;
 pub trait SerializeBytes: Sized {
     const SIZE: u8;
 
-    type Iter: DoubleEndedIterator<Item=u8>;
+    type Iter: DoubleEndedIterator<Item = u8>;
 
     fn serialize(self) -> Self::Iter;
 
-    fn deserialize(source: impl Iterator<Item=u8>) -> Self;
+    fn deserialize(source: impl Iterator<Item = u8>) -> Self;
 }
 
 pub trait SerializeByte {
@@ -34,7 +34,7 @@ impl<T: SerializeByte> SerializeBytes for T {
         std::iter::once(self.to_byte())
     }
 
-    fn deserialize(mut source: impl Iterator<Item=u8>) -> Self {
+    fn deserialize(mut source: impl Iterator<Item = u8>) -> Self {
         Self::from_byte(source.next().unwrap())
     }
 }

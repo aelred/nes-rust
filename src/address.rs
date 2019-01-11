@@ -30,7 +30,7 @@ impl SerializeBytes for Address {
         vec![lower, higher].into_iter()
     }
 
-    fn deserialize(mut source: impl Iterator<Item=u8>) -> Self {
+    fn deserialize(mut source: impl Iterator<Item = u8>) -> Self {
         let lower = source.next().unwrap();
         let higher = source.next().unwrap();
         Address((u16::from(higher) << 8) + u16::from(lower))
