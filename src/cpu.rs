@@ -56,22 +56,8 @@ impl CPU {
 
         match self.addressable.instr() {
             ADC(addressing_mode) => {
-                let accumulator = self.accumulator();
                 let value = self.fetch(addressing_mode);
-
-                let carry_in = self.status.get(Flag::Carry) as u16;
-
-                let full_result = accumulator as u16 + value as u16 + carry_in;
-
-                let result = full_result as u8;
-                let carry_out = full_result & (1 << 8) != 0;
-
-                // Check if the sign bit has changed
-                let overflow = bit7((accumulator ^ result) & (value ^ result));
-                self.status.set_to(Flag::Overflow, overflow);
-
-                self.set_accumulator(result);
-                self.status.set_to(Flag::Carry, carry_out);
+                self.add_to_accumulator(value);
             }
             AND(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
@@ -171,30 +157,34 @@ impl CPU {
             RTI => unimplemented!("RTI"), // TODO
             RTS => *self.program_counter_mut() = self.pull_stack(),
             SBC(addressing_mode) => {
-                let accumulator = self.accumulator();
                 let value = !self.fetch(addressing_mode);
-
-                let carry_in = self.status.get(Flag::Carry) as u16;
-
-                let full_result = (accumulator as u16)
-                    .wrapping_add(value as u16)
-                    .wrapping_add(carry_in);
-
-                let result = full_result as u8;
-                let carry_out = full_result & (1 << 8) != 0;
-
-                // Check if the sign bit has changed
-                let overflow = bit7((accumulator ^ result) & (value ^ result));
-                self.status.set_to(Flag::Overflow, overflow);
-
-                self.set_accumulator(result);
-                self.status.set_to(Flag::Carry, carry_out);
+                self.add_to_accumulator(value);
             }
             SEC => self.status.set(Flag::Carry),
             SED => self.status.set(Flag::Decimal),
             SEI => self.status.set(Flag::InterruptDisable),
             instr => unimplemented!("{:?}", instr),
         }
+    }
+
+    fn add_to_accumulator(&mut self, value: u8) {
+        let accumulator = self.accumulator();
+
+        let carry_in = self.status.get(Flag::Carry) as u16;
+
+        let full_result = (accumulator as u16)
+            .wrapping_add(value as u16)
+            .wrapping_add(carry_in);
+
+        let result = full_result as u8;
+        let carry_out = full_result & (1 << 8) != 0;
+
+        // Check if the sign bit has changed
+        let overflow = bit7((accumulator ^ result) & (value ^ result));
+        self.status.set_to(Flag::Overflow, overflow);
+
+        self.set_accumulator(result);
+        self.status.set_to(Flag::Carry, carry_out);
     }
 
     fn shift(&mut self, mode: ShiftAddressingMode, carry_bit: u8, op: impl FnOnce(u8, u8) -> (u8)) {
