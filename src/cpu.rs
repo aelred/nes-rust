@@ -190,6 +190,7 @@ impl CPU {
                 self.set_accumulator(result);
                 self.status.set_to(Flag::Carry, carry_out);
             }
+            SEC => self.status.set(Flag::Carry),
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1391,6 +1392,15 @@ mod tests {
         assert_eq!(sub(-48, -80), (32, false));
         assert_eq!(sub(-48, 112), (96, true));
         assert_eq!(sub(-48, 48), (-96, false));
+    }
+
+    #[test]
+    fn instr_sec_sets_carry_flag() {
+        let cpu = run_instr(mem!(SEC), |cpu| {
+            cpu.status.clear(Flag::Carry);
+        });
+
+        assert_eq!(cpu.status.get(Flag::Carry), true);
     }
 
     #[test]

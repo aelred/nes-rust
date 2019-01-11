@@ -319,7 +319,13 @@ pub enum Instruction {
     /// multiple byte subtraction to be performed.
     SBC(FlexibleAddressingMode),
 
+    /// Set Carry Flag
+    ///
+    /// C = 1
+    ///
+    /// Set the carry flag to one.
     SEC,
+
     SED,
     SEI,
     STA(StoreAddressingMode),
