@@ -103,7 +103,8 @@ impl CPU {
             CPX(addressing_mode) => self.compare(self.x, addressing_mode),
             CPY(addressing_mode) => self.compare(self.y, addressing_mode),
             DEC(addressing_mode) => {
-                let addr = self.fetch_ref(addressing_mode);
+                // Borrow only `addressable` to avoid issue with split borrows
+                let addr = self.addressable.fetch_ref(addressing_mode);
                 CPU::decrement(&mut self.status, addr);
             }
             DEX => CPU::decrement(&mut self.status, &mut self.x),
@@ -113,7 +114,8 @@ impl CPU {
                 self.set_accumulator(self.accumulator() ^ value);
             }
             INC(addressing_mode) => {
-                let addr = self.fetch_ref(addressing_mode);
+                // Borrow only `addressable` to avoid issue with split borrows
+                let addr = self.addressable.fetch_ref(addressing_mode);
                 CPU::increment(&mut self.status, addr);
             }
             INX => CPU::increment(&mut self.status, &mut self.x),
