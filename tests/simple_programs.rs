@@ -14,8 +14,18 @@ macro_rules! run {
 }
 
 fn run(cpu: &mut CPU) -> u8 {
+    const MAX_INSTRUCTIONS: u32 = 1_000;
+
+    let mut instructions = 0;
+
     while cpu.read(HALT_ADDRESS) == 0 {
         cpu.run_instruction();
+
+        instructions += 1;
+
+        if instructions > MAX_INSTRUCTIONS {
+            panic!("Exceeded maximum number of instructions");
+        }
     }
 
     cpu.accumulator()
@@ -26,6 +36,18 @@ fn one_plus_one() {
     run!(2;
         LDAImmediate, 1u8,
         ADCImmediate, 1u8,
+        STAAbsolute, HALT_ADDRESS
+    );
+}
+
+#[test]
+fn seven_times_six() {
+    run!(42;
+        LDAImmediate, 0u8,
+        LDXImmediate, 6u8,
+        ADCImmediate, 7u8,
+        DEX,
+        BNE, -5i8,
         STAAbsolute, HALT_ADDRESS
     );
 }
