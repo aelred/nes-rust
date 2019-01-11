@@ -172,6 +172,12 @@ impl CPU {
                 let data = self.addressable.deref_address(stack_address);
                 self.set_accumulator(data);
             }
+            PLP => {
+                self.stack_pointer = self.stack_pointer.wrapping_add(1);
+                let stack_address = STACK + self.stack_pointer;
+                let data = self.addressable.deref_address(stack_address);
+                self.status = data;
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1226,6 +1232,24 @@ mod tests {
     #[test]
     fn instr_pla_increments_stack_pointer_by_one_byte() {
         let cpu = run_instr(mem!(PLA), |cpu| {
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.stack_pointer, 7);
+    }
+
+    #[test]
+    fn instr_plp_reads_status_from_stack() {
+        let cpu = run_instr(mem!(PLP), |cpu| {
+            cpu.set(STACK, 31);
+        });
+
+        assert_eq!(cpu.status.0, 31);
+    }
+
+    #[test]
+    fn instr_plp_increments_stack_pointer_by_one_byte() {
+        let cpu = run_instr(mem!(PLP), |cpu| {
             cpu.stack_pointer = 6;
         });
 

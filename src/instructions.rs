@@ -280,7 +280,12 @@ pub enum Instruction {
     /// are set as appropriate.
     PLA,
 
+    /// Pull Processor Status
+    ///
+    /// Pulls an 8 bit value from the stack and into the processor flags. The flags will take on new
+    /// states as determined by the value pulled.
     PLP,
+
     ROL(ShiftAddressingMode),
     ROR(ShiftAddressingMode),
     RTI,
