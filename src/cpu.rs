@@ -1228,8 +1228,8 @@ mod tests {
     fn absolute_addressing_mode_fetches_values_at_given_address() {
         let mut cpu = CPU::default();
         let (higher, lower) = Address::new(432).split();
-        cpu.set(cpu.program_counter(), higher);
-        cpu.set(cpu.program_counter() + 1u16, lower);
+        cpu.set(cpu.program_counter(), lower);
+        cpu.set(cpu.program_counter() + 1u16, higher);
         cpu.set(Address::new(432), 35);
         assert_eq!(*cpu.addressable.absolute(), 35);
     }
