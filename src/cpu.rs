@@ -167,6 +167,7 @@ impl CPU {
             ROR(addressing_mode) => {
                 self.shift(addressing_mode, 0, |val, carry| val >> 1 | carry << 7);
             }
+            RTI => unimplemented!("RTI"), // TODO
             instr => unimplemented!("{:?}", instr),
         }
     }

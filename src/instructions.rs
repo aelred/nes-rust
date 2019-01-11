@@ -298,7 +298,12 @@ pub enum Instruction {
     /// current value of the carry flag whilst the old bit 0 becomes the new carry flag value.
     ROR(ShiftAddressingMode),
 
+    /// Return from Interrupt
+    ///
+    /// The RTI instruction is used at the end of an interrupt processing routine. It pulls the
+    /// processor flags from the stack followed by the program counter.
     RTI,
+
     RTS,
     SBC(FlexibleAddressingMode),
     SEC,
