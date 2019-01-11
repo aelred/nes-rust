@@ -191,6 +191,7 @@ impl CPU {
                 self.status.set_to(Flag::Carry, carry_out);
             }
             SEC => self.status.set(Flag::Carry),
+            SED => self.status.set(Flag::Decimal),
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1401,6 +1402,15 @@ mod tests {
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
+    }
+
+    #[test]
+    fn instr_sed_sets_decimal_flag() {
+        let cpu = run_instr(mem!(SED), |cpu| {
+            cpu.status.clear(Flag::Decimal);
+        });
+
+        assert_eq!(cpu.status.get(Flag::Decimal), true);
     }
 
     #[test]

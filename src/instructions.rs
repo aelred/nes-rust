@@ -326,7 +326,13 @@ pub enum Instruction {
     /// Set the carry flag to one.
     SEC,
 
+    /// Set Decimal Flag
+    ///
+    /// D = 1
+    ///
+    /// Set the decimal mode flag to one.
     SED,
+
     SEI,
     STA(StoreAddressingMode),
     STX(STXAddressingMode),
