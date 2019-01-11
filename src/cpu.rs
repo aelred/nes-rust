@@ -19,6 +19,10 @@ pub struct CPU {
     status: Status,
 }
 
+fn bit0(value: u8) -> bool {
+    value & 1 != 0
+}
+
 fn bit6(value: u8) -> bool {
     value & (1 << 6) != 0
 }
@@ -146,6 +150,16 @@ impl CPU {
                 let value = *self.fetch(addressing_mode);
                 self.y = value;
                 self.set_flags(value);
+            }
+            LSR(addressing_mode) => {
+                let addr = self.fetch(addressing_mode);
+
+                let old_value = *addr;
+                *addr >>= 1;
+                let new_value = *addr;
+
+                self.status.carry = bit0(old_value);
+                self.set_flags(new_value);
             }
             instr => unimplemented!("{:?}", instr),
         }
@@ -1048,6 +1062,26 @@ mod tests {
         let cpu = run_instr(mem!(LDYImmediate, 5u8), |cpu| {});
 
         assert_eq!(cpu.y, 5);
+    }
+
+    #[test]
+    fn instr_lsr_shifts_right() {
+        let cpu = run_instr(mem!(LSRAccumulator), |cpu| {
+            *cpu.accumulator_mut() = 0b100;
+        });
+
+        assert_eq!(cpu.accumulator(), 0b10);
+        assert_eq!(cpu.status.carry, false);
+    }
+
+    #[test]
+    fn instr_lsr_sets_carry_flag_on_underflow() {
+        let cpu = run_instr(mem!(LSRAccumulator), |cpu| {
+            *cpu.accumulator_mut() = 0b1010101;
+        });
+
+        assert_eq!(cpu.accumulator(), 0b101010);
+        assert_eq!(cpu.status.carry, true);
     }
 
     #[test]
