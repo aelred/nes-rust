@@ -163,6 +163,12 @@ impl CPU {
             }
             PHA => self.push_stack(self.accumulator()),
             PHP => self.push_stack(self.status),
+            PLA => {
+                self.stack_pointer += 1;
+                let stack_address = STACK + self.stack_pointer;
+                let data = self.addressable.deref_address(stack_address);
+                self.set_accumulator(data);
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1171,6 +1177,25 @@ mod tests {
         });
 
         assert_eq!(cpu.stack_pointer, 5);
+    }
+
+    #[test]
+    fn instr_pla_reads_accumulator_from_stack() {
+        let cpu = run_instr(mem!(PLA), |cpu| {
+            cpu.set(STACK + 7u8, 20);
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.accumulator(), 20);
+    }
+
+    #[test]
+    fn instr_pla_increments_stack_pointer_by_one_byte() {
+        let cpu = run_instr(mem!(PLA), |cpu| {
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.stack_pointer, 7);
     }
 
     #[test]

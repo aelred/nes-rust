@@ -274,7 +274,12 @@ pub enum Instruction {
     /// Pushes a copy of the status flags on to the stack.
     PHP,
 
+    /// Pull Accumulator
+    ///
+    /// Pulls an 8 bit value from the stack and into the accumulator. The zero and negative flags
+    /// are set as appropriate.
     PLA,
+
     PLP,
     ROL(ShiftAddressingMode),
     ROR(ShiftAddressingMode),
