@@ -250,7 +250,12 @@ pub enum Instruction {
     /// shifted into the carry flag. Bit 7 is set to zero.
     LSR(ShiftAddressingMode),
 
+    /// No Operation
+    ///
+    /// The NOP instruction causes no changes to the processor other than the normal incrementing of
+    /// the program counter to the next instruction.
     NOP,
+
     ORA(FlexibleAddressingMode),
     PHA,
     PHP,

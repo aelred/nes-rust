@@ -161,6 +161,7 @@ impl CPU {
                 self.status.carry = bit0(old_value);
                 self.set_flags(new_value);
             }
+            NOP => { }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1082,6 +1083,15 @@ mod tests {
 
         assert_eq!(cpu.accumulator(), 0b101010);
         assert_eq!(cpu.status.carry, true);
+    }
+
+    #[test]
+    fn instr_nop_increments_program_counter() {
+        let cpu = run_instr(mem!(LSRAccumulator), |cpu| {
+            *cpu.program_counter_mut() = Address::new(20);
+        });
+
+        assert_eq!(*cpu.program_counter(), Address::new(21));
     }
 
     #[test]
