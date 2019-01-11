@@ -310,7 +310,15 @@ pub enum Instruction {
     /// pulls the program counter (minus one) from the stack.
     RTS,
 
+    /// Subtract with Carry
+    ///
+    /// A,Z,C,N = A-M-(1-C)
+    ///
+    /// This instruction subtracts the contents of a memory location to the accumulator together
+    /// with the not of the carry bit. If overflow occurs the carry bit is clear, this enables
+    /// multiple byte subtraction to be performed.
     SBC(FlexibleAddressingMode),
+
     SEC,
     SED,
     SEI,
