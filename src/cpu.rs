@@ -127,15 +127,8 @@ impl CPU {
 
                 // For some reason the spec says the pointer must be to the last byte of the JSR
                 // instruction...
-                let data = (*self.program_counter() - 1).bytes();
-
-                for byte in data.into_iter() {
-                    let addr = self
-                        .addressable
-                        .deref_address_mut(STACK + self.stack_pointer);
-                    *addr = byte;
-                    self.stack_pointer -= 1;
-                }
+                let data = *self.program_counter() - 1;
+                self.push_stack(data);
 
                 *self.program_counter_mut() = addr;
             }
@@ -168,15 +161,18 @@ impl CPU {
                 let value = *self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() | value);
             }
-            PHA => {
-                let accumulator = self.accumulator();
-                let addr = self
-                    .addressable
-                    .deref_address_mut(STACK + self.stack_pointer);
-                *addr = accumulator;
-                self.stack_pointer -= 1;
-            }
+            PHA => self.push_stack(self.accumulator()),
+            PHP => self.push_stack(self.status),
             instr => unimplemented!("{:?}", instr),
+        }
+    }
+
+    fn push_stack<T: SerializeBytes>(&mut self, data: T) {
+        for byte in data.bytes().into_iter() {
+            let stack_address = STACK + self.stack_pointer;
+            let location = self.addressable.deref_address_mut(stack_address);
+            *location = byte;
+            self.stack_pointer -= 1;
         }
     }
 
@@ -338,6 +334,7 @@ impl Addressable {
     }
 }
 
+#[derive(Copy, Clone)]
 struct Status(u8);
 
 impl Status {
@@ -364,6 +361,12 @@ impl Status {
     fn set_flags(&mut self, value: u8) {
         self.set_to(Flag::Zero, value == 0);
         self.set_to(Flag::Negative, bit7(value));
+    }
+}
+
+impl SerializeBytes for Status {
+    fn bytes(self) -> Vec<u8> {
+        self.0.bytes()
     }
 }
 
@@ -1135,7 +1138,6 @@ mod tests {
     #[test]
     fn instr_pha_writes_accumulator_to_stack_pointer() {
         let cpu = run_instr(mem!(PHA), |cpu| {
-            *cpu.program_counter_mut() = Address::new(0x1234);
             *cpu.accumulator_mut() = 20;
             cpu.stack_pointer = 6;
         });
@@ -1146,6 +1148,25 @@ mod tests {
     #[test]
     fn instr_pha_decrements_stack_pointer_by_one_byte() {
         let cpu = run_instr(mem!(PHA), |cpu| {
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.stack_pointer, 5);
+    }
+
+    #[test]
+    fn instr_php_writes_status_to_stack_pointer() {
+        let cpu = run_instr(mem!(PHP), |cpu| {
+            cpu.status = Status(142);
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.get(STACK + 6u8), 142);
+    }
+
+    #[test]
+    fn instr_php_decrements_stack_pointer_by_one_byte() {
+        let cpu = run_instr(mem!(PHP), |cpu| {
             cpu.stack_pointer = 6;
         });
 

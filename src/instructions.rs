@@ -269,7 +269,11 @@ pub enum Instruction {
     /// Pushes a copy of the accumulator on to the stack.
     PHA,
 
+    /// Push Processor Status
+    ///
+    /// Pushes a copy of the status flags on to the stack.
     PHP,
+
     PLA,
     PLP,
     ROL(ShiftAddressingMode),
