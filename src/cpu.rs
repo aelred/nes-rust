@@ -17,10 +17,6 @@ pub struct CPU {
     status: Status,
 }
 
-fn bit0(value: u8) -> bool {
-    value & 1 != 0
-}
-
 fn bit6(value: u8) -> bool {
     value & (1 << 6) != 0
 }
@@ -63,7 +59,7 @@ impl CPU {
                 let value = self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() & value);
             }
-            ASL(addressing_mode) => self.shift(addressing_mode, 7, |val, carry| val << 1),
+            ASL(addressing_mode) => self.shift(addressing_mode, 7, |val, _| val << 1),
             BCC => self.branch_if(!self.status.get(Flag::Carry)),
             BCS => self.branch_if(self.status.get(Flag::Carry)),
             BEQ => self.branch_if(self.status.get(Flag::Zero)),
@@ -131,7 +127,7 @@ impl CPU {
                 let value = self.fetch(addressing_mode);
                 self.set_y(value);
             }
-            LSR(addressing_mode) => self.shift(addressing_mode, 0, |val, carry| val >> 1),
+            LSR(addressing_mode) => self.shift(addressing_mode, 0, |val, _| val >> 1),
             NOP => {}
             ORA(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
@@ -188,7 +184,6 @@ impl CPU {
             TYA => {
                 self.set_accumulator(self.y());
             }
-            instr => unimplemented!("{:?}", instr),
         }
     }
 
@@ -197,8 +192,8 @@ impl CPU {
 
         let carry_in = self.status.get(Flag::Carry) as u16;
 
-        let full_result = (accumulator as u16)
-            .wrapping_add(value as u16)
+        let full_result = u16::from(accumulator)
+            .wrapping_add(u16::from(value))
             .wrapping_add(carry_in);
 
         let result = full_result as u8;
@@ -450,7 +445,7 @@ impl<'a> Iterator for MemoryIterator<'a> {
 struct Status(u8);
 
 impl Status {
-    fn get(&self, flag: Flag) -> bool {
+    fn get(self, flag: Flag) -> bool {
         (self.0 & flag as u8) != 0
     }
 
@@ -487,12 +482,12 @@ impl SerializeByte for Status {
 }
 
 enum Flag {
-    Negative = 0b10000000,
-    Overflow = 0b01000000,
-    Decimal = 0b00001000,
-    InterruptDisable = 0b00000100,
-    Zero = 0b00000010,
-    Carry = 0b00000001,
+    Negative = 0b1000_0000,
+    Overflow = 0b0100_0000,
+    Decimal = 0b0000_1000,
+    InterruptDisable = 0b0000_0100,
+    Zero = 0b0000_0010,
+    Carry = 0b0000_0001,
 }
 
 #[cfg(test)]
