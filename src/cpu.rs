@@ -39,8 +39,9 @@ impl<M: Memory> CPU<M> {
         }
     }
 
-    pub fn read(&self, address: Address) -> u8 {
-        self.read_address(address)
+    pub fn read<T: SerializeBytes>(&self, address: Address) -> T {
+        let iter = MemoryIterator::new(&self.memory, address);
+        T::deserialize(iter)
     }
 
     pub fn write(&mut self, address: Address, byte: u8) {
@@ -257,7 +258,7 @@ impl<M: Memory> CPU<M> {
     fn pull_stack<T: SerializeBytes>(&mut self) -> T {
         self.stack_pointer = self.stack_pointer.wrapping_add(T::SIZE);
         let stack_address = STACK + self.stack_pointer;
-        self.read_address(stack_address)
+        self.read(stack_address)
     }
 
     fn increment(&mut self, reference: Reference) {
@@ -327,7 +328,7 @@ impl<M: Memory> CPU<M> {
 
     pub fn read_reference(&self, reference: Reference) -> u8 {
         match reference {
-            Reference::Address(address) => self.read_address(address),
+            Reference::Address(address) => self.read(address),
             Reference::Accumulator => self.accumulator,
             Reference::X => self.x,
             Reference::Y => self.y,
@@ -343,18 +344,13 @@ impl<M: Memory> CPU<M> {
         };
     }
 
-    fn read_address<T: SerializeBytes>(&self, address: Address) -> T {
-        let iter = MemoryIterator::new(&self.memory, address);
-        T::deserialize(iter)
-    }
-
     fn instr(&mut self) -> Instruction {
         let opcode: OpCode = self.fetch_at_program_counter();
         opcode.instruction()
     }
 
     pub fn fetch_at_program_counter<T: SerializeBytes>(&mut self) -> T {
-        let data = self.read_address(self.program_counter);
+        let data = self.read(self.program_counter);
         self.program_counter += T::SIZE;
         data
     }
