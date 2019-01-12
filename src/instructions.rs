@@ -12,9 +12,7 @@ use crate::addressing_modes::StoreAddressingMode;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Instruction {
-
     // Load / Store Operations
-
     /// Load Accumulator
     ///
     /// A,Z,N = M
@@ -61,7 +59,6 @@ pub enum Instruction {
     STY(STYAddressingMode),
 
     // Register Transfers
-
     /// Transfer Accumulator to X
     ///
     /// X = A
@@ -95,7 +92,6 @@ pub enum Instruction {
     TYA,
 
     // Stack Operations
-
     /// Transfer Stack Pointer to X
     ///
     /// X = S
@@ -168,7 +164,6 @@ pub enum Instruction {
     BIT(BITAddressingMode),
 
     // Arithmetic
-
     /// Add With Carry
     ///
     /// A,Z,C,N = A+M+C
@@ -212,7 +207,6 @@ pub enum Instruction {
     CPY(CompareAddressingMode),
 
     // Increments & Decrements
-
     /// Increment Memory
     ///
     /// M,Z,N = M+1
@@ -257,7 +251,6 @@ pub enum Instruction {
     DEY,
 
     // Shifts
-
     /// Arithmetic Shift Left
     ///
     /// A,Z,C,N = M*2 or M,Z,C,N = M*2
@@ -289,7 +282,6 @@ pub enum Instruction {
     ROR(ShiftAddressingMode),
 
     // Jumps & Calls
-
     /// Jump
     ///
     /// Sets the program counter to the address specified by the operand.
@@ -308,7 +300,6 @@ pub enum Instruction {
     RTS,
 
     // Branches
-
     /// Branch if Carry Clear
     ///
     /// If the carry flag is clear then add the relative displacement to the program counter to
@@ -358,7 +349,6 @@ pub enum Instruction {
     BVS,
 
     // Status Flag Changes
-
     /// Clear Carry Flag
     ///
     /// C = 0
@@ -409,7 +399,6 @@ pub enum Instruction {
     SEI,
 
     // System Functions
-
     /// Force Interrupt
     ///
     /// The BRK instruction forces the generation of an interrupt request. The program counter and

@@ -43,9 +43,7 @@ impl CPU {
         use crate::instructions::Instruction::*;
 
         match self.addressable.instr() {
-
             // Load/Store Operations
-
             LDA(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
                 self.set_accumulator(value);
@@ -69,7 +67,6 @@ impl CPU {
             }
 
             // Register Transfers
-
             TAX => {
                 self.set_x(self.accumulator());
             }
@@ -84,7 +81,6 @@ impl CPU {
             }
 
             // Stack Operations
-
             TSX => {
                 self.set_x(self.stack_pointer);
             }
@@ -102,7 +98,6 @@ impl CPU {
             PHP => self.push_stack(self.status),
 
             // Logical
-
             AND(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() & value);
@@ -117,14 +112,14 @@ impl CPU {
             }
             BIT(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
-                let zero = (self.accumulator() & value) == 0;
-                self.status.set_to(Flag::Zero, zero);
-                self.status.set_to(Flag::Overflow, bit6(value));
-                self.status.set_to(Flag::Negative, bit7(value));
+                let result = self.accumulator() & value;
+                self.status.set_to(Flag::Zero, result == 0);
+                self.status.set_to(Flag::Overflow, value & (1 << 6) != 0);
+                self.status
+                    .set_to(Flag::Negative, (value as i8).is_negative());
             }
 
             // Arithmetic
-
             ADC(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
                 self.add_to_accumulator(value);
@@ -138,7 +133,6 @@ impl CPU {
             CPY(addressing_mode) => self.compare(self.y(), addressing_mode),
 
             // Increments & Decrements
-
             INC(addressing_mode) => {
                 // Borrow only `addressable` to avoid issue with split borrows
                 let addr = self.addressable.fetch_ref(addressing_mode);
@@ -155,18 +149,16 @@ impl CPU {
             DEY => CPU::decrement(&mut self.status, &mut self.addressable.y),
 
             // Shifts
-
             ASL(addressing_mode) => self.shift(addressing_mode, 7, |val, _| val << 1),
             LSR(addressing_mode) => self.shift(addressing_mode, 0, |val, _| val >> 1),
             ROL(addressing_mode) => {
-                self.shift(addressing_mode, 7, |val, carry| (val << 1) | carry);
+                self.shift(addressing_mode, 7, |val, carry| val << 1 | carry);
             }
             ROR(addressing_mode) => {
                 self.shift(addressing_mode, 0, |val, carry| val >> 1 | carry << 7);
             }
 
             // Jumps & Calls
-
             JMP(addressing_mode) => {
                 let addr = addressing_mode.fetch_address(&mut self.addressable);
                 *self.program_counter_mut() = addr;
@@ -184,7 +176,6 @@ impl CPU {
             RTS => *self.program_counter_mut() = self.pull_stack(),
 
             // Branches
-
             BCC => self.branch_if(!self.status.get(Flag::Carry)),
             BCS => self.branch_if(self.status.get(Flag::Carry)),
             BEQ => self.branch_if(self.status.get(Flag::Zero)),
@@ -195,7 +186,6 @@ impl CPU {
             BVS => self.branch_if(self.status.get(Flag::Overflow)),
 
             // Status Flag Changes
-
             CLC => self.status.clear(Flag::Carry),
             CLD => self.status.clear(Flag::Decimal),
             CLI => self.status.clear(Flag::InterruptDisable),
@@ -205,7 +195,6 @@ impl CPU {
             SEI => self.status.set(Flag::InterruptDisable),
 
             // System Functions
-
             BRK => unimplemented!("BRK"), // TODO
             NOP => {}
             RTI => unimplemented!("RTI"), // TODO
@@ -225,7 +214,7 @@ impl CPU {
         let carry_out = full_result & (1 << 8) != 0;
 
         // Check if the sign bit has changed
-        let overflow = bit7((accumulator ^ result) & (value ^ result));
+        let overflow = (((accumulator ^ result) & (value ^ result)) as i8).is_negative();
         self.status.set_to(Flag::Overflow, overflow);
 
         self.set_accumulator(result);
@@ -492,7 +481,7 @@ impl Status {
 
     fn set_flags(&mut self, value: u8) {
         self.set_to(Flag::Zero, value == 0);
-        self.set_to(Flag::Negative, bit7(value));
+        self.set_to(Flag::Negative, (value as i8).is_negative());
     }
 }
 
