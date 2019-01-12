@@ -187,6 +187,10 @@ impl CPU {
             TXA => {
                 self.set_accumulator(self.x());
             }
+            TXS => {
+                self.stack_pointer = self.x();
+                self.set_flags(self.stack_pointer);
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1520,6 +1524,15 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 65);
+    }
+
+    #[test]
+    fn instr_txs_transfers_x_register_to_stack_pointer() {
+        let cpu = run_instr(mem!(TXS), |cpu| {
+            *cpu.x_mut() = 65;
+        });
+
+        assert_eq!(cpu.stack_pointer, 65);
     }
 
     #[test]
