@@ -3,6 +3,7 @@ use nes_rust::Address;
 use nes_rust::Memory;
 use nes_rust::OpCode::*;
 use nes_rust::CPU;
+use nes_rust::OpCode;
 
 const PARAM_ADDRESS: Address = Address::new(0xFEED);
 const RETURN_ADDRESS: Address = Address::new(0xBEEF);
@@ -77,6 +78,31 @@ fn triangle_number() {
         ADCAbsolute, PARAM_ADDRESS,
         DECAbsolute, PARAM_ADDRESS,
         BNE, -8i8,
+        STAAbsolute, RETURN_ADDRESS,
+        LDAImmediate, 1u8,
+        STAAbsolute, HALT_ADDRESS
+    );
+}
+
+#[test]
+fn fibonacci() {
+    run!([11] -> [89];
+        LDXImmediate, 0x01u8,
+        STXZeroPage, 0xffu8,
+        SEC,
+        LDYAbsolute, PARAM_ADDRESS,
+        TYA,
+        SBCImmediate, 0x03u8,
+        TAY,
+        CLC,
+        LDAImmediate, 0x02u8,
+        STAZeroPage, 0xfeu8,
+        LDXZeroPage, 0xfeu8,
+        ADCZeroPage, 0xffu8,
+        STAZeroPage, 0xfeu8,
+        STXZeroPage, 0xffu8,
+        DEY,
+        BNE, -11i8,
         STAAbsolute, RETURN_ADDRESS,
         LDAImmediate, 1u8,
         STAAbsolute, HALT_ADDRESS
