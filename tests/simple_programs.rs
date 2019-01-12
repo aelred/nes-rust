@@ -68,3 +68,17 @@ fn seven_times_six() {
         STAAbsolute, HALT_ADDRESS
     );
 }
+
+#[test]
+fn triangle_number() {
+    run!([20] -> [210];
+        LDAImmediate, 0u8,
+        LDXAbsolute, PARAM_ADDRESS,
+        ADCAbsolute, PARAM_ADDRESS,
+        DECAbsolute, PARAM_ADDRESS,
+        BNE, -8i8,
+        STAAbsolute, RETURN_ADDRESS,
+        LDAImmediate, 1u8,
+        STAAbsolute, HALT_ADDRESS
+    );
+}
