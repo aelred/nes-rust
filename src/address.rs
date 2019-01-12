@@ -11,6 +11,10 @@ impl Address {
         Address(value)
     }
 
+    pub const fn zero_page(value: u8) -> Self {
+        Address::new(value as u16)
+    }
+
     pub fn index(self) -> usize {
         self.0 as usize
     }

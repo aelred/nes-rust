@@ -241,7 +241,7 @@ impl<M: Memory> CPU<M> {
     }
 
     fn zero_page(&mut self) -> Reference {
-        unimplemented!();
+        Reference::Address(Address::zero_page(self.fetch_at_program_counter()))
     }
 
     fn zero_page_x(&mut self) -> Reference {
@@ -300,6 +300,17 @@ mod tests {
         let mut cpu = CPU::with_memory(mem! {LDAImmediate, 76u8});
         cpu.run_instruction();
         assert_eq!(cpu.read_reference(Reference::Accumulator), 76);
+    }
+
+    #[test]
+    fn zero_page_addressing_mode_fetches_value_at_given_zero_page_address() {
+        let mut cpu = CPU::with_memory(mem!(
+            0 => { 15u8 }
+            15 => { 35u8 }
+        ));
+
+        let reference = cpu.zero_page();
+        assert_eq!(cpu.read_reference(reference), 35);
     }
 
     #[test]
