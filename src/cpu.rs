@@ -169,6 +169,9 @@ impl CPU {
             STX(addressing_mode) => {
                 *self.fetch_ref(addressing_mode) = self.x();
             }
+            STY(addressing_mode) => {
+                *self.fetch_ref(addressing_mode) = self.y();
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1454,6 +1457,15 @@ mod tests {
     fn instr_stx_stores_x_register_in_memory() {
         let cpu = run_instr(mem!(STXAbsolute, Address::new(0x32)), |cpu| {
             *cpu.x_mut() = 65;
+        });
+
+        assert_eq!(cpu.get(Address::new(0x32)), 65);
+    }
+
+    #[test]
+    fn instr_sty_stores_y_register_in_memory() {
+        let cpu = run_instr(mem!(STYAbsolute, Address::new(0x32)), |cpu| {
+            *cpu.y_mut() = 65;
         });
 
         assert_eq!(cpu.get(Address::new(0x32)), 65);

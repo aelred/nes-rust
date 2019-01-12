@@ -220,3 +220,13 @@ pub enum STYAddressingMode {
     ZeroPageX,
     Absolute,
 }
+
+impl ReferenceAddressingMode for STYAddressingMode {
+    fn fetch_ref(self, addressable: &mut Addressable) -> &mut u8 {
+        match self {
+            STYAddressingMode::ZeroPage => addressable.zero_page(),
+            STYAddressingMode::ZeroPageX => addressable.zero_page_x(),
+            STYAddressingMode::Absolute => addressable.absolute(),
+        }
+    }
+}

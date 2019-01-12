@@ -348,12 +348,19 @@ pub enum Instruction {
     STA(StoreAddressingMode),
 
     /// Store X Register
+    ///
     /// M = X
     ///
     /// Stores the contents of the X register into memory.
     STX(STXAddressingMode),
 
+    /// Store Y Register
+    ///
+    /// M = Y
+    ///
+    /// Stores the contents of the Y register into memory.
     STY(STYAddressingMode),
+
     TAX,
     TAY,
     TSX,
