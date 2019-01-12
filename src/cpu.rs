@@ -542,7 +542,7 @@ mod tests {
 
     #[test]
     fn instr_and_performs_bitwise_and() {
-        let cpu = run_instr(mem!(ANDImmediate, 0b1100u8), |cpu| {
+        let cpu = run_instr(mem!(ANDImmediate, 0b1100_u8), |cpu| {
             cpu.set_accumulator(0b1010);
         });
 
@@ -562,10 +562,10 @@ mod tests {
     #[test]
     fn instr_asl_sets_carry_flag_on_overflow() {
         let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
-            cpu.set_accumulator(0b10101010);
+            cpu.set_accumulator(0b1010_1010);
         });
 
-        assert_eq!(cpu.accumulator(), 0b01010100);
+        assert_eq!(cpu.accumulator(), 0b0101_0100);
         assert_eq!(cpu.status.get(Flag::Carry), true);
     }
 
@@ -644,8 +644,8 @@ mod tests {
     #[test]
     fn instr_bit_sets_zero_flag_when_bitwise_and_is_zero() {
         let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            cpu.set_accumulator(0b11110000u8);
-            cpu.set(Address::new(654), 0b00001111u8);
+            cpu.set_accumulator(0b1111_0000u8);
+            cpu.set(Address::new(654), 0b0000_1111u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Zero), true);
@@ -654,8 +654,8 @@ mod tests {
     #[test]
     fn instr_bit_clears_zero_flag_when_bitwise_and_is_not_zero() {
         let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            cpu.set_accumulator(0b11111100u8);
-            cpu.set(Address::new(654), 0b00111111u8);
+            cpu.set_accumulator(0b1111_1100u8);
+            cpu.set(Address::new(654), 0b0011_1111u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Zero), false);
@@ -670,7 +670,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Overflow), false);
 
         let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            cpu.set(Address::new(654), 0b01000000u8);
+            cpu.set(Address::new(654), 0b0100_0000u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Overflow), true);
@@ -685,7 +685,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            cpu.set(Address::new(654), 0b10000000u8);
+            cpu.set(Address::new(654), 0b1000_0000u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Negative), true);
@@ -1080,7 +1080,7 @@ mod tests {
 
     #[test]
     fn instr_eor_performs_bitwise_xor() {
-        let cpu = run_instr(mem!(EORImmediate, 0b1100u8), |cpu| {
+        let cpu = run_instr(mem!(EORImmediate, 0b1100_u8), |cpu| {
             cpu.set_accumulator(0b1010);
         });
 
@@ -1189,21 +1189,21 @@ mod tests {
 
     #[test]
     fn instr_lda_loads_operand_into_accumulator() {
-        let cpu = run_instr(mem!(LDAImmediate, 5u8), |cpu| {});
+        let cpu = run_instr(mem!(LDAImmediate, 5u8), |_| {});
 
         assert_eq!(cpu.accumulator(), 5);
     }
 
     #[test]
     fn instr_ldx_loads_operand_into_x_register() {
-        let cpu = run_instr(mem!(LDXImmediate, 5u8), |cpu| {});
+        let cpu = run_instr(mem!(LDXImmediate, 5u8), |_| {});
 
         assert_eq!(cpu.x(), 5);
     }
 
     #[test]
     fn instr_ldy_loads_operand_into_y_register() {
-        let cpu = run_instr(mem!(LDYImmediate, 5u8), |cpu| {});
+        let cpu = run_instr(mem!(LDYImmediate, 5u8), |_| {});
 
         assert_eq!(cpu.y(), 5);
     }
@@ -1221,10 +1221,10 @@ mod tests {
     #[test]
     fn instr_lsr_sets_carry_flag_on_underflow() {
         let cpu = run_instr(mem!(LSRAccumulator), |cpu| {
-            cpu.set_accumulator(0b1010101);
+            cpu.set_accumulator(0b101_0101);
         });
 
-        assert_eq!(cpu.accumulator(), 0b101010);
+        assert_eq!(cpu.accumulator(), 0b10_1010);
         assert_eq!(cpu.status.get(Flag::Carry), true);
     }
 
@@ -1239,7 +1239,7 @@ mod tests {
 
     #[test]
     fn instr_ora_performs_bitwise_or() {
-        let cpu = run_instr(mem!(ORAImmediate, 0b1100u8), |cpu| {
+        let cpu = run_instr(mem!(ORAImmediate, 0b1100_u8), |cpu| {
             cpu.set_accumulator(0b1010);
         });
 
@@ -1341,7 +1341,7 @@ mod tests {
 
         let cpu = run_instr(mem!(ROLAccumulator), |cpu| {
             cpu.status.clear(Flag::Carry);
-            cpu.set_accumulator(0b10000000);
+            cpu.set_accumulator(0b1000_0000);
         });
 
         assert_eq!(cpu.accumulator(), 0);
@@ -1363,7 +1363,7 @@ mod tests {
             cpu.set_accumulator(0b100);
         });
 
-        assert_eq!(cpu.accumulator(), 0b10000010);
+        assert_eq!(cpu.accumulator(), 0b1000_0010);
         assert_eq!(cpu.status.get(Flag::Carry), false);
 
         let cpu = run_instr(mem!(RORAccumulator), |cpu| {
@@ -1560,10 +1560,10 @@ mod tests {
                     });
 
                     let carry_bit = *carry_in as u16;
-                    let expected = *x as u16 + *y as u16 + carry_bit;
+                    let expected = u16::from(*x) + u16::from(*y) + carry_bit;
 
                     let carry_out = (cpu.status.get(Flag::Carry) as u16) << 8;
-                    let actual = cpu.accumulator() as u16 + carry_out;
+                    let actual = u16::from(cpu.accumulator()) + carry_out;
 
                     assert_eq!(actual, expected, "{} + {} + {}", x, y, carry_bit);
                 }
@@ -1585,14 +1585,14 @@ mod tests {
                     });
 
                     let carry_bit = *carry_in as u16;
-                    let expected = (*x as u16)
-                        .wrapping_sub(*y as u16)
+                    let expected = (u16::from(*x))
+                        .wrapping_sub(u16::from(*y))
                         .wrapping_sub(1 - carry_bit);
                     let expected = expected & 0b1_1111_1111;
 
                     let carry_out = cpu.status.get(Flag::Carry) as u16;
                     let accumulator = cpu.accumulator();
-                    let actual = accumulator as u16 + ((1 - carry_out) << 8);
+                    let actual = u16::from(accumulator) + ((1 - carry_out) << 8);
 
                     assert_eq!(
                         actual, expected,
@@ -1761,15 +1761,15 @@ mod tests {
         assert_eq!(cpu.program_counter(), Address::new(0x1234));
     }
 
-    fn run_instr<F: FnOnce(&mut CPU)>(data: Vec<u8>, cpu_setup: F) -> CPU {
+    fn run_instr<I: IntoIterator<Item = u8>, F: FnOnce(&mut CPU)>(data: I, cpu_setup: F) -> CPU {
         let mut cpu = CPU::default();
 
         cpu_setup(&mut cpu);
 
         let mut pc = cpu.program_counter();
 
-        for byte in data.iter() {
-            cpu.set(pc, *byte);
+        for byte in data.into_iter() {
+            cpu.set(pc, byte);
             pc += 1u16;
         }
 

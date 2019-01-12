@@ -10,11 +10,11 @@ const HALT_ADDRESS: Address = Address::new(0xDEAD);
 macro_rules! run {
     ([$($params: expr),*] -> [$($expected: expr),*]; $( $expr: expr ),*) => {
         let mut cpu = CPU::with_memory(&mem!($($expr),*));
-        run(&mut cpu, vec!($($params),*), vec!($($expected),*));
+        run(&mut cpu, &[$($params),*], &[$($expected),*]);
     };
 }
 
-fn run(cpu: &mut CPU, params: Vec<u8>, expected: Vec<u8>) {
+fn run(cpu: &mut CPU, params: &[u8], expected: &[u8]) {
     for (offset, param) in params.iter().enumerate() {
         cpu.write(PARAM_ADDRESS + offset as u16, *param);
     }
