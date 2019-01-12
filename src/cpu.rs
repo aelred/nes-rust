@@ -368,7 +368,8 @@ impl Addressable {
     }
 
     pub fn absolute_y(&mut self) -> &mut u8 {
-        unimplemented!();
+        let address = self.absolute_address() + self.y;
+        self.deref_address_mut(address)
     }
 
     pub fn indirect_address(&mut self) -> Address {
@@ -1537,6 +1538,17 @@ mod tests {
         cpu.set(Address::new(435), 35);
         *cpu.x_mut() = 3;
         assert_eq!(*cpu.addressable.absolute_x(), 35);
+    }
+
+    #[test]
+    fn absolute_y_addressing_mode_fetches_values_at_given_address_offset_by_y() {
+        let mut cpu = CPU::default();
+        let (higher, lower) = Address::new(432).split();
+        cpu.set(cpu.program_counter(), lower);
+        cpu.set(cpu.program_counter() + 1u16, higher);
+        cpu.set(Address::new(435), 35);
+        *cpu.y_mut() = 3;
+        assert_eq!(*cpu.addressable.absolute_y(), 35);
     }
 
     #[test]
