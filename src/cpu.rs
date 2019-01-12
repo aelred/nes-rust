@@ -125,13 +125,11 @@ impl CPU {
             }
             LDX(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
-                *self.x_mut() = value;
-                self.set_flags(value);
+                self.set_x(value);
             }
             LDY(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
-                *self.y_mut() = value;
-                self.set_flags(value);
+                self.set_y(value);
             }
             LSR(addressing_mode) => self.shift(addressing_mode, 0, |val, carry| val >> 1),
             NOP => {}
@@ -173,16 +171,13 @@ impl CPU {
                 *self.fetch_ref(addressing_mode) = self.y();
             }
             TAX => {
-                *self.x_mut() = self.accumulator();
-                self.set_flags(self.x());
+                self.set_x(self.accumulator());
             },
             TAY => {
-                *self.y_mut() = self.accumulator();
-                self.set_flags(self.y());
+                self.set_y(self.accumulator());
             }
             TSX => {
-                *self.x_mut() = self.stack_pointer;
-                self.set_flags(self.x());
+                self.set_x(self.stack_pointer);
             }
             TXA => {
                 self.set_accumulator(self.x());
@@ -258,10 +253,6 @@ impl CPU {
         status.set_flags(value);
     }
 
-    fn accumulator_mut(&mut self) -> &mut u8 {
-        &mut self.addressable.accumulator
-    }
-
     fn program_counter(&self) -> Address {
         self.addressable.program_counter
     }
@@ -274,16 +265,8 @@ impl CPU {
         self.addressable.x
     }
 
-    fn x_mut(&mut self) -> &mut u8 {
-        &mut self.addressable.x
-    }
-
     fn y(&self) -> u8 {
         self.addressable.y
-    }
-
-    fn y_mut(&mut self) -> &mut u8 {
-        &mut self.addressable.y
     }
 
     fn compare<T: ValueAddressingMode>(&mut self, register: u8, addressing_mode: T) {
@@ -298,7 +281,17 @@ impl CPU {
     }
 
     fn set_accumulator(&mut self, value: u8) {
-        *self.accumulator_mut() = value;
+        self.addressable.accumulator = value;
+        self.set_flags(value);
+    }
+
+    fn set_x(&mut self, value: u8) {
+        self.addressable.x = value;
+        self.set_flags(value);
+    }
+
+    fn set_y(&mut self, value: u8) {
+        self.addressable.y = value;
         self.set_flags(value);
     }
 
@@ -522,7 +515,7 @@ mod tests {
     #[test]
     fn instr_adc_adds_numbers() {
         let cpu = run_instr(mem!(ADCImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 42;
+            cpu.set_accumulator(42);
         });
 
         assert_eq!(cpu.accumulator(), 52);
@@ -533,7 +526,7 @@ mod tests {
     #[test]
     fn instr_adc_sets_carry_flag_on_unsigned_overflow() {
         let cpu = run_instr(mem!(ADCImmediate, 255u8), |cpu| {
-            *cpu.accumulator_mut() = 42;
+            cpu.set_accumulator(42);
         });
 
         assert_eq!(cpu.accumulator(), 41);
@@ -544,7 +537,7 @@ mod tests {
     #[test]
     fn instr_adc_sets_overflow_flag_on_signed_overflow() {
         let cpu = run_instr(mem!(ADCImmediate, 127i8), |cpu| {
-            *cpu.accumulator_mut() = 42i8 as u8;
+            cpu.set_accumulator(42i8 as u8);
         });
 
         assert_eq!(cpu.accumulator() as i8, -87i8);
@@ -555,7 +548,7 @@ mod tests {
     #[test]
     fn instr_and_performs_bitwise_and() {
         let cpu = run_instr(mem!(ANDImmediate, 0b1100u8), |cpu| {
-            *cpu.accumulator_mut() = 0b1010;
+            cpu.set_accumulator(0b1010);
         });
 
         assert_eq!(cpu.accumulator(), 0b1000);
@@ -564,7 +557,7 @@ mod tests {
     #[test]
     fn instr_asl_shifts_left() {
         let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
-            *cpu.accumulator_mut() = 0b100;
+            cpu.set_accumulator(0b100);
         });
 
         assert_eq!(cpu.accumulator(), 0b1000);
@@ -574,7 +567,7 @@ mod tests {
     #[test]
     fn instr_asl_sets_carry_flag_on_overflow() {
         let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
-            *cpu.accumulator_mut() = 0b10101010;
+            cpu.set_accumulator(0b10101010);
         });
 
         assert_eq!(cpu.accumulator(), 0b01010100);
@@ -656,7 +649,7 @@ mod tests {
     #[test]
     fn instr_bit_sets_zero_flag_when_bitwise_and_is_zero() {
         let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            *cpu.accumulator_mut() = 0b11110000u8;
+            cpu.set_accumulator(0b11110000u8);
             cpu.set(Address::new(654), 0b00001111u8);
         });
 
@@ -666,7 +659,7 @@ mod tests {
     #[test]
     fn instr_bit_clears_zero_flag_when_bitwise_and_is_not_zero() {
         let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            *cpu.accumulator_mut() = 0b11111100u8;
+            cpu.set_accumulator(0b11111100u8);
             cpu.set(Address::new(654), 0b00111111u8);
         });
 
@@ -847,19 +840,19 @@ mod tests {
     #[test]
     fn instr_cmp_sets_carry_flag_if_accumulator_greater_or_equal_to_operand() {
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 1;
+            cpu.set_accumulator(1);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), false);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 10;
+            cpu.set_accumulator(10);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 100;
+            cpu.set_accumulator(100);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
@@ -868,19 +861,19 @@ mod tests {
     #[test]
     fn instr_cmp_sets_zero_flag_if_accumulator_equals_operand() {
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 1;
+            cpu.set_accumulator(1);
         });
 
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 10;
+            cpu.set_accumulator(10);
         });
 
         assert_eq!(cpu.status.get(Flag::Zero), true);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 100;
+            cpu.set_accumulator(100);
         });
 
         assert_eq!(cpu.status.get(Flag::Zero), false);
@@ -889,19 +882,19 @@ mod tests {
     #[test]
     fn instr_cmp_sets_negative_flag_if_bit_7_of_accumulator_sub_operand_is_set() {
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 1;
+            cpu.set_accumulator(1);
         });
 
         assert_eq!(cpu.status.get(Flag::Negative), true);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 10;
+            cpu.set_accumulator(10);
         });
 
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
-            *cpu.accumulator_mut() = 100;
+            cpu.set_accumulator(100);
         });
 
         assert_eq!(cpu.status.get(Flag::Negative), false);
@@ -910,7 +903,7 @@ mod tests {
     #[test]
     fn instr_cpx_compares_using_x_register() {
         let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
-            *cpu.x_mut() = 1;
+            cpu.set_x(1);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), false);
@@ -918,7 +911,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Negative), true);
 
         let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
-            *cpu.x_mut() = 10;
+            cpu.set_x(10);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
@@ -926,7 +919,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
-            *cpu.x_mut() = 100;
+            cpu.set_x(100);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
@@ -937,7 +930,7 @@ mod tests {
     #[test]
     fn instr_cpy_compares_using_y_register() {
         let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
-            *cpu.y_mut() = 1;
+            cpu.set_y(1);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), false);
@@ -945,7 +938,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Negative), true);
 
         let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
-            *cpu.y_mut() = 10;
+            cpu.set_y(10);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
@@ -953,7 +946,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
-            *cpu.y_mut() = 100;
+            cpu.set_y(100);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
@@ -1007,7 +1000,7 @@ mod tests {
     #[test]
     fn instr_dex_decrements_x_register() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            *cpu.x_mut() = 45;
+            cpu.set_x(45);
         });
 
         assert_eq!(cpu.x(), 44);
@@ -1016,14 +1009,14 @@ mod tests {
     #[test]
     fn instr_dex_sets_zero_flag_based_on_result() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            *cpu.x_mut() = 45;
+            cpu.set_x(45);
         });
 
         assert_eq!(cpu.x(), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEX), |cpu| {
-            *cpu.x_mut() = 1;
+            cpu.set_x(1);
         });
 
         assert_eq!(cpu.x(), 0);
@@ -1033,14 +1026,14 @@ mod tests {
     #[test]
     fn instr_dex_sets_negative_flag_based_on_result() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            *cpu.x_mut() = 45;
+            cpu.set_x(45);
         });
 
         assert_eq!(cpu.x(), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEX), |cpu| {
-            *cpu.x_mut() = 0;
+            cpu.set_x(0);
         });
 
         assert_eq!(cpu.x() as i8, -1i8);
@@ -1050,7 +1043,7 @@ mod tests {
     #[test]
     fn instr_dey_decrements_y_register() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            *cpu.y_mut() = 45;
+            cpu.set_y(45);
         });
 
         assert_eq!(cpu.y(), 44);
@@ -1059,14 +1052,14 @@ mod tests {
     #[test]
     fn instr_dey_sets_zero_flag_based_on_result() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            *cpu.y_mut() = 45;
+            cpu.set_y(45);
         });
 
         assert_eq!(cpu.y(), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEY), |cpu| {
-            *cpu.y_mut() = 1;
+            cpu.set_y(1);
         });
 
         assert_eq!(cpu.y(), 0);
@@ -1076,14 +1069,14 @@ mod tests {
     #[test]
     fn instr_dey_sets_negative_flag_based_on_result() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            *cpu.y_mut() = 45;
+            cpu.set_y(45);
         });
 
         assert_eq!(cpu.y(), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEY), |cpu| {
-            *cpu.y_mut() = 0;
+            cpu.set_y(0);
         });
 
         assert_eq!(cpu.y() as i8, -1i8);
@@ -1093,7 +1086,7 @@ mod tests {
     #[test]
     fn instr_eor_performs_bitwise_xor() {
         let cpu = run_instr(mem!(EORImmediate, 0b1100u8), |cpu| {
-            *cpu.accumulator_mut() = 0b1010;
+            cpu.set_accumulator(0b1010);
         });
 
         assert_eq!(cpu.accumulator(), 0b0110);
@@ -1145,7 +1138,7 @@ mod tests {
     #[test]
     fn instr_inx_increments_x_register() {
         let cpu = run_instr(mem!(INX), |cpu| {
-            *cpu.x_mut() = 45;
+            cpu.set_x(45);
         });
 
         assert_eq!(cpu.x(), 46);
@@ -1154,7 +1147,7 @@ mod tests {
     #[test]
     fn instr_iny_increments_y_register() {
         let cpu = run_instr(mem!(INY), |cpu| {
-            *cpu.y_mut() = 45;
+            cpu.set_y(45);
         });
 
         assert_eq!(cpu.y(), 46);
@@ -1223,7 +1216,7 @@ mod tests {
     #[test]
     fn instr_lsr_shifts_right() {
         let cpu = run_instr(mem!(LSRAccumulator), |cpu| {
-            *cpu.accumulator_mut() = 0b100;
+            cpu.set_accumulator(0b100);
         });
 
         assert_eq!(cpu.accumulator(), 0b10);
@@ -1233,7 +1226,7 @@ mod tests {
     #[test]
     fn instr_lsr_sets_carry_flag_on_underflow() {
         let cpu = run_instr(mem!(LSRAccumulator), |cpu| {
-            *cpu.accumulator_mut() = 0b1010101;
+            cpu.set_accumulator(0b1010101);
         });
 
         assert_eq!(cpu.accumulator(), 0b101010);
@@ -1252,7 +1245,7 @@ mod tests {
     #[test]
     fn instr_ora_performs_bitwise_or() {
         let cpu = run_instr(mem!(ORAImmediate, 0b1100u8), |cpu| {
-            *cpu.accumulator_mut() = 0b1010;
+            cpu.set_accumulator(0b1010);
         });
 
         assert_eq!(cpu.accumulator(), 0b1110);
@@ -1261,7 +1254,7 @@ mod tests {
     #[test]
     fn instr_pha_writes_accumulator_to_stack_pointer() {
         let cpu = run_instr(mem!(PHA), |cpu| {
-            *cpu.accumulator_mut() = 20;
+            cpu.set_accumulator(20);
             cpu.stack_pointer = 6;
         });
 
@@ -1337,7 +1330,7 @@ mod tests {
     fn instr_rol_rotates_left_with_carry_flag() {
         let cpu = run_instr(mem!(ROLAccumulator), |cpu| {
             cpu.status.clear(Flag::Carry);
-            *cpu.accumulator_mut() = 0b100;
+            cpu.set_accumulator(0b100);
         });
 
         assert_eq!(cpu.accumulator(), 0b1000);
@@ -1345,7 +1338,7 @@ mod tests {
 
         let cpu = run_instr(mem!(ROLAccumulator), |cpu| {
             cpu.status.set(Flag::Carry);
-            *cpu.accumulator_mut() = 0b100;
+            cpu.set_accumulator(0b100);
         });
 
         assert_eq!(cpu.accumulator(), 0b1001);
@@ -1353,7 +1346,7 @@ mod tests {
 
         let cpu = run_instr(mem!(ROLAccumulator), |cpu| {
             cpu.status.clear(Flag::Carry);
-            *cpu.accumulator_mut() = 0b10000000;
+            cpu.set_accumulator(0b10000000);
         });
 
         assert_eq!(cpu.accumulator(), 0);
@@ -1364,7 +1357,7 @@ mod tests {
     fn instr_ror_rotates_left_with_carry_flag() {
         let cpu = run_instr(mem!(RORAccumulator), |cpu| {
             cpu.status.clear(Flag::Carry);
-            *cpu.accumulator_mut() = 0b100;
+            cpu.set_accumulator(0b100);
         });
 
         assert_eq!(cpu.accumulator(), 0b10);
@@ -1372,7 +1365,7 @@ mod tests {
 
         let cpu = run_instr(mem!(RORAccumulator), |cpu| {
             cpu.status.set(Flag::Carry);
-            *cpu.accumulator_mut() = 0b100;
+            cpu.set_accumulator(0b100);
         });
 
         assert_eq!(cpu.accumulator(), 0b10000010);
@@ -1380,7 +1373,7 @@ mod tests {
 
         let cpu = run_instr(mem!(RORAccumulator), |cpu| {
             cpu.status.clear(Flag::Carry);
-            *cpu.accumulator_mut() = 0b1;
+            cpu.set_accumulator(0b1);
         });
 
         assert_eq!(cpu.accumulator(), 0);
@@ -1410,7 +1403,7 @@ mod tests {
     fn instr_sbc_subtracts_numbers() {
         let cpu = run_instr(mem!(SBCImmediate, 10u8), |cpu| {
             cpu.status.set(Flag::Carry);
-            *cpu.accumulator_mut() = 42;
+            cpu.set_accumulator(42);
         });
 
         assert_eq!(cpu.accumulator(), 32);
@@ -1422,7 +1415,7 @@ mod tests {
         fn sub(accumulator: i8, value: i8) -> (i8, bool) {
             let cpu = run_instr(mem!(SBCImmediate, value as i8), |cpu| {
                 cpu.status.set(Flag::Carry);
-                *cpu.accumulator_mut() = accumulator as u8;
+                cpu.set_accumulator(accumulator as u8);
             });
 
             (cpu.accumulator() as i8, cpu.status.get(Flag::Overflow))
@@ -1468,7 +1461,7 @@ mod tests {
     #[test]
     fn instr_sta_stores_accumulator_in_memory() {
         let cpu = run_instr(mem!(STAAbsolute, Address::new(0x32)), |cpu| {
-            *cpu.accumulator_mut() = 65;
+            cpu.set_accumulator(65);
         });
 
         assert_eq!(cpu.get(Address::new(0x32)), 65);
@@ -1477,7 +1470,7 @@ mod tests {
     #[test]
     fn instr_stx_stores_x_register_in_memory() {
         let cpu = run_instr(mem!(STXAbsolute, Address::new(0x32)), |cpu| {
-            *cpu.x_mut() = 65;
+            cpu.set_x(65);
         });
 
         assert_eq!(cpu.get(Address::new(0x32)), 65);
@@ -1486,7 +1479,7 @@ mod tests {
     #[test]
     fn instr_sty_stores_y_register_in_memory() {
         let cpu = run_instr(mem!(STYAbsolute, Address::new(0x32)), |cpu| {
-            *cpu.y_mut() = 65;
+            cpu.set_y(65);
         });
 
         assert_eq!(cpu.get(Address::new(0x32)), 65);
@@ -1495,7 +1488,7 @@ mod tests {
     #[test]
     fn instr_tax_transfers_accumulator_to_x_register() {
         let cpu = run_instr(mem!(TAX), |cpu| {
-            *cpu.accumulator_mut() = 65;
+            cpu.set_accumulator(65);
         });
 
         assert_eq!(cpu.x(), 65);
@@ -1504,7 +1497,7 @@ mod tests {
     #[test]
     fn instr_tay_transfers_accumulator_to_y_register() {
         let cpu = run_instr(mem!(TAY), |cpu| {
-            *cpu.accumulator_mut() = 65;
+            cpu.set_accumulator(65);
         });
 
         assert_eq!(cpu.y(), 65);
@@ -1522,7 +1515,7 @@ mod tests {
     #[test]
     fn instr_txa_transfers_x_register_to_accumulator() {
         let cpu = run_instr(mem!(TXA), |cpu| {
-            *cpu.x_mut() = 65;
+            cpu.set_x(65);
         });
 
         assert_eq!(cpu.accumulator(), 65);
@@ -1531,7 +1524,7 @@ mod tests {
     #[test]
     fn instr_txs_transfers_x_register_to_stack_pointer() {
         let cpu = run_instr(mem!(TXS), |cpu| {
-            *cpu.x_mut() = 65;
+            cpu.set_x(65);
         });
 
         assert_eq!(cpu.stack_pointer, 65);
@@ -1552,7 +1545,7 @@ mod tests {
     #[test]
     fn instr_tya_transfers_y_register_to_accumulator() {
         let cpu = run_instr(mem!(TYA), |cpu| {
-            *cpu.y_mut() = 65;
+            cpu.set_y(65);
         });
 
         assert_eq!(cpu.accumulator(), 65);
@@ -1568,7 +1561,7 @@ mod tests {
                 for carry_in in carry_values.iter() {
                     let cpu = run_instr(mem!(ADCImmediate, *y), |cpu| {
                         cpu.status.set_to(Flag::Carry, *carry_in);
-                        *cpu.accumulator_mut() = *x;
+                        cpu.set_accumulator(*x);
                     });
 
                     let carry_bit = *carry_in as u16;
@@ -1593,7 +1586,7 @@ mod tests {
                 for carry_in in carry_values.iter() {
                     let cpu = run_instr(mem!(SBCImmediate, *y), |cpu| {
                         cpu.status.set_to(Flag::Carry, *carry_in);
-                        *cpu.accumulator_mut() = *x;
+                        cpu.set_accumulator(*x);
                     });
 
                     let carry_bit = *carry_in as u16;
@@ -1626,7 +1619,7 @@ mod tests {
     #[test]
     fn accumulator_addressing_mode_fetches_accumulator_value() {
         let mut cpu = CPU::default();
-        *cpu.accumulator_mut() = 76;
+        cpu.set_accumulator(76);
         assert_eq!(*cpu.addressable.accumulator(), 76);
     }
 
@@ -1647,7 +1640,7 @@ mod tests {
         cpu.set(cpu.program_counter(), lower);
         cpu.set(cpu.program_counter() + 1u16, higher);
         cpu.set(Address::new(435), 35);
-        *cpu.x_mut() = 3;
+        cpu.set_x(3);
         assert_eq!(*cpu.addressable.absolute_x(), 35);
     }
 
@@ -1658,14 +1651,14 @@ mod tests {
         cpu.set(cpu.program_counter(), lower);
         cpu.set(cpu.program_counter() + 1u16, higher);
         cpu.set(Address::new(435), 35);
-        *cpu.y_mut() = 3;
+        cpu.set_y(3);
         assert_eq!(*cpu.addressable.absolute_y(), 35);
     }
 
     #[test]
     fn zero_flag_is_not_set_when_accumulator_is_non_zero() {
         let cpu = run_instr(mem!(ADCImmediate, 1u8), |cpu| {
-            *cpu.accumulator_mut() = 42;
+            cpu.set_accumulator(42);
         });
 
         assert_eq!(cpu.accumulator(), 43);
@@ -1675,7 +1668,7 @@ mod tests {
     #[test]
     fn zero_flag_is_set_when_accumulator_is_zero() {
         let cpu = run_instr(mem!(ADCImmediate, 214u8), |cpu| {
-            *cpu.accumulator_mut() = 42;
+            cpu.set_accumulator(42);
         });
 
         assert_eq!(cpu.accumulator(), 0);
@@ -1685,7 +1678,7 @@ mod tests {
     #[test]
     fn negative_flag_is_not_set_when_accumulator_is_positive() {
         let cpu = run_instr(mem!(ADCImmediate, 1u8), |cpu| {
-            *cpu.accumulator_mut() = 42;
+            cpu.set_accumulator(42);
         });
 
         assert_eq!(cpu.accumulator(), 43);
@@ -1695,7 +1688,7 @@ mod tests {
     #[test]
     fn negative_flag_is_set_when_accumulator_is_negative() {
         let cpu = run_instr(mem!(ADCImmediate, -1i8), |cpu| {
-            *cpu.accumulator_mut() = 0;
+            cpu.set_accumulator(0);
         });
 
         assert_eq!(cpu.accumulator() as i8, -1i8);
