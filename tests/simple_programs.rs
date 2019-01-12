@@ -4,15 +4,19 @@ use nes_rust::Memory;
 use nes_rust::OpCode::*;
 use nes_rust::CPU;
 use nes_rust::OpCode;
+use nes_rust::SerializeBytes;
+use std::fmt::Debug;
 
 const PARAM_ADDRESS: Address = Address::new(0xFEED);
 const RETURN_ADDRESS: Address = Address::new(0xBEEF);
 const HALT_ADDRESS: Address = Address::new(0xDEAD);
 
 macro_rules! run {
-    ([$($params: expr),*] -> [$($expected: expr),*]; $( $expr: expr ),*) => {
-        let mut cpu = CPU::with_memory(mem!($($expr),*));
-        run(&mut cpu, &[$($params),*], &[$($expected),*]);
+    ($params:tt -> $expected:expr; $( $expr: tt )*) => {
+        let mut cpu = CPU::with_memory(mem!($($expr)*));
+        let params: Vec<u8> = $params.into_iter().cloned().collect();
+        let expected: Vec<u8> = $expected.into_iter().cloned().collect();
+        run(&mut cpu, &params, &expected);
     };
 }
 
@@ -25,7 +29,7 @@ fn run<M: Memory>(cpu: &mut CPU<M>, params: &[u8], expected: &[u8]) {
 
     let mut instructions = 0;
 
-    while cpu.read(HALT_ADDRESS) == 0 {
+    while cpu.read::<u8>(HALT_ADDRESS) == 0 {
         cpu.run_instruction();
 
         instructions += 1;
@@ -35,12 +39,39 @@ fn run<M: Memory>(cpu: &mut CPU<M>, params: &[u8], expected: &[u8]) {
         }
     }
 
-    let mut result = vec![];
+    let mut result: Vec<u8> = vec![];
     for offset in 0..expected.len() {
         result.push(cpu.read(RETURN_ADDRESS + offset as u16));
     }
 
     assert_eq!(result, expected);
+}
+
+#[test]
+fn hello_world() {
+    run!({"Felix\0".as_bytes()} -> "hello world from Felix!\0".as_bytes();
+        0 => {
+            LDXImmediate, 255u8,
+            LDYImmediate, 16u8,
+            INX,
+            INY,
+            LDAAbsoluteX, PARAM_ADDRESS,
+            STAAbsoluteY, RETURN_ADDRESS,
+            BNE, -10i8,
+            LDAImmediate, 33u8,
+            STAAbsoluteY, RETURN_ADDRESS,
+            INY,
+            LDAImmediate, 0u8,
+            STAAbsoluteY, RETURN_ADDRESS,
+            LDAImmediate, 1u8,
+            STAAbsolute, HALT_ADDRESS
+        }
+        RETURN_ADDRESS => {
+            104u8, 101u8, 108u8, 108u8, 111u8, 32u8,
+            119u8, 111u8, 114u8, 108u8, 100u8, 32u8,
+            102u8, 114u8, 111u8, 109u8, 32u8
+        }
+    );
 }
 
 #[test]
