@@ -47,6 +47,10 @@ impl CPU {
         self.addressable.deref_address(address)
     }
 
+    pub fn write(&mut self, address: Address, byte: u8) {
+        *self.addressable.deref_address_mut(address) = byte;
+    }
+
     pub fn accumulator(&self) -> u8 {
         self.addressable.accumulator
     }
