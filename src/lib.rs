@@ -5,6 +5,7 @@ mod instructions;
 mod opcodes;
 
 pub use crate::address::Address;
+pub use crate::cpu::Memory;
 pub use crate::cpu::CPU;
 pub use crate::opcodes::OpCode;
 
@@ -72,14 +73,19 @@ impl SerializeByte for OpCode {
 #[macro_export]
 macro_rules! mem {
     ($( $data: expr ),*) => {
+        mem!(0; $($data),*)
+    };
+    ($offset: expr; $( $data: expr ),*) => {
         {
-            let mut vec: Vec<u8> = vec![];
+            let mut memory = [0; 0x10000];
+            let mut addr: Address = Address::new($offset);
             $(
                 for byte in $crate::SerializeBytes::serialize($data) {
-                    vec.push(byte);
+                    $crate::Memory::write(&mut memory, addr, byte);
+                    addr += 1u16;
                 }
             )*
-            vec
+            memory
         }
     };
 }
