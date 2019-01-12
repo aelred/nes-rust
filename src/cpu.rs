@@ -191,6 +191,9 @@ impl CPU {
                 self.stack_pointer = self.x();
                 self.set_flags(self.stack_pointer);
             }
+            TYA => {
+                self.set_accumulator(self.y());
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1533,6 +1536,15 @@ mod tests {
         });
 
         assert_eq!(cpu.stack_pointer, 65);
+    }
+
+    #[test]
+    fn instr_tya_transfers_y_register_to_accumulator() {
+        let cpu = run_instr(mem!(TYA), |cpu| {
+            *cpu.y_mut() = 65;
+        });
+
+        assert_eq!(cpu.accumulator(), 65);
     }
 
     #[test]

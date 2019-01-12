@@ -400,5 +400,11 @@ pub enum Instruction {
     /// Copies the current contents of the X register into the stack register.
     TXS,
 
+    /// Transfer Y to Accumulator
+    ///
+    /// A = Y
+    ///
+    /// Copies the current contents of the Y register into the accumulator and sets the zero and
+    /// negative flags as appropriate.
     TYA,
 }
