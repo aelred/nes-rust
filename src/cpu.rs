@@ -189,7 +189,6 @@ impl CPU {
             }
             TXS => {
                 self.stack_pointer = self.x();
-                self.set_flags(self.stack_pointer);
             }
             TYA => {
                 self.set_accumulator(self.y());
@@ -1536,6 +1535,18 @@ mod tests {
         });
 
         assert_eq!(cpu.stack_pointer, 65);
+    }
+
+    #[test]
+    fn instr_txs_does_not_modify_zero_or_negative_register() {
+        let cpu = run_instr(mem!(TXS), |cpu| {
+            cpu.set_x(65);
+            cpu.status.set(Flag::Zero);
+            cpu.status.set(Flag::Negative);
+        });
+
+        assert_eq!(cpu.status.get(Flag::Zero), true);
+        assert_eq!(cpu.status.get(Flag::Negative), true);
     }
 
     #[test]
