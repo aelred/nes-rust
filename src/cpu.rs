@@ -180,6 +180,10 @@ impl CPU {
                 *self.y_mut() = self.accumulator();
                 self.set_flags(self.y());
             }
+            TSX => {
+                *self.x_mut() = self.stack_pointer;
+                self.set_flags(self.x());
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1495,6 +1499,15 @@ mod tests {
         });
 
         assert_eq!(cpu.y(), 65);
+    }
+
+    #[test]
+    fn instr_tsx_transfers_stack_pointer_to_x_register() {
+        let cpu = run_instr(mem!(TSX), |cpu| {
+            cpu.stack_pointer = 65;
+        });
+
+        assert_eq!(cpu.x(), 65);
     }
 
     #[test]

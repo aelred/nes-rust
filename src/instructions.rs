@@ -377,7 +377,13 @@ pub enum Instruction {
     /// negative flags as appropriate.
     TAY,
 
+    /// Transfer Stack Pointer to X
+    /// X = S
+    ///
+    /// Copies the current contents of the stack register into the X register and sets the zero and
+    /// negative flags as appropriate.
     TSX,
+
     TXA,
     TXS,
     TYA,
