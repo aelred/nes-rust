@@ -17,14 +17,6 @@ pub struct CPU {
     status: Status,
 }
 
-fn bit6(value: u8) -> bool {
-    value & (1 << 6) != 0
-}
-
-fn bit7(value: u8) -> bool {
-    value & (1 << 7) != 0
-}
-
 impl CPU {
     pub fn with_memory(memory: &[u8]) -> Self {
         let mut cpu = CPU::default();
@@ -51,18 +43,78 @@ impl CPU {
         use crate::instructions::Instruction::*;
 
         match self.addressable.instr() {
-            ADC(addressing_mode) => {
+
+            // Load/Store Operations
+
+            LDA(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
-                self.add_to_accumulator(value);
+                self.set_accumulator(value);
             }
+            LDX(addressing_mode) => {
+                let value = self.fetch(addressing_mode);
+                self.set_x(value);
+            }
+            LDY(addressing_mode) => {
+                let value = self.fetch(addressing_mode);
+                self.set_y(value);
+            }
+            STA(addressing_mode) => {
+                *self.fetch_ref(addressing_mode) = self.accumulator();
+            }
+            STX(addressing_mode) => {
+                *self.fetch_ref(addressing_mode) = self.x();
+            }
+            STY(addressing_mode) => {
+                *self.fetch_ref(addressing_mode) = self.y();
+            }
+
+            // Register Transfers
+
+            TAX => {
+                self.set_x(self.accumulator());
+            }
+            TAY => {
+                self.set_y(self.accumulator());
+            }
+            TXA => {
+                self.set_accumulator(self.x());
+            }
+            TYA => {
+                self.set_accumulator(self.y());
+            }
+
+            // Stack Operations
+
+            TSX => {
+                self.set_x(self.stack_pointer);
+            }
+            TXS => {
+                self.stack_pointer = self.x();
+            }
+            PLA => {
+                let accumulator = self.pull_stack();
+                self.set_accumulator(accumulator);
+            }
+            PLP => {
+                self.status = self.pull_stack();
+            }
+            PHA => self.push_stack(self.accumulator()),
+            PHP => self.push_stack(self.status),
+
+            // Logical
+
             AND(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() & value);
             }
-            ASL(addressing_mode) => self.shift(addressing_mode, 7, |val, _| val << 1),
-            BCC => self.branch_if(!self.status.get(Flag::Carry)),
-            BCS => self.branch_if(self.status.get(Flag::Carry)),
-            BEQ => self.branch_if(self.status.get(Flag::Zero)),
+            EOR(addressing_mode) => {
+                let value = self.fetch(addressing_mode);
+                self.set_accumulator(self.accumulator() ^ value);
+            }
+            ORA(addressing_mode) => {
+                let value = self.fetch(addressing_mode);
+                self.set_accumulator(self.accumulator() | value);
+            }
             BIT(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
                 let zero = (self.accumulator() & value) == 0;
@@ -70,30 +122,23 @@ impl CPU {
                 self.status.set_to(Flag::Overflow, bit6(value));
                 self.status.set_to(Flag::Negative, bit7(value));
             }
-            BMI => self.branch_if(self.status.get(Flag::Negative)),
-            BNE => self.branch_if(!self.status.get(Flag::Zero)),
-            BPL => self.branch_if(!self.status.get(Flag::Negative)),
-            BRK => unimplemented!("BRK"), // TODO
-            BVC => self.branch_if(!self.status.get(Flag::Overflow)),
-            BVS => self.branch_if(self.status.get(Flag::Overflow)),
-            CLC => self.status.clear(Flag::Carry),
-            CLD => self.status.clear(Flag::Decimal),
-            CLI => self.status.clear(Flag::InterruptDisable),
-            CLV => self.status.clear(Flag::Overflow),
+
+            // Arithmetic
+
+            ADC(addressing_mode) => {
+                let value = self.fetch(addressing_mode);
+                self.add_to_accumulator(value);
+            }
+            SBC(addressing_mode) => {
+                let value = !self.fetch(addressing_mode);
+                self.add_to_accumulator(value);
+            }
             CMP(addressing_mode) => self.compare(self.accumulator(), addressing_mode),
             CPX(addressing_mode) => self.compare(self.x(), addressing_mode),
             CPY(addressing_mode) => self.compare(self.y(), addressing_mode),
-            DEC(addressing_mode) => {
-                // Borrow only `addressable` to avoid issue with split borrows
-                let addr = self.addressable.fetch_ref(addressing_mode);
-                CPU::decrement(&mut self.status, addr);
-            }
-            DEX => CPU::decrement(&mut self.status, &mut self.addressable.x),
-            DEY => CPU::decrement(&mut self.status, &mut self.addressable.y),
-            EOR(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_accumulator(self.accumulator() ^ value);
-            }
+
+            // Increments & Decrements
+
             INC(addressing_mode) => {
                 // Borrow only `addressable` to avoid issue with split borrows
                 let addr = self.addressable.fetch_ref(addressing_mode);
@@ -101,6 +146,27 @@ impl CPU {
             }
             INX => CPU::increment(&mut self.status, &mut self.addressable.x),
             INY => CPU::increment(&mut self.status, &mut self.addressable.y),
+            DEC(addressing_mode) => {
+                // Borrow only `addressable` to avoid issue with split borrows
+                let addr = self.addressable.fetch_ref(addressing_mode);
+                CPU::decrement(&mut self.status, addr);
+            }
+            DEX => CPU::decrement(&mut self.status, &mut self.addressable.x),
+            DEY => CPU::decrement(&mut self.status, &mut self.addressable.y),
+
+            // Shifts
+
+            ASL(addressing_mode) => self.shift(addressing_mode, 7, |val, _| val << 1),
+            LSR(addressing_mode) => self.shift(addressing_mode, 0, |val, _| val >> 1),
+            ROL(addressing_mode) => {
+                self.shift(addressing_mode, 7, |val, carry| (val << 1) | carry);
+            }
+            ROR(addressing_mode) => {
+                self.shift(addressing_mode, 0, |val, carry| val >> 1 | carry << 7);
+            }
+
+            // Jumps & Calls
+
             JMP(addressing_mode) => {
                 let addr = addressing_mode.fetch_address(&mut self.addressable);
                 *self.program_counter_mut() = addr;
@@ -115,75 +181,34 @@ impl CPU {
 
                 *self.program_counter_mut() = addr;
             }
-            LDA(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_accumulator(value);
-            }
-            LDX(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_x(value);
-            }
-            LDY(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_y(value);
-            }
-            LSR(addressing_mode) => self.shift(addressing_mode, 0, |val, _| val >> 1),
-            NOP => {}
-            ORA(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_accumulator(self.accumulator() | value);
-            }
-            PHA => self.push_stack(self.accumulator()),
-            PHP => self.push_stack(self.status),
-            PLA => {
-                let accumulator = self.pull_stack();
-                self.set_accumulator(accumulator);
-            }
-            PLP => {
-                self.status = self.pull_stack();
-            }
-            ROL(addressing_mode) => {
-                self.shift(addressing_mode, 7, |val, carry| (val << 1) | carry);
-            }
-            ROR(addressing_mode) => {
-                self.shift(addressing_mode, 0, |val, carry| val >> 1 | carry << 7);
-            }
-            RTI => unimplemented!("RTI"), // TODO
             RTS => *self.program_counter_mut() = self.pull_stack(),
-            SBC(addressing_mode) => {
-                let value = !self.fetch(addressing_mode);
-                self.add_to_accumulator(value);
-            }
+
+            // Branches
+
+            BCC => self.branch_if(!self.status.get(Flag::Carry)),
+            BCS => self.branch_if(self.status.get(Flag::Carry)),
+            BEQ => self.branch_if(self.status.get(Flag::Zero)),
+            BMI => self.branch_if(self.status.get(Flag::Negative)),
+            BNE => self.branch_if(!self.status.get(Flag::Zero)),
+            BPL => self.branch_if(!self.status.get(Flag::Negative)),
+            BVC => self.branch_if(!self.status.get(Flag::Overflow)),
+            BVS => self.branch_if(self.status.get(Flag::Overflow)),
+
+            // Status Flag Changes
+
+            CLC => self.status.clear(Flag::Carry),
+            CLD => self.status.clear(Flag::Decimal),
+            CLI => self.status.clear(Flag::InterruptDisable),
+            CLV => self.status.clear(Flag::Overflow),
             SEC => self.status.set(Flag::Carry),
             SED => self.status.set(Flag::Decimal),
             SEI => self.status.set(Flag::InterruptDisable),
-            STA(addressing_mode) => {
-                *self.fetch_ref(addressing_mode) = self.accumulator();
-            }
-            STX(addressing_mode) => {
-                *self.fetch_ref(addressing_mode) = self.x();
-            }
-            STY(addressing_mode) => {
-                *self.fetch_ref(addressing_mode) = self.y();
-            }
-            TAX => {
-                self.set_x(self.accumulator());
-            }
-            TAY => {
-                self.set_y(self.accumulator());
-            }
-            TSX => {
-                self.set_x(self.stack_pointer);
-            }
-            TXA => {
-                self.set_accumulator(self.x());
-            }
-            TXS => {
-                self.stack_pointer = self.x();
-            }
-            TYA => {
-                self.set_accumulator(self.y());
-            }
+
+            // System Functions
+
+            BRK => unimplemented!("BRK"), // TODO
+            NOP => {}
+            RTI => unimplemented!("RTI"), // TODO
         }
     }
 
