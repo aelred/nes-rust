@@ -347,7 +347,12 @@ pub enum Instruction {
     /// Stores the contents of the accumulator into memory.
     STA(StoreAddressingMode),
 
+    /// Store X Register
+    /// M = X
+    ///
+    /// Stores the contents of the X register into memory.
     STX(STXAddressingMode),
+
     STY(STYAddressingMode),
     TAX,
     TAY,

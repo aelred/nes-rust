@@ -204,6 +204,16 @@ pub enum STXAddressingMode {
     Absolute,
 }
 
+impl ReferenceAddressingMode for STXAddressingMode {
+    fn fetch_ref(self, addressable: &mut Addressable) -> &mut u8 {
+        match self {
+            STXAddressingMode::ZeroPage => addressable.zero_page(),
+            STXAddressingMode::ZeroPageY => addressable.zero_page_y(),
+            STXAddressingMode::Absolute => addressable.absolute(),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum STYAddressingMode {
     ZeroPage,

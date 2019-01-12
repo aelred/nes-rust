@@ -166,6 +166,9 @@ impl CPU {
             STA(addressing_mode) => {
                 *self.fetch_ref(addressing_mode) = self.accumulator();
             }
+            STX(addressing_mode) => {
+                *self.fetch_ref(addressing_mode) = self.x();
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1442,6 +1445,15 @@ mod tests {
     fn instr_sta_stores_accumulator_in_memory() {
         let cpu = run_instr(mem!(STAAbsolute, Address::new(0x32)), |cpu| {
             *cpu.accumulator_mut() = 65;
+        });
+
+        assert_eq!(cpu.get(Address::new(0x32)), 65);
+    }
+
+    #[test]
+    fn instr_stx_stores_x_register_in_memory() {
+        let cpu = run_instr(mem!(STXAbsolute, Address::new(0x32)), |cpu| {
+            *cpu.x_mut() = 65;
         });
 
         assert_eq!(cpu.get(Address::new(0x32)), 65);
