@@ -378,13 +378,21 @@ pub enum Instruction {
     TAY,
 
     /// Transfer Stack Pointer to X
+    ///
     /// X = S
     ///
     /// Copies the current contents of the stack register into the X register and sets the zero and
     /// negative flags as appropriate.
     TSX,
 
+    /// Transfer X to Accumulator
+    ///
+    /// A = X
+    ///
+    /// Copies the current contents of the X register into the accumulator and sets the zero and
+    /// negative flags as appropriate.
     TXA,
+
     TXS,
     TYA,
 }
