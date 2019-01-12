@@ -172,7 +172,7 @@ impl CPU {
             }
             TAX => {
                 self.set_x(self.accumulator());
-            },
+            }
             TAY => {
                 self.set_y(self.accumulator());
             }

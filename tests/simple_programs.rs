@@ -15,7 +15,6 @@ macro_rules! run {
 }
 
 fn run(cpu: &mut CPU, params: Vec<u8>, expected: Vec<u8>) {
-
     for (offset, param) in params.iter().enumerate() {
         cpu.write(PARAM_ADDRESS + offset as u16, *param);
     }
