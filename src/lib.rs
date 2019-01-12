@@ -73,19 +73,24 @@ impl SerializeByte for OpCode {
 #[macro_export]
 macro_rules! mem {
     ($( $data: expr ),*) => {
-        mem!(0; $($data),*)
+        mem!{0 => { $($data),* }}
     };
-    ($offset: expr; $( $data: expr ),*) => {
+    ($( $offset: expr => { $( $data: expr ),* } )*) => {
         {
             let mut memory = [0; 0x10000];
-            let mut addr: Address = Address::new($offset);
             $(
-                for byte in $crate::SerializeBytes::serialize($data) {
-                    $crate::Memory::write(&mut memory, addr, byte);
-                    addr += 1u16;
-                }
+                let mut addr: Address = Address::from($offset);
+                $(
+                    for byte in $crate::SerializeBytes::serialize($data) {
+                        $crate::Memory::write(&mut memory, addr, byte);
+                        addr += 1u16;
+                    }
+                )*
             )*
             memory
         }
+    };
+    ($offset: expr => $data: expr) => {
+        mem!{$offset => { $data }}
     };
 }

@@ -10,7 +10,16 @@ use crate::SerializeBytes;
 const STACK: Address = Address::new(0x0100);
 
 pub struct CPU<M> {
-    addressable: Addressable<M>,
+    /// 2KB of internal RAM, plus more mapped space
+    memory: M,
+    /// A
+    accumulator: u8,
+    /// PC
+    program_counter: Address,
+    /// X
+    x: u8,
+    /// Y
+    y: u8,
     /// S
     stack_pointer: u8,
     /// P
@@ -20,34 +29,32 @@ pub struct CPU<M> {
 impl<M: Memory> CPU<M> {
     pub fn with_memory(memory: M) -> Self {
         CPU {
-            addressable: Addressable {
-                memory,
-                accumulator: 0,
-                program_counter: Address::new(0x00),
-                x: 0,
-                y: 0,
-            },
+            memory,
+            accumulator: 0,
+            program_counter: Address::new(0),
+            x: 0,
+            y: 0,
             stack_pointer: 0xFF,
             status: Status(0),
         }
     }
 
     pub fn read(&self, address: Address) -> u8 {
-        self.addressable.read_address(address)
+        self.read_address(address)
     }
 
     pub fn write(&mut self, address: Address, byte: u8) {
-        self.addressable.write(Reference::Address(address), byte);
+        self.write_reference(Reference::Address(address), byte);
     }
 
     pub fn accumulator(&self) -> u8 {
-        self.addressable.accumulator
+        self.accumulator
     }
 
     pub fn run_instruction(&mut self) {
         use crate::instructions::Instruction::*;
 
-        match self.addressable.instr() {
+        match self.instr() {
             // Load/Store Operations
             LDA(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
@@ -63,15 +70,15 @@ impl<M: Memory> CPU<M> {
             }
             STA(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
-                self.addressable.write(reference, self.accumulator());
+                self.write_reference(reference, self.accumulator());
             }
             STX(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
-                self.addressable.write(reference, self.x());
+                self.write_reference(reference, self.x());
             }
             STY(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
-                self.addressable.write(reference, self.y());
+                self.write_reference(reference, self.y());
             }
 
             // Register Transfers
@@ -166,11 +173,11 @@ impl<M: Memory> CPU<M> {
 
             // Jumps & Calls
             JMP(addressing_mode) => {
-                let addr = addressing_mode.fetch_address(&mut self.addressable);
+                let addr = addressing_mode.fetch_address(self);
                 *self.program_counter_mut() = addr;
             }
             JSR => {
-                let addr = self.addressable.absolute_address();
+                let addr = self.fetch_at_program_counter();
 
                 // For some reason the spec says the pointer must be to the last byte of the JSR
                 // instruction...
@@ -231,7 +238,7 @@ impl<M: Memory> CPU<M> {
         let carry = self.status.get(Flag::Carry);
         let reference = self.fetch_ref(mode);
 
-        let old_value = self.addressable.read(reference);
+        let old_value = self.read_reference(reference);
         let new_value = op(old_value, carry as u8);
         let carry = old_value & (1 << carry_bit) != 0;
 
@@ -250,33 +257,33 @@ impl<M: Memory> CPU<M> {
     fn pull_stack<T: SerializeBytes>(&mut self) -> T {
         self.stack_pointer = self.stack_pointer.wrapping_add(T::SIZE);
         let stack_address = STACK + self.stack_pointer;
-        self.addressable.read_address(stack_address)
+        self.read_address(stack_address)
     }
 
     fn increment(&mut self, reference: Reference) {
-        let value = self.addressable.read(reference).wrapping_add(1);
+        let value = self.read_reference(reference).wrapping_add(1);
         self.set_reference(reference, value);
     }
 
     fn decrement(&mut self, reference: Reference) {
-        let value = self.addressable.read(reference).wrapping_sub(1);
+        let value = self.read_reference(reference).wrapping_sub(1);
         self.set_reference(reference, value);
     }
 
-    fn program_counter(&self) -> Address {
-        self.addressable.program_counter
+    pub fn program_counter(&self) -> Address {
+        self.program_counter
     }
 
     fn program_counter_mut(&mut self) -> &mut Address {
-        &mut self.addressable.program_counter
+        &mut self.program_counter
     }
 
-    fn x(&self) -> u8 {
-        self.addressable.x
+    pub fn x(&self) -> u8 {
+        self.x
     }
 
-    fn y(&self) -> u8 {
-        self.addressable.y
+    pub fn y(&self) -> u8 {
+        self.y
     }
 
     fn compare<T: ValueAddressingMode>(&mut self, register: u8, addressing_mode: T) {
@@ -287,7 +294,7 @@ impl<M: Memory> CPU<M> {
     }
 
     fn set_reference(&mut self, reference: Reference, value: u8) {
-        self.addressable.write(reference, value);
+        self.write_reference(reference, value);
         self.status.set_flags(value);
     }
 
@@ -295,27 +302,61 @@ impl<M: Memory> CPU<M> {
         self.set_reference(Reference::Accumulator, value);
     }
 
-    fn set_x(&mut self, value: u8) {
+    pub fn set_x(&mut self, value: u8) {
         self.set_reference(Reference::X, value);
     }
 
-    fn set_y(&mut self, value: u8) {
+    pub fn set_y(&mut self, value: u8) {
         self.set_reference(Reference::Y, value);
     }
 
     fn branch_if(&mut self, cond: bool) {
-        let offset = self.addressable.relative();
+        let offset: i8 = self.fetch_at_program_counter();
         if cond {
             *self.program_counter_mut() += offset;
         }
     }
 
     fn fetch_ref<T: ReferenceAddressingMode>(&mut self, addressing_mode: T) -> Reference {
-        addressing_mode.fetch_ref(&mut self.addressable)
+        addressing_mode.fetch_ref(self)
     }
 
     pub fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> u8 {
-        addressing_mode.fetch(&mut self.addressable)
+        addressing_mode.fetch(self)
+    }
+
+    pub fn read_reference(&self, reference: Reference) -> u8 {
+        match reference {
+            Reference::Address(address) => self.read_address(address),
+            Reference::Accumulator => self.accumulator,
+            Reference::X => self.x,
+            Reference::Y => self.y,
+        }
+    }
+
+    fn write_reference(&mut self, reference: Reference, byte: u8) {
+        match reference {
+            Reference::Address(address) => self.memory.write(address, byte),
+            Reference::Accumulator => self.accumulator = byte,
+            Reference::X => self.x = byte,
+            Reference::Y => self.y = byte,
+        };
+    }
+
+    fn read_address<T: SerializeBytes>(&self, address: Address) -> T {
+        let iter = MemoryIterator::new(&self.memory, address);
+        T::deserialize(iter)
+    }
+
+    fn instr(&mut self) -> Instruction {
+        let opcode: OpCode = self.fetch_at_program_counter();
+        opcode.instruction()
+    }
+
+    pub fn fetch_at_program_counter<T: SerializeBytes>(&mut self) -> T {
+        let data = self.read_address(self.program_counter);
+        self.program_counter += T::SIZE;
+        data
     }
 }
 
@@ -324,13 +365,11 @@ type ArrayMemory = [u8; 0x10000];
 impl Default for CPU<ArrayMemory> {
     fn default() -> Self {
         CPU {
-            addressable: Addressable {
-                memory: [0; 0x10000],
-                accumulator: 0,
-                program_counter: Address::new(0x00),
-                x: 0,
-                y: 0,
-            },
+            memory: [0; 0x10000],
+            accumulator: 0,
+            program_counter: Address::new(0x00),
+            x: 0,
+            y: 0,
             stack_pointer: 0xFF,
             status: Status(0),
         }
@@ -345,9 +384,14 @@ pub enum Reference {
     Y,
 }
 
-pub trait Memory {
+pub trait Memory: Sized {
     fn read(&self, address: Address) -> u8;
     fn write(&mut self, address: Address, byte: u8);
+
+    fn read_address<T: SerializeBytes>(&self, address: Address) -> T {
+        let iter = MemoryIterator::new(self, address);
+        T::deserialize(iter)
+    }
 }
 
 impl Memory for ArrayMemory {
@@ -357,105 +401,6 @@ impl Memory for ArrayMemory {
 
     fn write(&mut self, address: Address, byte: u8) {
         self[address.index()] = byte;
-    }
-}
-
-pub struct Addressable<M> {
-    /// 2KB of internal RAM, plus more mapped space
-    memory: M,
-    /// A
-    accumulator: u8,
-    /// PC
-    program_counter: Address,
-    /// X
-    x: u8,
-    /// Y
-    y: u8,
-}
-
-impl<M: Memory> Addressable<M> {
-    pub fn read(&self, reference: Reference) -> u8 {
-        match reference {
-            Reference::Address(address) => self.read_address(address),
-            Reference::Accumulator => self.accumulator,
-            Reference::X => self.x,
-            Reference::Y => self.y,
-        }
-    }
-
-    fn write(&mut self, reference: Reference, byte: u8) {
-        match reference {
-            Reference::Address(address) => self.memory.write(address, byte),
-            Reference::Accumulator => self.accumulator = byte,
-            Reference::X => self.x = byte,
-            Reference::Y => self.y = byte,
-        };
-    }
-
-    pub fn immediate(&mut self) -> Reference {
-        let reference = Reference::Address(self.program_counter);
-        self.fetch_at_program_counter::<u8>();
-        reference
-    }
-
-    pub fn zero_page(&mut self) -> Reference {
-        unimplemented!();
-    }
-
-    pub fn zero_page_x(&mut self) -> Reference {
-        unimplemented!();
-    }
-
-    pub fn zero_page_y(&mut self) -> Reference {
-        unimplemented!();
-    }
-
-    pub fn relative(&mut self) -> i8 {
-        self.fetch_at_program_counter()
-    }
-
-    pub fn absolute(&mut self) -> Reference {
-        Reference::Address(self.absolute_address())
-    }
-
-    pub fn absolute_address(&mut self) -> Address {
-        self.fetch_at_program_counter()
-    }
-
-    pub fn absolute_x(&mut self) -> Reference {
-        Reference::Address(self.absolute_address() + self.x)
-    }
-
-    pub fn absolute_y(&mut self) -> Reference {
-        Reference::Address(self.absolute_address() + self.y)
-    }
-
-    pub fn indirect_address(&mut self) -> Address {
-        unimplemented!();
-    }
-
-    pub fn indirect_indexed(&mut self) -> Reference {
-        unimplemented!();
-    }
-
-    pub fn indexed_indirect(&mut self) -> Reference {
-        unimplemented!();
-    }
-
-    fn read_address<T: SerializeBytes>(&self, address: Address) -> T {
-        let iter = MemoryIterator::new(&self.memory, address);
-        T::deserialize(iter)
-    }
-
-    fn instr(&mut self) -> Instruction {
-        let opcode: OpCode = self.fetch_at_program_counter();
-        opcode.instruction()
-    }
-
-    fn fetch_at_program_counter<T: SerializeBytes>(&mut self) -> T {
-        let data = self.read_address(self.program_counter);
-        self.program_counter += T::SIZE;
-        data
     }
 }
 
@@ -619,7 +564,7 @@ mod tests {
 
     #[test]
     fn instr_bcc_branches_when_carry_flag_clear() {
-        let cpu = run_instr(mem!(90; BCC, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BCC, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Carry);
         });
@@ -630,7 +575,7 @@ mod tests {
 
     #[test]
     fn instr_bcc_does_not_branch_when_carry_flag_set() {
-        let cpu = run_instr(mem!(90; BCC, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BCC, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Carry);
         });
@@ -640,7 +585,7 @@ mod tests {
 
     #[test]
     fn instr_bcs_does_not_branch_when_carry_flag_clear() {
-        let cpu = run_instr(mem!(90; BCS, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BCS, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Carry);
         });
@@ -650,7 +595,7 @@ mod tests {
 
     #[test]
     fn instr_bcs_branches_when_carry_flag_set() {
-        let cpu = run_instr(mem!(90; BCS, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BCS, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Carry);
         });
@@ -661,7 +606,7 @@ mod tests {
 
     #[test]
     fn instr_beq_does_not_branch_when_zero_flag_clear() {
-        let cpu = run_instr(mem!(90; BEQ, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BEQ, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Zero);
         });
@@ -671,7 +616,7 @@ mod tests {
 
     #[test]
     fn instr_beq_branches_when_zero_flag_set() {
-        let cpu = run_instr(mem!(90; BEQ, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BEQ, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Zero);
         });
@@ -732,7 +677,7 @@ mod tests {
 
     #[test]
     fn instr_bmi_does_not_branch_when_negative_flag_clear() {
-        let cpu = run_instr(mem!(90; BMI, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BMI, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Negative);
         });
@@ -742,7 +687,7 @@ mod tests {
 
     #[test]
     fn instr_bmi_branches_when_negative_flag_set() {
-        let cpu = run_instr(mem!(90; BMI, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BMI, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Negative);
         });
@@ -753,7 +698,7 @@ mod tests {
 
     #[test]
     fn instr_bne_branches_when_zero_flag_clear() {
-        let cpu = run_instr(mem!(90; BNE, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BNE, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Zero);
         });
@@ -764,7 +709,7 @@ mod tests {
 
     #[test]
     fn instr_bne_does_not_branch_when_zero_flag_set() {
-        let cpu = run_instr(mem!(90; BNE, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BNE, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Zero);
         });
@@ -774,7 +719,7 @@ mod tests {
 
     #[test]
     fn instr_bpl_branches_when_negative_flag_clear() {
-        let cpu = run_instr(mem!(90; BPL, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BPL, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Negative);
         });
@@ -785,7 +730,7 @@ mod tests {
 
     #[test]
     fn instr_bpl_does_not_branch_when_negative_flag_set() {
-        let cpu = run_instr(mem!(90; BPL, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BPL, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Negative);
         });
@@ -795,7 +740,7 @@ mod tests {
 
     #[test]
     fn instr_bvc_branches_when_overflow_flag_clear() {
-        let cpu = run_instr(mem!(90; BVC, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BVC, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Overflow);
         });
@@ -806,7 +751,7 @@ mod tests {
 
     #[test]
     fn instr_bvc_does_not_branch_when_overflow_flag_set() {
-        let cpu = run_instr(mem!(90; BVC, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BVC, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Overflow);
         });
@@ -816,7 +761,7 @@ mod tests {
 
     #[test]
     fn instr_bvs_does_not_branch_when_carry_flag_clear() {
-        let cpu = run_instr(mem!(90; BVS, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BVS, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Overflow);
         });
@@ -826,7 +771,7 @@ mod tests {
 
     #[test]
     fn instr_bvs_branches_when_carry_flag_set() {
-        let cpu = run_instr(mem!(90; BVS, -10i8), |cpu| {
+        let cpu = run_instr(mem!(90 => { BVS, -10i8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Overflow);
         });
@@ -1189,7 +1134,7 @@ mod tests {
 
     #[test]
     fn instr_jmp_jumps_to_operand() {
-        let cpu = run_instr(mem!(200; JMPAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(200 => { JMPAbsolute, Address::new(100) }), |cpu| {
             *cpu.program_counter_mut() = Address::new(200);
         });
 
@@ -1198,7 +1143,7 @@ mod tests {
 
     #[test]
     fn instr_jsr_jumps_to_operand() {
-        let cpu = run_instr(mem!(200; JSR, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(200 => { JSR, Address::new(100) }), |cpu| {
             *cpu.program_counter_mut() = Address::new(200);
         });
 
@@ -1207,7 +1152,7 @@ mod tests {
 
     #[test]
     fn instr_jsr_writes_program_counter_to_stack_pointer() {
-        let cpu = run_instr(mem!(0x1234; JSR, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(0x1234 => { JSR, Address::new(100) }), |cpu| {
             *cpu.program_counter_mut() = Address::new(0x1234);
             cpu.stack_pointer = 6;
         });
@@ -1269,7 +1214,7 @@ mod tests {
 
     #[test]
     fn instr_nop_increments_program_counter() {
-        let cpu = run_instr(mem!(20; LSRAccumulator), |cpu| {
+        let cpu = run_instr(mem!(20 => LSRAccumulator), |cpu| {
             *cpu.program_counter_mut() = Address::new(20);
         });
 
@@ -1644,59 +1589,6 @@ mod tests {
     }
 
     #[test]
-    fn immediate_addressing_mode_fetches_given_value() {
-        let mut cpu = CPU::default();
-        cpu.set(cpu.program_counter(), 56);
-        let reference = cpu.addressable.immediate();
-        assert_eq!(cpu.addressable.read(reference), 56);
-    }
-
-    #[test]
-    fn accumulator_addressing_mode_fetches_accumulator_value() {
-        let mut cpu = CPU::default();
-        cpu.set_accumulator(76);
-        assert_eq!(cpu.addressable.read(Reference::Accumulator), 76);
-    }
-
-    #[test]
-    fn absolute_addressing_mode_fetches_values_at_given_address() {
-        let mut cpu = CPU::default();
-        let (higher, lower) = Address::new(432).split();
-        cpu.set(cpu.program_counter(), lower);
-        cpu.set(cpu.program_counter() + 1u16, higher);
-        cpu.set(Address::new(432), 35);
-
-        let reference = cpu.addressable.absolute();
-        assert_eq!(cpu.addressable.read(reference), 35);
-    }
-
-    #[test]
-    fn absolute_x_addressing_mode_fetches_values_at_given_address_offset_by_x() {
-        let mut cpu = CPU::default();
-        let (higher, lower) = Address::new(432).split();
-        cpu.set(cpu.program_counter(), lower);
-        cpu.set(cpu.program_counter() + 1u16, higher);
-        cpu.set(Address::new(435), 35);
-        cpu.set_x(3);
-
-        let reference = cpu.addressable.absolute_x();
-        assert_eq!(cpu.addressable.read(reference), 35);
-    }
-
-    #[test]
-    fn absolute_y_addressing_mode_fetches_values_at_given_address_offset_by_y() {
-        let mut cpu = CPU::default();
-        let (higher, lower) = Address::new(432).split();
-        cpu.set(cpu.program_counter(), lower);
-        cpu.set(cpu.program_counter() + 1u16, higher);
-        cpu.set(Address::new(435), 35);
-        cpu.set_y(3);
-
-        let reference = cpu.addressable.absolute_y();
-        assert_eq!(cpu.addressable.read(reference), 35);
-    }
-
-    #[test]
     fn zero_flag_is_not_set_when_accumulator_is_non_zero() {
         let cpu = run_instr(mem!(ADCImmediate, 1u8), |cpu| {
             cpu.set_accumulator(42);
@@ -1738,7 +1630,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_1_when_executing_1_byte_instr() {
-        let cpu = run_instr(mem!(100; ASLAccumulator), |cpu| {
+        let cpu = run_instr(mem!(100 => ASLAccumulator), |cpu| {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
@@ -1747,7 +1639,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_2_when_executing_2_byte_instr() {
-        let cpu = run_instr(mem!(100; ADCImmediate, 0u8), |cpu| {
+        let cpu = run_instr(mem!(100 => { ADCImmediate, 0u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
@@ -1756,7 +1648,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_3_when_executing_3_byte_instr() {
-        let cpu = run_instr(mem!(100; ASLAbsolute, Address::new(0)), |cpu| {
+        let cpu = run_instr(mem!(100 => { ASLAbsolute, Address::new(0) }), |cpu| {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
@@ -1780,7 +1672,7 @@ mod tests {
 
     #[test]
     fn stack_operations_wrap_value_on_overflow() {
-        let cpu = run_instr(mem!(0x1234; JSR, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(0x1234 => { JSR, Address::new(100) }), |cpu| {
             cpu.stack_pointer = 0;
             *cpu.program_counter_mut() = Address::new(0x1234);
         });
@@ -1791,7 +1683,7 @@ mod tests {
 
     #[test]
     fn program_counter_wraps_on_overflow() {
-        let cpu = run_instr(mem!(0xffff; NOP), |cpu| {
+        let cpu = run_instr(mem!(0xffff => NOP), |cpu| {
             *cpu.program_counter_mut() = Address::new(0xffff);
         });
 
@@ -1800,9 +1692,12 @@ mod tests {
 
     #[test]
     fn instructions_can_wrap_on_program_counter_overflow() {
-        let cpu = run_instr(mem!(0xfffe; JMPAbsolute, Address::new(0x1234)), |cpu| {
-            *cpu.program_counter_mut() = Address::new(0xfffe);
-        });
+        let cpu = run_instr(
+            mem!(0xfffe => { JMPAbsolute, Address::new(0x1234) }),
+            |cpu| {
+                *cpu.program_counter_mut() = Address::new(0xfffe);
+            },
+        );
 
         assert_eq!(cpu.program_counter(), Address::new(0x1234));
     }
@@ -1817,7 +1712,7 @@ mod tests {
 
         cpu.run_instruction();
 
-        hexdump::hexdump(&cpu.addressable.memory[..0x200]);
+        hexdump::hexdump(&cpu.memory[..0x200]);
 
         cpu
     }

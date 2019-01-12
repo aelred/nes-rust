@@ -37,6 +37,12 @@ impl SerializeBytes for Address {
     }
 }
 
+impl From<u16> for Address {
+    fn from(value: u16) -> Self {
+        Address::new(value)
+    }
+}
+
 impl AddAssign<i8> for Address {
     fn add_assign(&mut self, rhs: i8) {
         self.0 = self.0.wrapping_add(rhs as u16);
