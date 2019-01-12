@@ -176,6 +176,10 @@ impl CPU {
                 *self.x_mut() = self.accumulator();
                 self.set_flags(self.x());
             },
+            TAY => {
+                *self.y_mut() = self.accumulator();
+                self.set_flags(self.y());
+            }
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1482,6 +1486,15 @@ mod tests {
         });
 
         assert_eq!(cpu.x(), 65);
+    }
+
+    #[test]
+    fn instr_tay_transfers_accumulator_to_y_register() {
+        let cpu = run_instr(mem!(TAY), |cpu| {
+            *cpu.accumulator_mut() = 65;
+        });
+
+        assert_eq!(cpu.y(), 65);
     }
 
     #[test]

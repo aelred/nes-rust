@@ -369,7 +369,14 @@ pub enum Instruction {
     /// negative flags as appropriate.
     TAX,
 
+    /// Transfer Accumulator to Y
+    ///
+    /// Y = A
+    ///
+    /// Copies the current contents of the accumulator into the Y register and sets the zero and
+    /// negative flags as appropriate.
     TAY,
+
     TSX,
     TXA,
     TXS,
