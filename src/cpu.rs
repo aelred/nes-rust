@@ -11,10 +11,6 @@ const STACK: Address = Address::new(0x0100);
 
 pub struct CPU {
     addressable: Addressable,
-    /// X
-    x: u8,
-    /// Y
-    y: u8,
     /// S
     stack_pointer: u8,
     /// P
@@ -89,15 +85,15 @@ impl CPU {
             CLI => self.status.clear(Flag::InterruptDisable),
             CLV => self.status.clear(Flag::Overflow),
             CMP(addressing_mode) => self.compare(self.accumulator(), addressing_mode),
-            CPX(addressing_mode) => self.compare(self.x, addressing_mode),
-            CPY(addressing_mode) => self.compare(self.y, addressing_mode),
+            CPX(addressing_mode) => self.compare(self.x(), addressing_mode),
+            CPY(addressing_mode) => self.compare(self.y(), addressing_mode),
             DEC(addressing_mode) => {
                 // Borrow only `addressable` to avoid issue with split borrows
                 let addr = self.addressable.fetch_ref(addressing_mode);
                 CPU::decrement(&mut self.status, addr);
             }
-            DEX => CPU::decrement(&mut self.status, &mut self.x),
-            DEY => CPU::decrement(&mut self.status, &mut self.y),
+            DEX => CPU::decrement(&mut self.status, &mut self.addressable.x),
+            DEY => CPU::decrement(&mut self.status, &mut self.addressable.y),
             EOR(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
                 self.set_accumulator(self.accumulator() ^ value);
@@ -107,8 +103,8 @@ impl CPU {
                 let addr = self.addressable.fetch_ref(addressing_mode);
                 CPU::increment(&mut self.status, addr);
             }
-            INX => CPU::increment(&mut self.status, &mut self.x),
-            INY => CPU::increment(&mut self.status, &mut self.y),
+            INX => CPU::increment(&mut self.status, &mut self.addressable.x),
+            INY => CPU::increment(&mut self.status, &mut self.addressable.y),
             JMP(addressing_mode) => {
                 let addr = addressing_mode.fetch_address(&mut self.addressable);
                 *self.program_counter_mut() = addr;
@@ -129,12 +125,12 @@ impl CPU {
             }
             LDX(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
-                self.x = value;
+                *self.x_mut() = value;
                 self.set_flags(value);
             }
             LDY(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
-                self.y = value;
+                *self.y_mut() = value;
                 self.set_flags(value);
             }
             LSR(addressing_mode) => self.shift(addressing_mode, 0, |val, carry| val >> 1),
@@ -247,6 +243,22 @@ impl CPU {
         &mut self.addressable.program_counter
     }
 
+    fn x(&self) -> u8 {
+        self.addressable.x
+    }
+
+    fn x_mut(&mut self) -> &mut u8 {
+        &mut self.addressable.x
+    }
+
+    fn y(&self) -> u8 {
+        self.addressable.y
+    }
+
+    fn y_mut(&mut self) -> &mut u8 {
+        &mut self.addressable.y
+    }
+
     fn compare<T: ValueAddressingMode>(&mut self, register: u8, addressing_mode: T) {
         let value = self.fetch(addressing_mode);
         let (result, carry) = register.overflowing_sub(value);
@@ -286,9 +298,9 @@ impl Default for CPU {
                 memory: [0; 0x10000],
                 accumulator: 0,
                 program_counter: Address::new(0x00),
+                x: 0,
+                y: 0,
             },
-            x: 0,
-            y: 0,
             stack_pointer: 0xFF,
             status: Status(0),
         }
@@ -302,6 +314,10 @@ pub struct Addressable {
     accumulator: u8,
     /// PC
     program_counter: Address,
+    /// X
+    x: u8,
+    /// Y
+    y: u8,
 }
 
 impl Addressable {
@@ -347,7 +363,8 @@ impl Addressable {
     }
 
     pub fn absolute_x(&mut self) -> &mut u8 {
-        unimplemented!();
+        let address = self.absolute_address() + self.x;
+        self.deref_address_mut(address)
     }
 
     pub fn absolute_y(&mut self) -> &mut u8 {
@@ -469,8 +486,8 @@ mod tests {
 
         assert_eq!(cpu.program_counter(), Address::new(0x00));
         assert_eq!(cpu.accumulator(), 0);
-        assert_eq!(cpu.x, 0);
-        assert_eq!(cpu.y, 0);
+        assert_eq!(cpu.x(), 0);
+        assert_eq!(cpu.y(), 0);
         assert_eq!(cpu.stack_pointer, 0xFF);
     }
 
@@ -865,7 +882,7 @@ mod tests {
     #[test]
     fn instr_cpx_compares_using_x_register() {
         let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
-            cpu.x = 1;
+            *cpu.x_mut() = 1;
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), false);
@@ -873,7 +890,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Negative), true);
 
         let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
-            cpu.x = 10;
+            *cpu.x_mut() = 10;
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
@@ -881,7 +898,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
-            cpu.x = 100;
+            *cpu.x_mut() = 100;
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
@@ -892,7 +909,7 @@ mod tests {
     #[test]
     fn instr_cpy_compares_using_y_register() {
         let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
-            cpu.y = 1;
+            *cpu.y_mut() = 1;
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), false);
@@ -900,7 +917,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Negative), true);
 
         let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
-            cpu.y = 10;
+            *cpu.y_mut() = 10;
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
@@ -908,7 +925,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
         let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
-            cpu.y = 100;
+            *cpu.y_mut() = 100;
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
@@ -962,86 +979,86 @@ mod tests {
     #[test]
     fn instr_dex_decrements_x_register() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 45;
+            *cpu.x_mut() = 45;
         });
 
-        assert_eq!(cpu.x, 44);
+        assert_eq!(cpu.x(), 44);
     }
 
     #[test]
     fn instr_dex_sets_zero_flag_based_on_result() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 45;
+            *cpu.x_mut() = 45;
         });
 
-        assert_eq!(cpu.x, 44);
+        assert_eq!(cpu.x(), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 1;
+            *cpu.x_mut() = 1;
         });
 
-        assert_eq!(cpu.x, 0);
+        assert_eq!(cpu.x(), 0);
         assert_eq!(cpu.status.get(Flag::Zero), true);
     }
 
     #[test]
     fn instr_dex_sets_negative_flag_based_on_result() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 45;
+            *cpu.x_mut() = 45;
         });
 
-        assert_eq!(cpu.x, 44);
+        assert_eq!(cpu.x(), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 0;
+            *cpu.x_mut() = 0;
         });
 
-        assert_eq!(cpu.x as i8, -1i8);
+        assert_eq!(cpu.x() as i8, -1i8);
         assert_eq!(cpu.status.get(Flag::Negative), true);
     }
 
     #[test]
     fn instr_dey_decrements_y_register() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 45;
+            *cpu.y_mut() = 45;
         });
 
-        assert_eq!(cpu.y, 44);
+        assert_eq!(cpu.y(), 44);
     }
 
     #[test]
     fn instr_dey_sets_zero_flag_based_on_result() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 45;
+            *cpu.y_mut() = 45;
         });
 
-        assert_eq!(cpu.y, 44);
+        assert_eq!(cpu.y(), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 1;
+            *cpu.y_mut() = 1;
         });
 
-        assert_eq!(cpu.y, 0);
+        assert_eq!(cpu.y(), 0);
         assert_eq!(cpu.status.get(Flag::Zero), true);
     }
 
     #[test]
     fn instr_dey_sets_negative_flag_based_on_result() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 45;
+            *cpu.y_mut() = 45;
         });
 
-        assert_eq!(cpu.y, 44);
+        assert_eq!(cpu.y(), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 0;
+            *cpu.y_mut() = 0;
         });
 
-        assert_eq!(cpu.y as i8, -1i8);
+        assert_eq!(cpu.y() as i8, -1i8);
         assert_eq!(cpu.status.get(Flag::Negative), true);
     }
 
@@ -1100,19 +1117,19 @@ mod tests {
     #[test]
     fn instr_inx_increments_x_register() {
         let cpu = run_instr(mem!(INX), |cpu| {
-            cpu.x = 45;
+            *cpu.x_mut() = 45;
         });
 
-        assert_eq!(cpu.x, 46);
+        assert_eq!(cpu.x(), 46);
     }
 
     #[test]
     fn instr_iny_increments_y_register() {
         let cpu = run_instr(mem!(INY), |cpu| {
-            cpu.y = 45;
+            *cpu.y_mut() = 45;
         });
 
-        assert_eq!(cpu.y, 46);
+        assert_eq!(cpu.y(), 46);
     }
 
     #[test]
@@ -1165,14 +1182,14 @@ mod tests {
     fn instr_ldx_loads_operand_into_x_register() {
         let cpu = run_instr(mem!(LDXImmediate, 5u8), |cpu| {});
 
-        assert_eq!(cpu.x, 5);
+        assert_eq!(cpu.x(), 5);
     }
 
     #[test]
     fn instr_ldy_loads_operand_into_y_register() {
         let cpu = run_instr(mem!(LDYImmediate, 5u8), |cpu| {});
 
-        assert_eq!(cpu.y, 5);
+        assert_eq!(cpu.y(), 5);
     }
 
     #[test]
@@ -1509,6 +1526,17 @@ mod tests {
         cpu.set(cpu.program_counter() + 1u16, higher);
         cpu.set(Address::new(432), 35);
         assert_eq!(*cpu.addressable.absolute(), 35);
+    }
+
+    #[test]
+    fn absolute_x_addressing_mode_fetches_values_at_given_address_offset_by_x() {
+        let mut cpu = CPU::default();
+        let (higher, lower) = Address::new(432).split();
+        cpu.set(cpu.program_counter(), lower);
+        cpu.set(cpu.program_counter() + 1u16, higher);
+        cpu.set(Address::new(435), 35);
+        *cpu.x_mut() = 3;
+        assert_eq!(*cpu.addressable.absolute_x(), 35);
     }
 
     #[test]
