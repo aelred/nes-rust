@@ -172,6 +172,10 @@ impl CPU {
             STY(addressing_mode) => {
                 *self.fetch_ref(addressing_mode) = self.y();
             }
+            TAX => {
+                *self.x_mut() = self.accumulator();
+                self.set_flags(self.x());
+            },
             instr => unimplemented!("{:?}", instr),
         }
     }
@@ -1469,6 +1473,15 @@ mod tests {
         });
 
         assert_eq!(cpu.get(Address::new(0x32)), 65);
+    }
+
+    #[test]
+    fn instr_tax_transfers_accumulator_to_x_register() {
+        let cpu = run_instr(mem!(TAX), |cpu| {
+            *cpu.accumulator_mut() = 65;
+        });
+
+        assert_eq!(cpu.x(), 65);
     }
 
     #[test]

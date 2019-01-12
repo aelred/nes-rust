@@ -361,7 +361,14 @@ pub enum Instruction {
     /// Stores the contents of the Y register into memory.
     STY(STYAddressingMode),
 
+    /// Transfer Accumulator to X
+    ///
+    /// X = A
+    //
+    /// Copies the current contents of the accumulator into the X register and sets the zero and
+    /// negative flags as appropriate.
     TAX,
+
     TAY,
     TSX,
     TXA,
