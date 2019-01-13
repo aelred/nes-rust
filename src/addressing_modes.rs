@@ -281,18 +281,20 @@ impl<M: Memory> CPU<M> {
 
     fn indexed_indirect(&mut self) -> Reference {
         let offset = self.fetch_at_program_counter().wrapping_add(self.x());
-        let lower = self.read(Address::from_bytes(0, offset));
-        let higher = self.read(Address::from_bytes(0, offset.wrapping_add(1)));
-        let address = Address::from_bytes(higher, lower);
+        let address = self.read_zero_page_address(offset);
         Reference::Address(address)
     }
 
     fn indirect_indexed(&mut self) -> Reference {
         let offset = self.fetch_at_program_counter();
+        let address = self.read_zero_page_address(offset) + self.y();
+        Reference::Address(address)
+    }
+
+    fn read_zero_page_address(&self, offset: u8) -> Address {
         let lower = self.read(Address::from_bytes(0, offset));
         let higher = self.read(Address::from_bytes(0, offset.wrapping_add(1)));
-        let address = Address::from_bytes(higher, lower) + self.y();
-        Reference::Address(address)
+        Address::from_bytes(higher, lower)
     }
 }
 
