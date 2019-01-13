@@ -33,34 +33,6 @@ impl From<u16> for Address {
     }
 }
 
-impl AddAssign<i8> for Address {
-    fn add_assign(&mut self, rhs: i8) {
-        self.0 = self.0.wrapping_add(rhs as u16);
-    }
-}
-
-impl AddAssign<u8> for Address {
-    fn add_assign(&mut self, rhs: u8) {
-        self.0 = self.0.wrapping_add(u16::from(rhs));
-    }
-}
-
-impl Add<u8> for Address {
-    type Output = Address;
-
-    fn add(self, rhs: u8) -> <Self as Add<u8>>::Output {
-        Address(self.0.wrapping_add(u16::from(rhs)))
-    }
-}
-
-impl Sub<u8> for Address {
-    type Output = Address;
-
-    fn sub(self, rhs: u8) -> <Self as Sub<u8>>::Output {
-        Address(self.0.wrapping_sub(u16::from(rhs)))
-    }
-}
-
 impl AddAssign<u16> for Address {
     fn add_assign(&mut self, rhs: u16) {
         self.0 = self.0.wrapping_add(rhs);
@@ -72,5 +44,13 @@ impl Add<u16> for Address {
 
     fn add(self, rhs: u16) -> <Self as Add<u16>>::Output {
         Address(self.0.wrapping_add(rhs))
+    }
+}
+
+impl Sub<u16> for Address {
+    type Output = Address;
+
+    fn sub(self, rhs: u16) -> <Self as Sub<u16>>::Output {
+        Address(self.0.wrapping_sub(rhs))
     }
 }

@@ -251,14 +251,14 @@ impl<M: Memory> CPU<M> {
     }
 
     fn push_stack(&mut self, byte: u8) {
-        let stack_address = STACK + self.stack_pointer;
+        let stack_address = STACK + self.stack_pointer as u16;
         self.write(stack_address, byte);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
 
     fn pull_stack(&mut self) -> u8 {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
-        let stack_address = STACK + self.stack_pointer;
+        let stack_address = STACK + self.stack_pointer as u16;
         self.read(stack_address)
     }
 
@@ -315,7 +315,7 @@ impl<M: Memory> CPU<M> {
     fn branch_if(&mut self, cond: bool) {
         let offset = self.fetch_at_program_counter() as i8;
         if cond {
-            *self.program_counter_mut() += offset;
+            *self.program_counter_mut() += offset as u16;
         }
     }
 
@@ -1148,8 +1148,8 @@ mod tests {
         });
 
         // Program counter points to last byte of JSR instruction
-        assert_eq!(cpu.get(STACK + 6u8), 0x12);
-        assert_eq!(cpu.get(STACK + 5u8), 0x36);
+        assert_eq!(cpu.get(STACK + 6), 0x12);
+        assert_eq!(cpu.get(STACK + 5), 0x36);
     }
 
     #[test]
@@ -1227,7 +1227,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.get(STACK + 6u8), 20);
+        assert_eq!(cpu.get(STACK + 6), 20);
     }
 
     #[test]
@@ -1246,7 +1246,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.get(STACK + 6u8), 142);
+        assert_eq!(cpu.get(STACK + 6), 142);
     }
 
     #[test]
@@ -1261,7 +1261,7 @@ mod tests {
     #[test]
     fn instr_pla_reads_accumulator_from_stack() {
         let cpu = run_instr(mem!(PLA), |cpu| {
-            cpu.set(STACK + 7u8, 20);
+            cpu.set(STACK + 7, 20);
             cpu.stack_pointer = 6;
         });
 
@@ -1353,8 +1353,8 @@ mod tests {
     fn instr_rts_reads_program_counter_from_stack() {
         let cpu = run_instr(mem!(RTS), |cpu| {
             cpu.stack_pointer = 100;
-            cpu.set(STACK + 102u8, 0x12);
-            cpu.set(STACK + 101u8, 0x34);
+            cpu.set(STACK + 102, 0x12);
+            cpu.set(STACK + 101, 0x34);
         });
 
         assert_eq!(cpu.program_counter(), Address::new(0x1234));
@@ -1669,13 +1669,13 @@ mod tests {
         });
 
         assert_eq!(cpu.get(STACK), 0x12);
-        assert_eq!(cpu.get(STACK + 0xffu8), 0x36);
+        assert_eq!(cpu.get(STACK + 0xff), 0x36);
 
         let cpu = run_instr(
             mem!(
                 40 => { RTS }
                 STACK => { 0x12u8 }
-                STACK + 0xffu8 => { 0x36u8 }
+                STACK + 0xff => { 0x36u8 }
             ),
             |cpu| {
                 cpu.stack_pointer = 0xfe;

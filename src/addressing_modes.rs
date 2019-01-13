@@ -265,11 +265,11 @@ impl<M: Memory> CPU<M> {
     }
 
     fn absolute_x(&mut self) -> Reference {
-        Reference::Address(self.absolute_address() + self.x())
+        Reference::Address(self.absolute_address() + self.x() as u16)
     }
 
     fn absolute_y(&mut self) -> Reference {
-        Reference::Address(self.absolute_address() + self.y())
+        Reference::Address(self.absolute_address() + self.y() as u16)
     }
 
     fn indirect_address(&mut self) -> Address {
@@ -287,7 +287,7 @@ impl<M: Memory> CPU<M> {
 
     fn indirect_indexed(&mut self) -> Reference {
         let offset = self.fetch_at_program_counter();
-        let address = self.read_zero_page_address(offset) + self.y();
+        let address = self.read_zero_page_address(offset) + self.y() as u16;
         Reference::Address(address)
     }
 
