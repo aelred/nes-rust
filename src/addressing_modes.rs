@@ -283,11 +283,16 @@ impl<M: Memory> CPU<M> {
         let offset = self.fetch_at_program_counter().wrapping_add(self.x());
         let lower = self.read(Address::from_bytes(0, offset));
         let higher = self.read(Address::from_bytes(0, offset.wrapping_add(1)));
-        Reference::Address(Address::from_bytes(higher, lower))
+        let address = Address::from_bytes(higher, lower);
+        Reference::Address(address)
     }
 
     fn indirect_indexed(&mut self) -> Reference {
-        unimplemented!();
+        let offset = self.fetch_at_program_counter();
+        let lower = self.read(Address::from_bytes(0, offset));
+        let higher = self.read(Address::from_bytes(0, offset.wrapping_add(1)));
+        let address = Address::from_bytes(higher, lower) + self.y();
+        Reference::Address(address)
     }
 }
 
@@ -451,6 +456,32 @@ mod tests {
         cpu.set_x(0);
 
         let reference = cpu.indexed_indirect();
+        assert_eq!(cpu.read_reference(reference), 57);
+    }
+
+    #[test]
+    fn indirect_indexed_addressing_mode_fetches_address_offset_by_y_at_given_zero_page_address() {
+        let mut cpu = CPU::with_memory(mem!(
+            0 => { 0x32 }
+            0x32 => { 0x34, 0x12 }
+            0x1237 => { 57 }
+        ));
+        cpu.set_y(3);
+
+        let reference = cpu.indirect_indexed();
+        assert_eq!(cpu.read_reference(reference), 57);
+    }
+
+    #[test]
+    fn indirect_indexed_addressing_mode_wraps_address_read_from_zero_page() {
+        let mut cpu = CPU::with_memory(mem!(
+            0x00 => { 0xff }
+            0xff => { 0x12 }
+            0xff12 => { 57 }
+        ));
+        cpu.set_y(0);
+
+        let reference = cpu.indirect_indexed();
         assert_eq!(cpu.read_reference(reference), 57);
     }
 }
