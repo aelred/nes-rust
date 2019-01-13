@@ -1129,10 +1129,21 @@ mod tests {
     }
 
     #[test]
-    fn instr_jmp_jumps_to_operand() {
+    fn instr_jmp_jumps_to_immediate_operand() {
         let cpu = run_instr(mem!(200 => { JMPAbsolute, Address::new(100) }), |cpu| {
             *cpu.program_counter_mut() = Address::new(200);
         });
+
+        assert_eq!(cpu.program_counter(), Address::new(100));
+    }
+
+    #[test]
+    fn instr_jmp_jumps_to_indirect_operand() {
+        let cpu = run_instr(mem!(
+                200 => { JMPIndirect, Address::new(300) }
+                300 => { Address::new(100) }
+            ), |cpu| { *cpu.program_counter_mut() = Address::new(200); }
+        );
 
         assert_eq!(cpu.program_counter(), Address::new(100));
     }

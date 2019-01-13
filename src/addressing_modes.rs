@@ -273,7 +273,8 @@ impl<M: Memory> CPU<M> {
     }
 
     fn indirect_address(&mut self) -> Address {
-        unimplemented!();
+        let address_of_address = self.fetch_at_program_counter();
+        self.read(address_of_address)
     }
 
     fn indirect_indexed(&mut self) -> Reference {
@@ -398,4 +399,14 @@ mod tests {
         assert_eq!(cpu.read_reference(reference), 35);
     }
 
+    #[test]
+    fn indirect_addressing_mode_fetches_address_at_given_address() {
+        let mut cpu = CPU::with_memory(mem!(
+            0 => { Address::new(432) }
+            432 => { Address::new(35) }
+        ));
+
+        let address = cpu.indirect_address();
+        assert_eq!(address, Address::new(35));
+    }
 }
