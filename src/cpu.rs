@@ -373,7 +373,6 @@ impl<M: Memory> CPU<M> {
 
     fn instr(&mut self) -> Instruction {
         let opcode: OpCode = OpCode::from_byte(self.fetch_at_program_counter());
-        println!("{:?}", opcode.instruction());
         opcode.instruction()
     }
 
