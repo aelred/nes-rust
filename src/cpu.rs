@@ -48,7 +48,7 @@ impl<M: Memory> CPU<M> {
         self.write_reference(Reference::Address(address), byte);
     }
 
-    pub fn accumulator(&self) -> u8 {
+    fn accumulator(&self) -> u8 {
         self.accumulator
     }
 
@@ -322,7 +322,7 @@ impl<M: Memory> CPU<M> {
         addressing_mode.fetch_ref(self)
     }
 
-    pub fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> u8 {
+    fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> u8 {
         addressing_mode.fetch(self)
     }
 
