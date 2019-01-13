@@ -245,7 +245,9 @@ impl<M: Memory> CPU<M> {
     }
 
     fn zero_page_x(&mut self) -> Reference {
-        unimplemented!();
+        let operand: u8 = self.fetch_at_program_counter();
+        let address = Address::zero_page(operand.wrapping_add(self.x()));
+        Reference::Address(address)
     }
 
     fn zero_page_y(&mut self) -> Reference {
@@ -311,6 +313,29 @@ mod tests {
 
         let reference = cpu.zero_page();
         assert_eq!(cpu.read_reference(reference), 35);
+    }
+
+    #[test]
+    fn zero_page_x_addressing_mode_fetches_value_at_given_zero_page_address_offset_by_x() {
+        let mut cpu = CPU::with_memory(mem!(
+            0 => { 15u8 }
+            18 => { 35u8 }
+        ));
+        cpu.set_x(3);
+
+        let reference = cpu.zero_page_x();
+        assert_eq!(cpu.read_reference(reference), 35);
+    }
+
+    #[test]
+    fn zero_page_x_addressing_mode_wraps() {
+        let mut cpu = CPU::with_memory(mem!(
+            0 => { 0xFFu8 }
+        ));
+        cpu.set_x(1);
+
+        let reference = cpu.zero_page_x();
+        assert_eq!(cpu.read_reference(reference), 0xFF);
     }
 
     #[test]
