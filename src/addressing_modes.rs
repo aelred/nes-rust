@@ -236,23 +236,23 @@ impl ReferenceAddressingMode for STYAddressingMode {
 impl<M: Memory> CPU<M> {
     fn immediate(&mut self) -> Reference {
         let reference = Reference::Address(self.program_counter());
-        self.fetch_at_program_counter::<u8>();
+        self.fetch_at_program_counter();
         reference
     }
 
     fn zero_page(&mut self) -> Reference {
-        Reference::Address(Address::zero_page(self.fetch_at_program_counter()))
+        Reference::Address(Address::from_bytes(0, self.fetch_at_program_counter()))
     }
 
     fn zero_page_x(&mut self) -> Reference {
         let operand: u8 = self.fetch_at_program_counter();
-        let address = Address::zero_page(operand.wrapping_add(self.x()));
+        let address = Address::from_bytes(0, operand.wrapping_add(self.x()));
         Reference::Address(address)
     }
 
     fn zero_page_y(&mut self) -> Reference {
         let operand: u8 = self.fetch_at_program_counter();
-        let address = Address::zero_page(operand.wrapping_add(self.y()));
+        let address = Address::from_bytes(0, operand.wrapping_add(self.y()));
         Reference::Address(address)
     }
 
@@ -261,7 +261,7 @@ impl<M: Memory> CPU<M> {
     }
 
     fn absolute_address(&mut self) -> Address {
-        self.fetch_at_program_counter()
+        self.fetch_address_at_program_counter()
     }
 
     fn absolute_x(&mut self) -> Reference {
@@ -273,8 +273,10 @@ impl<M: Memory> CPU<M> {
     }
 
     fn indirect_address(&mut self) -> Address {
-        let address_of_address = self.fetch_at_program_counter();
-        self.read(address_of_address)
+        let address_of_address = self.fetch_address_at_program_counter();
+        let lower = self.read(address_of_address);
+        let higher = self.read(address_of_address + 1u16);
+        Address::from_bytes(higher, lower)
     }
 
     fn indexed_indirect(&mut self) -> Reference {
@@ -367,8 +369,8 @@ mod tests {
     #[test]
     fn absolute_addressing_mode_fetches_values_at_given_address() {
         let mut cpu = CPU::with_memory(mem!(
-            0 => { Address::new(432) }
-            432 => { 35u8 }
+            0 => { 0x32, 0x04 }
+            0x432 => { 35u8 }
         ));
 
         let reference = cpu.absolute();
@@ -378,8 +380,8 @@ mod tests {
     #[test]
     fn absolute_x_addressing_mode_fetches_values_at_given_address_offset_by_x() {
         let mut cpu = CPU::with_memory(mem!(
-            0 => { Address::new(432) }
-            435 => { 35u8 }
+            0 => { 0x32, 0x04 }
+            0x435 => { 35u8 }
         ));
         cpu.set_x(3);
 
@@ -390,8 +392,8 @@ mod tests {
     #[test]
     fn absolute_y_addressing_mode_fetches_values_at_given_address_offset_by_y() {
         let mut cpu = CPU::with_memory(mem!(
-            0 => { Address::new(432) }
-            435 => { 35u8 }
+            0 => { 0x32, 0x04 }
+            0x435 => { 35u8 }
         ));
         cpu.set_y(3);
 
@@ -402,11 +404,11 @@ mod tests {
     #[test]
     fn indirect_addressing_mode_fetches_address_at_given_address() {
         let mut cpu = CPU::with_memory(mem!(
-            0 => { Address::new(432) }
-            432 => { Address::new(35) }
+            0 => { 0x32, 0x04 }
+            0x432 => { 0x35, 0 }
         ));
 
         let address = cpu.indirect_address();
-        assert_eq!(address, Address::new(35));
+        assert_eq!(address, Address::new(0x35));
     }
 }

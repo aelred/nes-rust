@@ -4,8 +4,6 @@ use crate::addressing_modes::ShiftAddressingMode;
 use crate::addressing_modes::ValueAddressingMode;
 use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
-use crate::serialize::SerializeByte;
-use crate::SerializeBytes;
 
 const STACK: Address = Address::new(0x0100);
 
@@ -39,9 +37,8 @@ impl<M: Memory> CPU<M> {
         }
     }
 
-    pub fn read<T: SerializeBytes>(&self, address: Address) -> T {
-        let iter = MemoryIterator::new(&self.memory, address);
-        T::deserialize(iter)
+    pub fn read(&self, address: Address) -> u8 {
+        self.memory.read(address)
     }
 
     pub fn write(&mut self, address: Address, byte: u8) {
@@ -108,10 +105,10 @@ impl<M: Memory> CPU<M> {
                 self.set_accumulator(accumulator);
             }
             PLP => {
-                self.status = self.pull_stack();
+                self.status = Status(self.pull_stack());
             }
             PHA => self.push_stack(self.accumulator()),
-            PHP => self.push_stack(self.status),
+            PHP => self.push_stack(self.status.0),
 
             // Logical
             AND(addressing_mode) => {
@@ -178,16 +175,23 @@ impl<M: Memory> CPU<M> {
                 *self.program_counter_mut() = addr;
             }
             JSR => {
-                let addr = self.fetch_at_program_counter();
+                let addr = self.fetch_address_at_program_counter();
 
                 // For some reason the spec says the pointer must be to the last byte of the JSR
                 // instruction...
                 let data = self.program_counter() - 1;
-                self.push_stack(data);
+
+                let (higher, lower) = data.split();
+                self.push_stack(higher);
+                self.push_stack(lower);
 
                 *self.program_counter_mut() = addr;
             }
-            RTS => *self.program_counter_mut() = self.pull_stack(),
+            RTS => {
+                let lower = self.pull_stack();
+                let higher = self.pull_stack();
+                *self.program_counter_mut() = Address::from_bytes(higher, lower)
+            },
 
             // Branches
             BCC => self.branch_if(!self.status.get(Flag::Carry)),
@@ -247,16 +251,14 @@ impl<M: Memory> CPU<M> {
         self.status.set_to(Flag::Carry, carry);
     }
 
-    fn push_stack<T: SerializeBytes>(&mut self, data: T) {
-        for byte in data.serialize().rev() {
-            let stack_address = STACK + self.stack_pointer;
-            self.write(stack_address, byte);
-            self.stack_pointer = self.stack_pointer.wrapping_sub(1);
-        }
+    fn push_stack(&mut self, byte: u8) {
+        let stack_address = STACK + self.stack_pointer;
+        self.write(stack_address, byte);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
 
-    fn pull_stack<T: SerializeBytes>(&mut self) -> T {
-        self.stack_pointer = self.stack_pointer.wrapping_add(T::SIZE);
+    fn pull_stack(&mut self) -> u8 {
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
         let stack_address = STACK + self.stack_pointer;
         self.read(stack_address)
     }
@@ -312,7 +314,7 @@ impl<M: Memory> CPU<M> {
     }
 
     fn branch_if(&mut self, cond: bool) {
-        let offset: i8 = self.fetch_at_program_counter();
+        let offset = self.fetch_at_program_counter() as i8;
         if cond {
             *self.program_counter_mut() += offset;
         }
@@ -345,14 +347,20 @@ impl<M: Memory> CPU<M> {
     }
 
     fn instr(&mut self) -> Instruction {
-        let opcode: OpCode = self.fetch_at_program_counter();
+        let opcode: OpCode = OpCode::from_byte(self.fetch_at_program_counter());
         opcode.instruction()
     }
 
-    pub fn fetch_at_program_counter<T: SerializeBytes>(&mut self) -> T {
+    pub fn fetch_at_program_counter(&mut self) -> u8 {
         let data = self.read(self.program_counter);
-        self.program_counter += T::SIZE;
+        self.program_counter += 1u16;
         data
+    }
+
+    pub fn fetch_address_at_program_counter(&mut self) -> Address {
+        let lower = self.fetch_at_program_counter();
+        let higher = self.fetch_at_program_counter();
+        Address::from_bytes(higher, lower)
     }
 }
 
@@ -383,11 +391,6 @@ pub enum Reference {
 pub trait Memory: Sized {
     fn read(&self, address: Address) -> u8;
     fn write(&mut self, address: Address, byte: u8);
-
-    fn read_address<T: SerializeBytes>(&self, address: Address) -> T {
-        let iter = MemoryIterator::new(self, address);
-        T::deserialize(iter)
-    }
 }
 
 impl Memory for ArrayMemory {
@@ -397,27 +400,6 @@ impl Memory for ArrayMemory {
 
     fn write(&mut self, address: Address, byte: u8) {
         self[address.index()] = byte;
-    }
-}
-
-struct MemoryIterator<'a, M> {
-    memory: &'a M,
-    address: Address,
-}
-
-impl<'a, M> MemoryIterator<'a, M> {
-    fn new(memory: &'a M, address: Address) -> Self {
-        MemoryIterator { memory, address }
-    }
-}
-
-impl<'a, M: Memory> Iterator for MemoryIterator<'a, M> {
-    type Item = u8;
-
-    fn next(&mut self) -> Option<u8> {
-        let byte = self.memory.read(self.address);
-        self.address += 1u8;
-        Some(byte)
     }
 }
 
@@ -451,13 +433,15 @@ impl Status {
     }
 }
 
-impl SerializeByte for Status {
-    fn to_byte(&self) -> u8 {
-        self.0
-    }
-
-    fn from_byte(byte: u8) -> Self {
+impl From<u8> for Status {
+    fn from(byte: u8) -> Self {
         Status(byte)
+    }
+}
+
+impl Into<u8> for Status {
+    fn into(self) -> u8 {
+        self.0
     }
 }
 
@@ -511,7 +495,7 @@ mod tests {
 
     #[test]
     fn instr_adc_sets_overflow_flag_on_signed_overflow() {
-        let cpu = run_instr(mem!(ADCImmediate, 127i8), |cpu| {
+        let cpu = run_instr(mem!(ADCImmediate, 127u8), |cpu| {
             cpu.set_accumulator(42i8 as u8);
         });
 
@@ -551,7 +535,7 @@ mod tests {
 
     #[test]
     fn instr_asl_can_operate_on_memory() {
-        let cpu = run_instr(mem!(ASLAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(ASLAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), 0b100);
         });
 
@@ -560,7 +544,7 @@ mod tests {
 
     #[test]
     fn instr_bcc_branches_when_carry_flag_clear() {
-        let cpu = run_instr(mem!(90 => { BCC, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BCC, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Carry);
         });
@@ -571,7 +555,7 @@ mod tests {
 
     #[test]
     fn instr_bcc_does_not_branch_when_carry_flag_set() {
-        let cpu = run_instr(mem!(90 => { BCC, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BCC, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Carry);
         });
@@ -581,7 +565,7 @@ mod tests {
 
     #[test]
     fn instr_bcs_does_not_branch_when_carry_flag_clear() {
-        let cpu = run_instr(mem!(90 => { BCS, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BCS, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Carry);
         });
@@ -591,7 +575,7 @@ mod tests {
 
     #[test]
     fn instr_bcs_branches_when_carry_flag_set() {
-        let cpu = run_instr(mem!(90 => { BCS, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BCS, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Carry);
         });
@@ -602,7 +586,7 @@ mod tests {
 
     #[test]
     fn instr_beq_does_not_branch_when_zero_flag_clear() {
-        let cpu = run_instr(mem!(90 => { BEQ, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BEQ, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Zero);
         });
@@ -612,7 +596,7 @@ mod tests {
 
     #[test]
     fn instr_beq_branches_when_zero_flag_set() {
-        let cpu = run_instr(mem!(90 => { BEQ, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BEQ, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Zero);
         });
@@ -623,9 +607,9 @@ mod tests {
 
     #[test]
     fn instr_bit_sets_zero_flag_when_bitwise_and_is_zero() {
-        let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
+        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
             cpu.set_accumulator(0b1111_0000u8);
-            cpu.set(Address::new(654), 0b0000_1111u8);
+            cpu.set(Address::new(54), 0b0000_1111u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Zero), true);
@@ -633,9 +617,9 @@ mod tests {
 
     #[test]
     fn instr_bit_clears_zero_flag_when_bitwise_and_is_not_zero() {
-        let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
+        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
             cpu.set_accumulator(0b1111_1100u8);
-            cpu.set(Address::new(654), 0b0011_1111u8);
+            cpu.set(Address::new(54), 0b0011_1111u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Zero), false);
@@ -643,14 +627,14 @@ mod tests {
 
     #[test]
     fn instr_bit_sets_overflow_bit_based_on_bit_6_of_operand() {
-        let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            cpu.set(Address::new(654), 0u8);
+        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+            cpu.set(Address::new(54), 0u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Overflow), false);
 
-        let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            cpu.set(Address::new(654), 0b0100_0000u8);
+        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+            cpu.set(Address::new(54), 0b0100_0000u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Overflow), true);
@@ -658,14 +642,14 @@ mod tests {
 
     #[test]
     fn instr_bit_sets_negative_bit_based_on_bit_7_of_operand() {
-        let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            cpu.set(Address::new(654), 0u8);
+        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+            cpu.set(Address::new(54), 0u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
-        let cpu = run_instr(mem!(BITAbsolute, Address::new(654)), |cpu| {
-            cpu.set(Address::new(654), 0b1000_0000u8);
+        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+            cpu.set(Address::new(54), 0b1000_0000u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Negative), true);
@@ -673,7 +657,7 @@ mod tests {
 
     #[test]
     fn instr_bmi_does_not_branch_when_negative_flag_clear() {
-        let cpu = run_instr(mem!(90 => { BMI, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BMI, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Negative);
         });
@@ -683,7 +667,7 @@ mod tests {
 
     #[test]
     fn instr_bmi_branches_when_negative_flag_set() {
-        let cpu = run_instr(mem!(90 => { BMI, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BMI, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Negative);
         });
@@ -694,7 +678,7 @@ mod tests {
 
     #[test]
     fn instr_bne_branches_when_zero_flag_clear() {
-        let cpu = run_instr(mem!(90 => { BNE, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BNE, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Zero);
         });
@@ -705,7 +689,7 @@ mod tests {
 
     #[test]
     fn instr_bne_does_not_branch_when_zero_flag_set() {
-        let cpu = run_instr(mem!(90 => { BNE, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BNE, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Zero);
         });
@@ -715,7 +699,7 @@ mod tests {
 
     #[test]
     fn instr_bpl_branches_when_negative_flag_clear() {
-        let cpu = run_instr(mem!(90 => { BPL, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BPL, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Negative);
         });
@@ -726,7 +710,7 @@ mod tests {
 
     #[test]
     fn instr_bpl_does_not_branch_when_negative_flag_set() {
-        let cpu = run_instr(mem!(90 => { BPL, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BPL, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Negative);
         });
@@ -736,7 +720,7 @@ mod tests {
 
     #[test]
     fn instr_bvc_branches_when_overflow_flag_clear() {
-        let cpu = run_instr(mem!(90 => { BVC, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BVC, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Overflow);
         });
@@ -747,7 +731,7 @@ mod tests {
 
     #[test]
     fn instr_bvc_does_not_branch_when_overflow_flag_set() {
-        let cpu = run_instr(mem!(90 => { BVC, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BVC, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Overflow);
         });
@@ -757,7 +741,7 @@ mod tests {
 
     #[test]
     fn instr_bvs_does_not_branch_when_carry_flag_clear() {
-        let cpu = run_instr(mem!(90 => { BVS, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BVS, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.clear(Flag::Overflow);
         });
@@ -767,7 +751,7 @@ mod tests {
 
     #[test]
     fn instr_bvs_branches_when_carry_flag_set() {
-        let cpu = run_instr(mem!(90 => { BVS, -10i8 }), |cpu| {
+        let cpu = run_instr(mem!(90 => { BVS, -10i8 as u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(90);
             cpu.status.set(Flag::Overflow);
         });
@@ -931,7 +915,7 @@ mod tests {
 
     #[test]
     fn instr_dec_decrements_operand() {
-        let cpu = run_instr(mem!(DECAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
@@ -940,14 +924,14 @@ mod tests {
 
     #[test]
     fn instr_dec_sets_zero_flag_based_on_result() {
-        let cpu = run_instr(mem!(DECAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
-        let cpu = run_instr(mem!(DECAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), 1);
         });
 
@@ -957,14 +941,14 @@ mod tests {
 
     #[test]
     fn instr_dec_sets_negative_flag_based_on_result() {
-        let cpu = run_instr(mem!(DECAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
-        let cpu = run_instr(mem!(DECAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), 0);
         });
 
@@ -1069,7 +1053,7 @@ mod tests {
 
     #[test]
     fn instr_inc_increments_operand() {
-        let cpu = run_instr(mem!(INCAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
@@ -1078,14 +1062,14 @@ mod tests {
 
     #[test]
     fn instr_inc_sets_zero_flag_based_on_result() {
-        let cpu = run_instr(mem!(INCAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 46);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
-        let cpu = run_instr(mem!(INCAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), -1i8 as u8);
         });
 
@@ -1095,14 +1079,14 @@ mod tests {
 
     #[test]
     fn instr_inc_sets_negative_flag_based_on_result() {
-        let cpu = run_instr(mem!(INCAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 46);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
-        let cpu = run_instr(mem!(INCAbsolute, Address::new(100)), |cpu| {
+        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
             cpu.set(Address::new(100), -10i8 as u8);
         });
 
@@ -1130,7 +1114,7 @@ mod tests {
 
     #[test]
     fn instr_jmp_jumps_to_immediate_operand() {
-        let cpu = run_instr(mem!(200 => { JMPAbsolute, Address::new(100) }), |cpu| {
+        let cpu = run_instr(mem!(200 => { JMPAbsolute, 100, 0 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(200);
         });
 
@@ -1140,17 +1124,17 @@ mod tests {
     #[test]
     fn instr_jmp_jumps_to_indirect_operand() {
         let cpu = run_instr(mem!(
-                200 => { JMPIndirect, Address::new(300) }
-                300 => { Address::new(100) }
-            ), |cpu| { *cpu.program_counter_mut() = Address::new(200); }
+                20 => { JMPIndirect, 30, 0 }
+                30 => { 10, 0 }
+            ), |cpu| { *cpu.program_counter_mut() = Address::new(20); }
         );
 
-        assert_eq!(cpu.program_counter(), Address::new(100));
+        assert_eq!(cpu.program_counter(), Address::new(10));
     }
 
     #[test]
     fn instr_jsr_jumps_to_operand() {
-        let cpu = run_instr(mem!(200 => { JSR, Address::new(100) }), |cpu| {
+        let cpu = run_instr(mem!(200 => { JSR, 100, 0 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(200);
         });
 
@@ -1159,7 +1143,7 @@ mod tests {
 
     #[test]
     fn instr_jsr_writes_program_counter_to_stack_pointer() {
-        let cpu = run_instr(mem!(0x1234 => { JSR, Address::new(100) }), |cpu| {
+        let cpu = run_instr(mem!(0x1234 => { JSR, 100, 0 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(0x1234);
             cpu.stack_pointer = 6;
         });
@@ -1171,7 +1155,7 @@ mod tests {
 
     #[test]
     fn instr_jsr_decrements_stack_pointer_by_two_bytes() {
-        let cpu = run_instr(mem!(JSR, Address::new(0x0123)), |cpu| {
+        let cpu = run_instr(mem!(JSR, 0x23, 0x01), |cpu| {
             cpu.stack_pointer = 6;
         });
 
@@ -1369,8 +1353,9 @@ mod tests {
     #[test]
     fn instr_rts_reads_program_counter_from_stack() {
         let cpu = run_instr(mem!(RTS), |cpu| {
-            cpu.set(STACK + 2u8, 0x12);
-            cpu.set(STACK + 1u8, 0x34);
+            cpu.stack_pointer = 100;
+            cpu.set(STACK + 102u8, 0x12);
+            cpu.set(STACK + 101u8, 0x34);
         });
 
         assert_eq!(cpu.program_counter(), Address::new(0x1234));
@@ -1399,7 +1384,7 @@ mod tests {
     #[test]
     fn instr_sbc_sets_overflow_bit_when_sign_is_wrong() {
         fn sub(accumulator: i8, value: i8) -> (i8, bool) {
-            let cpu = run_instr(mem!(SBCImmediate, value as i8), |cpu| {
+            let cpu = run_instr(mem!(SBCImmediate, value as u8), |cpu| {
                 cpu.status.set(Flag::Carry);
                 cpu.set_accumulator(accumulator as u8);
             });
@@ -1446,7 +1431,7 @@ mod tests {
 
     #[test]
     fn instr_sta_stores_accumulator_in_memory() {
-        let cpu = run_instr(mem!(STAAbsolute, Address::new(0x32)), |cpu| {
+        let cpu = run_instr(mem!(STAAbsolute, 0x32, 0), |cpu| {
             cpu.set_accumulator(65);
         });
 
@@ -1455,7 +1440,7 @@ mod tests {
 
     #[test]
     fn instr_stx_stores_x_register_in_memory() {
-        let cpu = run_instr(mem!(STXAbsolute, Address::new(0x32)), |cpu| {
+        let cpu = run_instr(mem!(STXAbsolute, 0x32, 0), |cpu| {
             cpu.set_x(65);
         });
 
@@ -1464,7 +1449,7 @@ mod tests {
 
     #[test]
     fn instr_sty_stores_y_register_in_memory() {
-        let cpu = run_instr(mem!(STYAbsolute, Address::new(0x32)), |cpu| {
+        let cpu = run_instr(mem!(STYAbsolute, 0x32, 0), |cpu| {
             cpu.set_y(65);
         });
 
@@ -1627,7 +1612,7 @@ mod tests {
 
     #[test]
     fn negative_flag_is_set_when_accumulator_is_negative() {
-        let cpu = run_instr(mem!(ADCImmediate, -1i8), |cpu| {
+        let cpu = run_instr(mem!(ADCImmediate, -1i8 as u8), |cpu| {
             cpu.set_accumulator(0);
         });
 
@@ -1655,7 +1640,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_3_when_executing_3_byte_instr() {
-        let cpu = run_instr(mem!(100 => { ASLAbsolute, Address::new(0) }), |cpu| {
+        let cpu = run_instr(mem!(100 => { ASLAbsolute, 0, 0 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
@@ -1679,13 +1664,27 @@ mod tests {
 
     #[test]
     fn stack_operations_wrap_value_on_overflow() {
-        let cpu = run_instr(mem!(0x1234 => { JSR, Address::new(100) }), |cpu| {
+        let cpu = run_instr(mem!(0x1234 => { JSR, 100, 0 }), |cpu| {
             cpu.stack_pointer = 0;
             *cpu.program_counter_mut() = Address::new(0x1234);
         });
 
         assert_eq!(cpu.get(STACK), 0x12);
         assert_eq!(cpu.get(STACK + 0xffu8), 0x36);
+
+        let cpu = run_instr(
+            mem!(
+                40 => { RTS }
+                STACK => { 0x12u8 }
+                STACK + 0xffu8 => { 0x36u8 }
+            ),
+            |cpu| {
+                cpu.stack_pointer = 0xfe;
+                *cpu.program_counter_mut() = Address::new(40);
+            }
+        );
+
+        assert_eq!(cpu.program_counter(), Address::new(0x1236));
     }
 
     #[test]
@@ -1700,7 +1699,7 @@ mod tests {
     #[test]
     fn instructions_can_wrap_on_program_counter_overflow() {
         let cpu = run_instr(
-            mem!(0xfffe => { JMPAbsolute, Address::new(0x1234) }),
+            mem!(0xfffe => { JMPAbsolute, 0x34, 0x12 }),
             |cpu| {
                 *cpu.program_counter_mut() = Address::new(0xfffe);
             },

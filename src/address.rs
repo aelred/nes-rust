@@ -1,4 +1,3 @@
-use crate::SerializeBytes;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Sub;
@@ -11,8 +10,8 @@ impl Address {
         Address(value)
     }
 
-    pub const fn zero_page(value: u8) -> Self {
-        Address::new(value as u16)
+    pub fn from_bytes(higher: u8, lower: u8) -> Self {
+        Address((u16::from(higher) << 8) + u16::from(lower))
     }
 
     pub fn index(self) -> usize {
@@ -21,23 +20,6 @@ impl Address {
 
     pub fn split(self) -> (u8, u8) {
         ((self.0 >> 8) as u8, self.0 as u8)
-    }
-}
-
-impl SerializeBytes for Address {
-    const SIZE: u8 = 2;
-
-    type Iter = std::vec::IntoIter<u8>;
-
-    fn serialize(self) -> Self::Iter {
-        let (higher, lower) = self.split();
-        vec![lower, higher].into_iter()
-    }
-
-    fn deserialize(mut source: impl Iterator<Item = u8>) -> Self {
-        let lower = source.next().unwrap();
-        let higher = source.next().unwrap();
-        Address((u16::from(higher) << 8) + u16::from(lower))
     }
 }
 

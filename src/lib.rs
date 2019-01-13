@@ -9,7 +9,7 @@ pub use crate::address::Address;
 pub use crate::cpu::Memory;
 pub use crate::cpu::CPU;
 pub use crate::opcodes::OpCode;
-pub use crate::serialize::SerializeBytes;
+pub use crate::serialize::SerializeByte;
 
 #[macro_export]
 macro_rules! mem {
@@ -22,10 +22,9 @@ macro_rules! mem {
             $(
                 let mut addr: Address = Address::from($offset);
                 $(
-                    for byte in $crate::SerializeBytes::serialize($data) {
-                        $crate::Memory::write(&mut memory, addr, byte);
-                        addr += 1u16;
-                    }
+                    let byte = $crate::SerializeByte::to_byte($data);
+                    $crate::Memory::write(&mut memory, addr, byte);
+                    addr += 1u16;
                 )*
             )*
             memory

@@ -11,6 +11,7 @@ use crate::addressing_modes::ShiftAddressingMode;
 use crate::addressing_modes::StoreAddressingMode;
 use crate::instructions::Instruction;
 use enum_primitive_derive::Primitive;
+use num_traits::cast::FromPrimitive;
 
 #[derive(Primitive, Copy, Clone)]
 pub enum OpCode {
@@ -273,6 +274,11 @@ pub enum OpCode {
 }
 
 impl OpCode {
+
+    pub fn from_byte(byte: u8) -> Self {
+        OpCode::from_u8(byte).expect("Unrecognised opcode")
+    }
+
     pub fn new(instr: Instruction) -> Self {
         use crate::instructions::Instruction::*;
 
