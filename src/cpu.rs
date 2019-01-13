@@ -235,7 +235,12 @@ impl<M: Memory> CPU<M> {
                 *self.program_counter_mut() = addr;
             }
             NOP => {}
-            RTI => unimplemented!("RTI"), // TODO
+            RTI => {
+                self.status = Status(self.pull_stack());
+                let lower = self.pull_stack();
+                let higher = self.pull_stack();
+                *self.program_counter_mut() = Address::from_bytes(higher, lower) + 1;
+            }
         }
     }
 
@@ -1588,6 +1593,28 @@ mod tests {
 
         let status = Status(cpu.get(STACK + 4));
         assert_eq!(status.get(Flag::Break), true);
+    }
+
+    #[test]
+    fn instr_rti_reads_status_and_program_counter_plus_one_and__from_stack() {
+        let cpu = run_instr(mem!(RTI), |cpu| {
+            cpu.stack_pointer = 100;
+            cpu.set(STACK + 103, 0x12);
+            cpu.set(STACK + 102, 0x34);
+            cpu.set(STACK + 101, 0x56);
+        });
+
+        assert_eq!(cpu.program_counter(), Address::new(0x1235));
+        assert_eq!(cpu.status.0, 0x56);
+    }
+
+    #[test]
+    fn instr_rti_increments_stack_pointer_by_three_bytes() {
+        let cpu = run_instr(mem!(RTI), |cpu| {
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.stack_pointer, 9);
     }
 
     #[test]
