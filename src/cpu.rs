@@ -6,6 +6,7 @@ use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
 
 const STACK: Address = Address::new(0x0100);
+const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
 pub struct CPU<M> {
     /// 2KB of internal RAM, plus more mapped space
@@ -39,6 +40,12 @@ impl<M: Memory> CPU<M> {
 
     pub fn read(&self, address: Address) -> u8 {
         self.memory.read(address)
+    }
+
+    pub fn read_address(&self, address: Address) -> Address {
+        let lower = self.read(address);
+        let higher = self.read(address + 1u16);
+        Address::from_bytes(higher, lower)
     }
 
     pub fn write(&mut self, address: Address, byte: u8) {
@@ -212,7 +219,21 @@ impl<M: Memory> CPU<M> {
             SEI => self.status.set(Flag::InterruptDisable),
 
             // System Functions
-            BRK => unimplemented!("BRK"), // TODO
+            BRK => {
+                self.status.set(Flag::Break);
+
+                let addr = self.read_address(INTERRUPT_VECTOR);
+
+                // For some reason the spec says the pointer must be to the last byte of the BRK
+                // instruction...
+                let data = self.program_counter() - 1;
+
+                self.push_stack(data.higher());
+                self.push_stack(data.lower());
+                self.push_stack(self.status.0);
+
+                *self.program_counter_mut() = addr;
+            }
             NOP => {}
             RTI => unimplemented!("RTI"), // TODO
         }
@@ -447,6 +468,7 @@ impl Into<u8> for Status {
 enum Flag {
     Negative = 0b1000_0000,
     Overflow = 0b0100_0000,
+    Break = 0b0001_0000,
     Decimal = 0b0000_1000,
     InterruptDisable = 0b0000_0100,
     Zero = 0b0000_0010,
@@ -1519,6 +1541,52 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator(), 65);
+    }
+
+    #[test]
+    fn instr_brk_jumps_to_address_at_interrupt_vector() {
+        let cpu = run_instr(
+            mem!(
+                0 => { BRK }
+                INTERRUPT_VECTOR => { 0x34, 0x12 }
+            ),
+            |_| { }
+        );
+
+        assert_eq!(cpu.program_counter(), Address::new(0x1234));
+    }
+
+    #[test]
+    fn instr_brk_writes_program_counter_and_status_to_stack_pointer() {
+        let cpu = run_instr(mem!(0x1234 => { BRK }), |cpu| {
+            *cpu.program_counter_mut() = Address::new(0x1234);
+            cpu.status = Status(0x56);
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.get(STACK + 6), 0x12);
+        assert_eq!(cpu.get(STACK + 5), 0x34);
+        assert_eq!(cpu.get(STACK + 4), 0x56);
+    }
+
+    #[test]
+    fn instr_brk_decrements_stack_pointer_by_three_bytes() {
+        let cpu = run_instr(mem!(BRK), |cpu| {
+            cpu.stack_pointer = 6;
+        });
+
+        assert_eq!(cpu.stack_pointer, 3);
+    }
+
+    #[test]
+    fn instr_brk_sets_break_flag_on_stack() {
+        let cpu = run_instr(mem!(BRK), |cpu| {
+            cpu.status.clear(Flag::Break);
+            cpu.stack_pointer = 6;
+        });
+
+        let status = Status(cpu.get(STACK + 4));
+        assert_eq!(status.get(Flag::Break), true);
     }
 
     #[test]

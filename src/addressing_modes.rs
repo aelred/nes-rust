@@ -274,9 +274,7 @@ impl<M: Memory> CPU<M> {
 
     fn indirect_address(&mut self) -> Address {
         let address_of_address = self.fetch_address_at_program_counter();
-        let lower = self.read(address_of_address);
-        let higher = self.read(address_of_address + 1u16);
-        Address::from_bytes(higher, lower)
+        self.read_address(address_of_address)
     }
 
     fn indexed_indirect(&mut self) -> Reference {
