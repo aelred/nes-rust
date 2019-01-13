@@ -277,11 +277,11 @@ impl<M: Memory> CPU<M> {
         self.read(address_of_address)
     }
 
-    fn indirect_indexed(&mut self) -> Reference {
+    fn indexed_indirect(&mut self) -> Reference {
         unimplemented!();
     }
 
-    fn indexed_indirect(&mut self) -> Reference {
+    fn indirect_indexed(&mut self) -> Reference {
         unimplemented!();
     }
 }
