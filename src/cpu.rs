@@ -196,7 +196,7 @@ impl<M: Memory> CPU<M> {
             RTS => {
                 let lower = self.pull_stack();
                 let higher = self.pull_stack();
-                *self.program_counter_mut() = Address::from_bytes(higher, lower)
+                *self.program_counter_mut() = Address::from_bytes(higher, lower) + 1;
             },
 
             // Branches
@@ -368,6 +368,7 @@ impl<M: Memory> CPU<M> {
 
     fn instr(&mut self) -> Instruction {
         let opcode: OpCode = OpCode::from_byte(self.fetch_at_program_counter());
+        println!("{:?}", opcode.instruction());
         opcode.instruction()
     }
 
@@ -1372,14 +1373,14 @@ mod tests {
     }
 
     #[test]
-    fn instr_rts_reads_program_counter_from_stack() {
+    fn instr_rts_reads_program_counter_plus_one_from_stack() {
         let cpu = run_instr(mem!(RTS), |cpu| {
             cpu.stack_pointer = 100;
             cpu.set(STACK + 102, 0x12);
             cpu.set(STACK + 101, 0x34);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(0x1234));
+        assert_eq!(cpu.program_counter(), Address::new(0x1235));
     }
 
     #[test]
@@ -1751,7 +1752,7 @@ mod tests {
             }
         );
 
-        assert_eq!(cpu.program_counter(), Address::new(0x1236));
+        assert_eq!(cpu.program_counter(), Address::new(0x1237));
     }
 
     #[test]

@@ -113,6 +113,26 @@ fn triangle_number() {
 }
 
 #[test]
+fn triangle_number_subroutine() {
+    run!([20] -> [210];
+        0 => {
+            JSR, 0x34, 0x12,
+            LDAImmediate, 1u8,
+            STAAbsolute, HALT_ADDRESS, 0
+        }
+        0x1234 => {
+            LDAImmediate, 0u8,
+            LDXAbsolute, PARAM_ADDRESS, 0,
+            ADCAbsolute, PARAM_ADDRESS, 0,
+            DECAbsolute, PARAM_ADDRESS, 0,
+            BNE, -8i8 as u8,
+            STAAbsolute, RETURN_ADDRESS, 0,
+            RTS
+        }
+    );
+}
+
+#[test]
 fn fibonacci() {
     run!([11] -> [89];
         LDXImmediate, 0x01u8,
