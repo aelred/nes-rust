@@ -181,9 +181,8 @@ impl<M: Memory> CPU<M> {
                 // instruction...
                 let data = self.program_counter() - 1;
 
-                let (higher, lower) = data.split();
-                self.push_stack(higher);
-                self.push_stack(lower);
+                self.push_stack(data.higher());
+                self.push_stack(data.lower());
 
                 *self.program_counter_mut() = addr;
             }

@@ -18,8 +18,12 @@ impl Address {
         self.0 as usize
     }
 
-    pub fn split(self) -> (u8, u8) {
-        ((self.0 >> 8) as u8, self.0 as u8)
+    pub fn higher(self) -> u8 {
+        (self.0 >> 8) as u8
+    }
+
+    pub fn lower(self) -> u8 {
+        self.0 as u8
     }
 }
 
