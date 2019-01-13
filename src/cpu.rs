@@ -4,7 +4,7 @@ use crate::addressing_modes::ShiftAddressingMode;
 use crate::addressing_modes::ValueAddressingMode;
 use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
-use crate::SerializeByte;
+use crate::serialize::SerializeByte;
 use crate::SerializeBytes;
 
 const STACK: Address = Address::new(0x0100);
