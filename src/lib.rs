@@ -8,6 +8,7 @@ mod memory;
 
 pub use crate::address::Address;
 pub use crate::memory::Memory;
+pub use crate::memory::ArrayMemory;
 pub use crate::cpu::CPU;
 pub use crate::opcodes::OpCode;
 pub use crate::serialize::SerializeByte;
@@ -19,7 +20,7 @@ macro_rules! mem {
     };
     ($( $offset: expr => { $( $data: expr ),* } )*) => {
         {
-            let mut memory = [0; 0x10000];
+            let mut memory = $crate::ArrayMemory::default();
             $(
                 let mut addr: Address = Address::from($offset);
                 $(

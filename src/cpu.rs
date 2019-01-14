@@ -394,7 +394,7 @@ impl<M: Memory> CPU<M> {
 impl Default for CPU<ArrayMemory> {
     fn default() -> Self {
         CPU {
-            memory: [0; 0x10000],
+            memory: ArrayMemory::default(),
             accumulator: 0,
             program_counter: Address::new(0x00),
             x: 0,
@@ -1797,7 +1797,7 @@ mod tests {
 
         cpu.run_instruction();
 
-        hexdump::hexdump(&cpu.memory[..0x200]);
+        hexdump::hexdump(&cpu.memory.slice()[..0x200]);
 
         cpu
     }

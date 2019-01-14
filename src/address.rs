@@ -1,8 +1,9 @@
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Sub;
+use std::fmt;
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
 pub struct Address(u16);
 
 impl Address {
@@ -24,6 +25,12 @@ impl Address {
 
     pub fn lower(self) -> u8 {
         self.0 as u8
+    }
+}
+
+impl fmt::Debug for Address {
+    fn fmt<'a>(&self, f: &mut fmt::Formatter<'a>) -> fmt::Result {
+        write!(f, "Address({:#x})", self.0)
     }
 }
 
@@ -52,5 +59,13 @@ impl Sub<u16> for Address {
 
     fn sub(self, rhs: u16) -> <Self as Sub<u16>>::Output {
         Address(self.0.wrapping_sub(rhs))
+    }
+}
+
+impl Sub<Address> for Address {
+    type Output = Address;
+
+    fn sub(self, rhs: Address) -> <Self as Sub<Address>>::Output {
+        self - rhs.0
     }
 }
