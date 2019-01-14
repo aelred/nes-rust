@@ -396,20 +396,6 @@ impl<M: Memory> CPU<M> {
     }
 }
 
-impl Default for CPU<ArrayMemory> {
-    fn default() -> Self {
-        CPU {
-            memory: ArrayMemory::default(),
-            accumulator: 0,
-            program_counter: Address::new(0x00),
-            x: 0,
-            y: 0,
-            stack_pointer: 0xFF,
-            status: Status(0),
-        }
-    }
-}
-
 #[derive(Copy, Clone)]
 pub enum Reference {
     Address(Address),
@@ -477,8 +463,8 @@ mod tests {
     use crate::mem;
 
     #[test]
-    fn default_cpu_is_in_default_state() {
-        let cpu = CPU::default();
+    fn cpu_initialises_in_default_state() {
+        let cpu = CPU::with_memory(ArrayMemory::default());
 
         assert_eq!(cpu.program_counter(), Address::new(0x00));
         assert_eq!(cpu.accumulator(), 0);
