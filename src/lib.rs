@@ -4,9 +4,10 @@ mod cpu;
 mod instructions;
 mod opcodes;
 mod serialize;
+mod memory;
 
 pub use crate::address::Address;
-pub use crate::cpu::Memory;
+pub use crate::memory::Memory;
 pub use crate::cpu::CPU;
 pub use crate::opcodes::OpCode;
 pub use crate::serialize::SerializeByte;

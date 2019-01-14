@@ -1,7 +1,7 @@
 use crate::address::Address;
-use crate::cpu::Memory;
 use crate::cpu::Reference;
 use crate::cpu::CPU;
+use crate::Memory;
 
 pub trait ReferenceAddressingMode {
     fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference;

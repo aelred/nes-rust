@@ -4,6 +4,8 @@ use crate::addressing_modes::ShiftAddressingMode;
 use crate::addressing_modes::ValueAddressingMode;
 use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
+use crate::memory::ArrayMemory;
+use crate::memory::Memory;
 
 const STACK: Address = Address::new(0x0100);
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
@@ -389,8 +391,6 @@ impl<M: Memory> CPU<M> {
     }
 }
 
-type ArrayMemory = [u8; 0x10000];
-
 impl Default for CPU<ArrayMemory> {
     fn default() -> Self {
         CPU {
@@ -411,21 +411,6 @@ pub enum Reference {
     Accumulator,
     X,
     Y,
-}
-
-pub trait Memory: Sized {
-    fn read(&self, address: Address) -> u8;
-    fn write(&mut self, address: Address, byte: u8);
-}
-
-impl Memory for ArrayMemory {
-    fn read(&self, address: Address) -> u8 {
-        self[address.index()]
-    }
-
-    fn write(&mut self, address: Address, byte: u8) {
-        self[address.index()] = byte;
-    }
 }
 
 #[derive(Copy, Clone)]
