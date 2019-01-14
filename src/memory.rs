@@ -113,7 +113,7 @@ mod tests {
 
             memory.write(address, value as u8);
             assert_eq!(memory.read(address), value as u8);
-            assert_eq!(memory.prg.read(address - 0x4020), value as u8);
+            assert_eq!(memory.prg.read(address), value as u8);
         }
     }
 
