@@ -6,6 +6,7 @@ use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
 use crate::memory::ArrayMemory;
 use crate::memory::Memory;
+use log::trace;
 
 const STACK: Address = Address::new(0x0100);
 const RESET_VECTOR: Address = Address::new(0xFFFC);
@@ -379,12 +380,16 @@ impl<M: Memory> CPU<M> {
     }
 
     fn instr(&mut self) -> Instruction {
+        let pc = self.program_counter();
         let opcode: OpCode = OpCode::from_byte(self.fetch_at_program_counter());
-        opcode.instruction()
+        let instruction = opcode.instruction();
+        trace!("        {:?}", instruction);
+        instruction
     }
 
     pub fn fetch_at_program_counter(&mut self) -> u8 {
         let data = self.read(self.program_counter);
+        trace!("{:<#04x}  {:<#04x}", self.program_counter.index(), data);
         self.program_counter += 1u16;
         data
     }
