@@ -8,6 +8,7 @@ use crate::memory::ArrayMemory;
 use crate::memory::Memory;
 
 const STACK: Address = Address::new(0x0100);
+const RESET_VECTOR: Address = Address::new(0xFFFC);
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
 pub struct CPU<M> {
@@ -29,10 +30,14 @@ pub struct CPU<M> {
 
 impl<M: Memory> CPU<M> {
     pub fn with_memory(memory: M) -> Self {
+        let lower = memory.read(RESET_VECTOR);
+        let higher = memory.read(RESET_VECTOR + 1);
+        let program_counter = Address::from_bytes(higher, lower);
+
         CPU {
             memory,
             accumulator: 0,
-            program_counter: Address::new(0),
+            program_counter,
             x: 0,
             y: 0,
             stack_pointer: 0xFF,
@@ -480,6 +485,17 @@ mod tests {
         assert_eq!(cpu.x(), 0);
         assert_eq!(cpu.y(), 0);
         assert_eq!(cpu.stack_pointer, 0xFF);
+    }
+
+    #[test]
+    fn cpu_initialises_program_counter_to_reset_vector() {
+        let memory = mem! {
+            0xFFFC => { 0x34, 0x12 }
+        };
+
+        let cpu = CPU::with_memory(memory);
+
+        assert_eq!(cpu.program_counter(), Address::new(0x1234));
     }
 
     #[test]
