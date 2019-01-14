@@ -5,6 +5,7 @@ mod instructions;
 mod opcodes;
 mod serialize;
 mod memory;
+mod ines;
 
 pub use crate::address::Address;
 pub use crate::memory::Memory;
