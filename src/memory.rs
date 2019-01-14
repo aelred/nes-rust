@@ -29,7 +29,6 @@ impl Memory for ArrayMemory {
     }
 }
 
-const INTERNAL_RAM_SPACE: Address = Address::new(0x0000);
 const PPU_SPACE: Address = Address::new(0x2000);
 const PRG_SPACE: Address = Address::new(0x4020);
 

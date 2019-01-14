@@ -1,6 +1,6 @@
 use crate::mapper::Mapper;
-use crate::Memory;
 use crate::Address;
+use crate::Memory;
 
 pub struct Cartridge {
     prg_rom: Box<[u8]>,
@@ -14,10 +14,10 @@ impl Cartridge {
             unimplemented!("Unsupported mapper {:?}", mapper);
         }
 
-        Cartridge{
+        Cartridge {
             prg_rom,
             prg_ram: [0; 0x2000],
-            mapper
+            mapper,
         }
     }
 }
@@ -25,12 +25,8 @@ impl Cartridge {
 impl Memory for Cartridge {
     fn read(&self, address: Address) -> u8 {
         match address.index() {
-            0x6000...0x7fff => {
-                self.prg_ram[address.index() - 0x6000]
-            }
-            0x8000...0xffff => {
-                self.prg_rom[address.index() - 0x8000]
-            }
+            0x6000...0x7fff => self.prg_ram[address.index() - 0x6000],
+            0x8000...0xffff => self.prg_rom[address.index() - 0x8000],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -64,7 +60,7 @@ mod tests {
         let mapper = Mapper::NROM;
         Cartridge::new(prg_rom, mapper);
     }
-    
+
     #[test]
     fn nrom_cartridge_maps_0x6000_through_0x7fff_to_ram() {
         let prg_rom = Box::new([0u8; 1024]);

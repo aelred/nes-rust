@@ -1,7 +1,7 @@
+use std::fmt;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Sub;
-use std::fmt;
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
 pub struct Address(u16);

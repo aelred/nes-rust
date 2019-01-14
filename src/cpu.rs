@@ -2,9 +2,8 @@ use crate::address::Address;
 use crate::addressing_modes::ReferenceAddressingMode;
 use crate::addressing_modes::ShiftAddressingMode;
 use crate::instructions::Instruction;
-use crate::opcodes::OpCode;
-use crate::memory::ArrayMemory;
 use crate::memory::Memory;
+use crate::opcodes::OpCode;
 use log::trace;
 
 const STACK: Address = Address::new(0x0100);
@@ -204,7 +203,7 @@ impl<M: Memory> CPU<M> {
                 let lower = self.pull_stack();
                 let higher = self.pull_stack();
                 *self.program_counter_mut() = Address::from_bytes(higher, lower) + 1;
-            },
+            }
 
             // Branches
             BCC => self.branch_if(!self.status.get(Flag::Carry)),
@@ -284,14 +283,14 @@ impl<M: Memory> CPU<M> {
     }
 
     fn push_stack(&mut self, byte: u8) {
-        let stack_address = STACK + self.stack_pointer as u16;
+        let stack_address = STACK + u16::from(self.stack_pointer);
         self.write(stack_address, byte);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
 
     fn pull_stack(&mut self) -> u8 {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
-        let stack_address = STACK + self.stack_pointer as u16;
+        let stack_address = STACK + u16::from(self.stack_pointer);
         self.read(stack_address)
     }
 
@@ -380,7 +379,6 @@ impl<M: Memory> CPU<M> {
     }
 
     fn instr(&mut self) -> Instruction {
-        let pc = self.program_counter();
         let opcode: OpCode = OpCode::from_byte(self.fetch_at_program_counter());
         let instruction = opcode.instruction();
         trace!("        {:?}", instruction);
@@ -1141,10 +1139,14 @@ mod tests {
 
     #[test]
     fn instr_jmp_jumps_to_indirect_operand() {
-        let cpu = run_instr(mem!(
+        let cpu = run_instr(
+            mem!(
                 20 => { JMPIndirect, 30, 0 }
                 30 => { 10, 0 }
-            ), |cpu| { *cpu.program_counter_mut() = Address::new(20); }
+            ),
+            |cpu| {
+                *cpu.program_counter_mut() = Address::new(20);
+            },
         );
 
         assert_eq!(cpu.program_counter(), Address::new(10));
@@ -1547,7 +1549,7 @@ mod tests {
                 0 => { BRK }
                 INTERRUPT_VECTOR => { 0x34, 0x12 }
             ),
-            |_| { }
+            |_| {},
         );
 
         assert_eq!(cpu.program_counter(), Address::new(0x1234));
@@ -1767,7 +1769,7 @@ mod tests {
             |cpu| {
                 cpu.stack_pointer = 0xfe;
                 *cpu.program_counter_mut() = Address::new(40);
-            }
+            },
         );
 
         assert_eq!(cpu.program_counter(), Address::new(0x1237));
@@ -1784,12 +1786,9 @@ mod tests {
 
     #[test]
     fn instructions_can_wrap_on_program_counter_overflow() {
-        let cpu = run_instr(
-            mem!(0xfffe => { JMPAbsolute, 0x34, 0x12 }),
-            |cpu| {
-                *cpu.program_counter_mut() = Address::new(0xfffe);
-            },
-        );
+        let cpu = run_instr(mem!(0xfffe => { JMPAbsolute, 0x34, 0x12 }), |cpu| {
+            *cpu.program_counter_mut() = Address::new(0xfffe);
+        });
 
         assert_eq!(cpu.program_counter(), Address::new(0x1234));
     }

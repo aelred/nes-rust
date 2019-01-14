@@ -19,7 +19,10 @@ macro_rules! run {
 
 fn run<M: Memory>(cpu: &mut CPU<M>, params: &[u8], expected: &[u8]) {
     for (offset, param) in params.iter().enumerate() {
-        cpu.write(Address::from_bytes(0, PARAM_ADDRESS) + offset as u16, *param);
+        cpu.write(
+            Address::from_bytes(0, PARAM_ADDRESS) + offset as u16,
+            *param,
+        );
     }
 
     const MAX_INSTRUCTIONS: u32 = 1_000;

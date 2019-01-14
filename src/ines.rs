@@ -1,8 +1,8 @@
-use std::io::Read;
-use std::io;
-use num_traits::cast::FromPrimitive;
-use crate::mapper::Mapper;
 use crate::cartridge::Cartridge;
+use crate::mapper::Mapper;
+use num_traits::cast::FromPrimitive;
+use std::io;
+use std::io::Read;
 
 const PRG_ROM_SIZE_LOCATION: usize = 4;
 const MAPPER_LOW_LOCATION: usize = 6;
@@ -54,7 +54,7 @@ impl INes {
         let low = header[MAPPER_LOW_LOCATION] >> 4;
         let high = header[MAPPER_HIGH_LOCATION] & 0b1111_0000;
         let byte = low | high;
-        Mapper::from_u8(byte).ok_or(INesReadError::UnrecognisedMapper(byte))
+        Mapper::from_u8(byte).ok_or_else(|| INesReadError::UnrecognisedMapper(byte))
     }
 }
 
@@ -66,7 +66,9 @@ mod tests {
     #[test]
     fn can_read_prg_rom_data_from_ines_file() {
         const SIZE: u8 = 10;
-        let header: [u8; 16] = [0x4E, 0x45, 0x53, 0x1A, SIZE, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let header: [u8; 16] = [
+            0x4E, 0x45, 0x53, 0x1A, SIZE, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
 
         // 160kb of prg data
         let mut prg_rom_data = vec![0; 163840];
@@ -89,7 +91,9 @@ mod tests {
         let low: u8 = 0b0011_0000;
         let high: u8 = 0b0001_0000;
 
-        let header: [u8; 16] = [0x4E, 0x45, 0x53, 0x1A, 2, 1, low, high, 0, 0, 0, 0, 0, 0, 0, 0];
+        let header: [u8; 16] = [
+            0x4E, 0x45, 0x53, 0x1A, 2, 1, low, high, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
 
         let cursor = Cursor::new(header).chain(std::io::repeat(0));
 

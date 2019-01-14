@@ -1,23 +1,23 @@
 mod address;
 mod addressing_modes;
+mod cartridge;
 mod cpu;
+mod ines;
 mod instructions;
+mod mapper;
+mod memory;
 mod opcodes;
 mod serialize;
-mod memory;
-mod ines;
-mod mapper;
-mod cartridge;
 
 pub use crate::address::Address;
-pub use crate::memory::Memory;
-pub use crate::memory::ArrayMemory;
+pub use crate::cartridge::Cartridge;
 pub use crate::cpu::CPU;
+pub use crate::ines::INes;
+pub use crate::ines::INesReadError;
+pub use crate::memory::ArrayMemory;
+pub use crate::memory::Memory;
 pub use crate::opcodes::OpCode;
 pub use crate::serialize::SerializeByte;
-pub use crate::ines::INes;
-pub use crate::cartridge::Cartridge;
-pub use crate::ines::INesReadError;
 
 use crate::memory::NESMemory;
 
