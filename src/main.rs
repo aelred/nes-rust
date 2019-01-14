@@ -15,5 +15,6 @@ fn main() -> Result<(), INesReadError> {
 
     loop {
         nes.tick();
+        std::thread::sleep_ms(100);
     }
 }
