@@ -30,11 +30,13 @@ impl Memory for ArrayMemory {
 }
 
 const INTERNAL_RAM_SPACE: Address = Address::new(0x0000);
+const PPU_SPACE: Address = Address::new(0x2000);
 const PRG_SPACE: Address = Address::new(0x4020);
 
 pub struct NESMemory<PRG> {
     internal_ram: [u8; 0x800],
     prg: PRG,
+    the_rest: ArrayMemory, // TODO
 }
 
 impl<PRG> NESMemory<PRG> {
@@ -42,6 +44,7 @@ impl<PRG> NESMemory<PRG> {
         NESMemory {
             internal_ram: [0; 0x800],
             prg,
+            the_rest: ArrayMemory::default(),
         }
     }
 }
@@ -50,6 +53,8 @@ impl<PRG: Memory> Memory for NESMemory<PRG> {
     fn read(&self, address: Address) -> u8 {
         if address >= PRG_SPACE {
             self.prg.read(address - PRG_SPACE)
+        } else if address >= PPU_SPACE {
+            self.the_rest.read(address) // TODO
         } else {
             self.internal_ram[address.index() % 0x0800]
         }
@@ -58,6 +63,8 @@ impl<PRG: Memory> Memory for NESMemory<PRG> {
     fn write(&mut self, address: Address, byte: u8) {
         if address >= PRG_SPACE {
             self.prg.write(address - PRG_SPACE, byte);
+        } else if address >= PPU_SPACE {
+            self.the_rest.write(address, byte) // TODO
         } else {
             self.internal_ram[address.index() % 0x0800] = byte;
         }
