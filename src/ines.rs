@@ -1,7 +1,8 @@
 use std::io::Read;
 use std::io;
-use enum_primitive_derive::Primitive;
 use num_traits::cast::FromPrimitive;
+use crate::mapper::Mapper;
+use crate::cartridge::Cartridge;
 
 const PRG_ROM_SIZE_LOCATION: usize = 4;
 const MAPPER_LOW_LOCATION: usize = 6;
@@ -10,7 +11,7 @@ const MAPPER_HIGH_LOCATION: usize = 7;
 const _16KB: usize = 16_384;
 
 #[derive(Debug)]
-enum INesReadError {
+pub enum INesReadError {
     IO(io::Error),
     UnrecognisedMapper(u8),
 }
@@ -21,13 +22,13 @@ impl From<io::Error> for INesReadError {
     }
 }
 
-struct INes {
+pub struct INes {
     prg_rom: Box<[u8]>,
     mapper: Mapper,
 }
 
 impl INes {
-    fn read<R: Read>(mut reader: R) -> Result<Self, INesReadError> {
+    pub fn read<R: Read>(mut reader: R) -> Result<Self, INesReadError> {
         let mut header = [0u8; 16];
         reader.read_exact(&mut header)?;
 
@@ -45,18 +46,16 @@ impl INes {
         Ok(ines)
     }
 
+    pub fn into_cartridge(self) -> Cartridge {
+        Cartridge::new(self.prg_rom, self.mapper)
+    }
+
     fn mapper(header: [u8; 16]) -> Result<Mapper, INesReadError> {
         let low = header[MAPPER_LOW_LOCATION] >> 4;
         let high = header[MAPPER_HIGH_LOCATION] & 0b1111_0000;
         let byte = low | high;
         Mapper::from_u8(byte).ok_or(INesReadError::UnrecognisedMapper(byte))
     }
-}
-
-#[derive(Debug, Eq, PartialEq, Primitive)]
-enum Mapper {
-    NROM = 0,
-    Namco129 = 19
 }
 
 #[cfg(test)]

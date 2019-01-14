@@ -52,7 +52,7 @@ impl<PRG> NESMemory<PRG> {
 impl<PRG: Memory> Memory for NESMemory<PRG> {
     fn read(&self, address: Address) -> u8 {
         if address >= PRG_SPACE {
-            self.prg.read(address - PRG_SPACE)
+            self.prg.read(address)
         } else if address >= PPU_SPACE {
             self.the_rest.read(address) // TODO
         } else {
@@ -62,7 +62,7 @@ impl<PRG: Memory> Memory for NESMemory<PRG> {
 
     fn write(&mut self, address: Address, byte: u8) {
         if address >= PRG_SPACE {
-            self.prg.write(address - PRG_SPACE, byte);
+            self.prg.write(address, byte);
         } else if address >= PPU_SPACE {
             self.the_rest.write(address, byte) // TODO
         } else {
