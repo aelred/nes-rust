@@ -7,17 +7,6 @@ pub trait ReferenceAddressingMode {
     fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference;
 }
 
-pub trait ValueAddressingMode {
-    fn fetch<M: Memory>(self, cpu: &mut CPU<M>) -> u8;
-}
-
-impl<T: ReferenceAddressingMode> ValueAddressingMode for T {
-    fn fetch<M: Memory>(self, cpu: &mut CPU<M>) -> u8 {
-        let reference = self.fetch_ref(cpu);
-        cpu.read_reference(reference)
-    }
-}
-
 #[derive(Debug, Copy, Clone)]
 pub enum FlexibleAddressingMode {
     Immediate,

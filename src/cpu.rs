@@ -1,7 +1,6 @@
 use crate::address::Address;
 use crate::addressing_modes::ReferenceAddressingMode;
 use crate::addressing_modes::ShiftAddressingMode;
-use crate::addressing_modes::ValueAddressingMode;
 use crate::instructions::Instruction;
 use crate::opcodes::OpCode;
 use crate::memory::ArrayMemory;
@@ -57,7 +56,7 @@ impl<M: Memory> CPU<M> {
     }
 
     pub fn write(&mut self, address: Address, byte: u8) {
-        self.write_reference(Reference::Address(address), byte);
+        self.memory.write(address, byte);
     }
 
     fn accumulator(&self) -> u8 {
@@ -322,7 +321,7 @@ impl<M: Memory> CPU<M> {
         self.y
     }
 
-    fn compare<T: ValueAddressingMode>(&mut self, register: u8, addressing_mode: T) {
+    fn compare<T: ReferenceAddressingMode>(&mut self, register: u8, addressing_mode: T) {
         let value = self.fetch(addressing_mode);
         let (result, carry) = register.overflowing_sub(value);
         self.status.set_to(Flag::Carry, !carry);
@@ -357,8 +356,9 @@ impl<M: Memory> CPU<M> {
         addressing_mode.fetch_ref(self)
     }
 
-    fn fetch<T: ValueAddressingMode>(&mut self, addressing_mode: T) -> u8 {
-        addressing_mode.fetch(self)
+    fn fetch<T: ReferenceAddressingMode>(&mut self, addressing_mode: T) -> u8 {
+        let reference = self.fetch_ref(addressing_mode);
+        self.read_reference(reference)
     }
 
     pub fn read_reference(&self, reference: Reference) -> u8 {
@@ -372,7 +372,7 @@ impl<M: Memory> CPU<M> {
 
     fn write_reference(&mut self, reference: Reference, byte: u8) {
         match reference {
-            Reference::Address(address) => self.memory.write(address, byte),
+            Reference::Address(address) => self.write(address, byte),
             Reference::Accumulator => self.accumulator = byte,
             Reference::X => self.x = byte,
             Reference::Y => self.y = byte,
