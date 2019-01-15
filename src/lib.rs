@@ -5,6 +5,7 @@ mod i_nes;
 mod mapper;
 mod memory;
 mod serialize;
+mod ppu;
 
 pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
