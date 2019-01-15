@@ -4,8 +4,8 @@ mod cpu;
 mod i_nes;
 mod mapper;
 mod memory;
-mod serialize;
 mod ppu;
+mod serialize;
 
 pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
@@ -17,17 +17,24 @@ pub use crate::memory::ArrayMemory;
 pub use crate::memory::Memory;
 pub use crate::serialize::SerializeByte;
 
-use crate::memory::NESMemory;
+use crate::cartridge::PRG;
+use crate::memory::NESCPUMemory;
+use crate::memory::NESPPUMemory;
+use crate::cartridge::CHR;
+use crate::ppu::PPU;
 
-pub struct NES {
-    cpu: CPU<NESMemory<Cartridge>>,
+pub struct NES<'a> {
+    cpu: CPU<NESCPUMemory<&'a mut PRG>>,
+    ppu: PPU<NESPPUMemory<&'a mut CHR>>,
 }
 
-impl NES {
-    pub fn new(cartridge: Cartridge) -> Self {
-        let memory = NESMemory::new(cartridge);
-        let cpu = CPU::with_memory(memory);
-        NES { cpu }
+impl<'a> NES<'a> {
+    pub fn new(cartridge: &'a mut Cartridge) -> Self {
+        let cpu_memory = NESCPUMemory::new(&mut cartridge.prg);
+        let cpu = CPU::with_memory(cpu_memory);
+        let ppu_memory = NESPPUMemory::new(&mut cartridge.chr);
+        let ppu = PPU::with_memory(ppu_memory);
+        NES { cpu, ppu }
     }
 
     pub fn tick(&mut self) {

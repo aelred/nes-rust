@@ -10,9 +10,9 @@ fn main() -> Result<(), INesReadError> {
     let handle = stdin.lock();
 
     let ines = INes::read(handle)?;
-    let cartridge = ines.into_cartridge();
+    let mut cartridge = ines.into_cartridge();
 
-    let mut nes = NES::new(cartridge);
+    let mut nes = NES::new(&mut cartridge);
 
     loop {
         nes.tick();

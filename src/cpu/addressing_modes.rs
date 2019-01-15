@@ -1,6 +1,6 @@
 use super::Reference;
-use super::CPU;
 use super::ReferenceAddressingMode;
+use super::CPU;
 use crate::address::Address;
 use crate::Memory;
 

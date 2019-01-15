@@ -5,9 +5,11 @@ use std::io;
 use std::io::Read;
 
 const PRG_ROM_SIZE_LOCATION: usize = 4;
+const CHR_ROM_SIZE_LOCATION: usize = 5;
 const MAPPER_LOW_LOCATION: usize = 6;
 const MAPPER_HIGH_LOCATION: usize = 7;
 
+const _8KB: usize = 8_192;
 const _16KB: usize = 16_384;
 
 #[derive(Debug)]
@@ -24,6 +26,7 @@ impl From<io::Error> for INesReadError {
 
 pub struct INes {
     prg_rom: Box<[u8]>,
+    chr_rom: Box<[u8]>,
     mapper: Mapper,
 }
 
@@ -38,8 +41,13 @@ impl INes {
         let mut prg_rom = vec![0u8; prg_rom_size as usize * _16KB];
         reader.read_exact(prg_rom.as_mut())?;
 
+        let chr_rom_size = header[CHR_ROM_SIZE_LOCATION];
+        let mut chr_rom = vec![0u8; chr_rom_size as usize * _8KB];
+        reader.read_exact(chr_rom.as_mut())?;
+
         let ines = INes {
             prg_rom: prg_rom.into_boxed_slice(),
+            chr_rom: chr_rom.into_boxed_slice(),
             mapper,
         };
 
@@ -47,7 +55,7 @@ impl INes {
     }
 
     pub fn into_cartridge(self) -> Cartridge {
-        Cartridge::new(self.prg_rom, self.mapper)
+        Cartridge::new(self.prg_rom, self.chr_rom, self.mapper)
     }
 
     fn mapper(header: [u8; 16]) -> Result<Mapper, INesReadError> {
@@ -77,12 +85,42 @@ mod tests {
             *item = i as u8;
         }
 
-        let cursor = Cursor::new(header).chain(Cursor::new(prg_rom_data.clone()));
+        let chr_rom_data = vec![0; 8_1920];
+
+        let prg_cursor = Cursor::new(prg_rom_data.clone());
+        let chr_cursor = Cursor::new(chr_rom_data.clone());
+        let cursor = Cursor::new(header).chain(prg_cursor).chain(chr_cursor);
 
         let ines = INes::read(cursor).unwrap();
 
         assert_eq!(ines.prg_rom.len(), 163_840);
         assert_eq!(Vec::from(ines.prg_rom), prg_rom_data);
+    }
+
+    #[test]
+    fn can_read_chr_rom_data_from_ines_file() {
+        const SIZE: u8 = 10;
+        let header: [u8; 16] = [
+            0x4E, 0x45, 0x53, 0x1A, 1, SIZE, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+
+        let prg_rom_data = vec![0; 16_384];
+
+        // 80kb of chr data
+        let mut chr_rom_data = vec![0; 81_920];
+
+        for (i, item) in chr_rom_data.iter_mut().enumerate() {
+            *item = i as u8;
+        }
+
+        let prg_cursor = Cursor::new(prg_rom_data.clone());
+        let chr_cursor = Cursor::new(chr_rom_data.clone());
+        let cursor = Cursor::new(header).chain(prg_cursor).chain(chr_cursor);
+
+        let ines = INes::read(cursor).unwrap();
+
+        assert_eq!(ines.chr_rom.len(), 81_920);
+        assert_eq!(Vec::from(ines.chr_rom), chr_rom_data);
     }
 
     #[test]
