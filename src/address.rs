@@ -30,7 +30,13 @@ impl Address {
 
 impl fmt::Debug for Address {
     fn fmt<'a>(&self, f: &mut fmt::Formatter<'a>) -> fmt::Result {
-        write!(f, "Address({:#x})", self.0)
+        write!(f, "Address({:#06x})", self.0)
+    }
+}
+
+impl fmt::Display for Address {
+    fn fmt<'a>(&self, f: &mut fmt::Formatter<'a>) -> fmt::Result {
+        write!(f, "{:#06x}", self.0)
     }
 }
 

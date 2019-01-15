@@ -5,6 +5,7 @@ use crate::instructions::Instruction;
 use crate::memory::Memory;
 use crate::opcodes::OpCode;
 use log::trace;
+use std::fmt;
 
 const STACK: Address = Address::new(0x0100);
 const RESET_VECTOR: Address = Address::new(0xFFFC);
@@ -45,7 +46,7 @@ impl<M: Memory> CPU<M> {
     }
 
     pub fn read(&self, address: Address) -> u8 {
-        self.memory.read(address)
+        self.read_reference(Reference::Address(address))
     }
 
     pub fn read_address(&self, address: Address) -> Address {
@@ -55,7 +56,7 @@ impl<M: Memory> CPU<M> {
     }
 
     pub fn write(&mut self, address: Address, byte: u8) {
-        self.memory.write(address, byte);
+        self.write_reference(Reference::Address(address), byte);
     }
 
     fn accumulator(&self) -> u8 {
@@ -362,7 +363,7 @@ impl<M: Memory> CPU<M> {
 
     pub fn read_reference(&self, reference: Reference) -> u8 {
         match reference {
-            Reference::Address(address) => self.read(address),
+            Reference::Address(address) => self.memory.read(address),
             Reference::Accumulator => self.accumulator,
             Reference::X => self.x,
             Reference::Y => self.y,
@@ -370,8 +371,9 @@ impl<M: Memory> CPU<M> {
     }
 
     fn write_reference(&mut self, reference: Reference, byte: u8) {
+        trace!("        {} := {:<#04x}", reference, byte);
         match reference {
-            Reference::Address(address) => self.write(address, byte),
+            Reference::Address(address) => self.memory.write(address, byte),
             Reference::Accumulator => self.accumulator = byte,
             Reference::X => self.x = byte,
             Reference::Y => self.y = byte,
@@ -387,7 +389,7 @@ impl<M: Memory> CPU<M> {
 
     pub fn fetch_at_program_counter(&mut self) -> u8 {
         let data = self.read(self.program_counter);
-        trace!("{:<#04x}  {:<#04x}", self.program_counter.index(), data);
+        trace!("{}  {:#04x}", self.program_counter, data);
         self.program_counter += 1u16;
         data
     }
@@ -405,6 +407,17 @@ pub enum Reference {
     Accumulator,
     X,
     Y,
+}
+
+impl fmt::Display for Reference {
+    fn fmt<'a>(&self, f: &mut fmt::Formatter<'a>) -> fmt::Result {
+        match self {
+            Reference::Address(address) => write!(f, "{}", address),
+            Reference::Accumulator => f.write_str("A"),
+            Reference::X => f.write_str("X"),
+            Reference::Y => f.write_str("Y"),
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
