@@ -78,12 +78,12 @@ mod tests {
     fn nrom_cartridge_maps_0x8000_through_0xffff_to_rom() {
         let mut prg_rom = Box::new([0u8; 0x8000]);
 
-        for i in 0..0x8000 {
-            prg_rom[i] = i as u8;
+        for (i, item) in prg_rom.iter_mut().enumerate() {
+            *item = i as u8;
         }
 
         let mapper = Mapper::NROM;
-        let mut cartridge = Cartridge::new(prg_rom, mapper);
+        let cartridge = Cartridge::new(prg_rom, mapper);
 
         for value in 0x8000..=0xffff {
             assert_eq!(cartridge.read(Address::new(value)), value as u8);
@@ -93,7 +93,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn nrom_cartridge_cannot_write_to_read_only_memory() {
-        let mut prg_rom = Box::new([0u8; 0x8000]);
+        let prg_rom = Box::new([0u8; 0x8000]);
 
         let mapper = Mapper::NROM;
         let mut cartridge = Cartridge::new(prg_rom, mapper);

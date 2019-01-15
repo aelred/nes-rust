@@ -49,7 +49,7 @@ fn run<M: Memory>(cpu: &mut CPU<M>, params: &[u8], expected: &[u8]) {
 
 #[test]
 fn hello_world() {
-    run!({"Felix\0".as_bytes()} -> "hello world from Felix!\0".as_bytes();
+    run!(b"Felix\0" -> b"hello world from Felix!\0";
         0 => {
             LDXImmediate, 255u8,
             LDYImmediate, 16u8,
@@ -66,7 +66,7 @@ fn hello_world() {
             LDAImmediate, 1u8,
             STAAbsolute, HALT_ADDRESS, 0
         }
-        RETURN_ADDRESS as u16 => {
+        u16::from(RETURN_ADDRESS) => {
             104u8, 101u8, 108u8, 108u8, 111u8, 32u8,
             119u8, 111u8, 114u8, 108u8, 100u8, 32u8,
             102u8, 114u8, 111u8, 109u8, 32u8

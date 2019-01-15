@@ -464,6 +464,7 @@ mod tests {
     use super::OpCode::*;
     use super::*;
     use crate::mem;
+    use crate::ArrayMemory;
 
     #[test]
     fn cpu_initialises_in_default_state() {
@@ -1589,7 +1590,7 @@ mod tests {
     }
 
     #[test]
-    fn instr_rti_reads_status_and_program_counter_plus_one_and__from_stack() {
+    fn instr_rti_reads_status_and_program_counter_plus_one_from_stack() {
         let cpu = run_instr(mem!(RTI), |cpu| {
             cpu.stack_pointer = 100;
             cpu.set(STACK + 103, 0x12);

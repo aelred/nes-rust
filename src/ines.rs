@@ -71,17 +71,17 @@ mod tests {
         ];
 
         // 160kb of prg data
-        let mut prg_rom_data = vec![0; 163840];
+        let mut prg_rom_data = vec![0; 163_840];
 
-        for i in 0..163840 {
-            prg_rom_data[i] = i as u8;
+        for (i, item) in prg_rom_data.iter_mut().enumerate() {
+            *item = i as u8;
         }
 
         let cursor = Cursor::new(header).chain(Cursor::new(prg_rom_data.clone()));
 
         let ines = INes::read(cursor).unwrap();
 
-        assert_eq!(ines.prg_rom.len(), 163840);
+        assert_eq!(ines.prg_rom.len(), 163_840);
         assert_eq!(Vec::from(ines.prg_rom), prg_rom_data);
     }
 
