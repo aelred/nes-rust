@@ -1,14 +1,14 @@
-use crate::addressing_modes::BITAddressingMode;
-use crate::addressing_modes::CompareAddressingMode;
-use crate::addressing_modes::FlexibleAddressingMode;
-use crate::addressing_modes::IncDecAddressingMode;
-use crate::addressing_modes::JumpAddressingMode;
-use crate::addressing_modes::LDXAddressingMode;
-use crate::addressing_modes::LDYAddressingMode;
-use crate::addressing_modes::STXAddressingMode;
-use crate::addressing_modes::STYAddressingMode;
-use crate::addressing_modes::ShiftAddressingMode;
-use crate::addressing_modes::StoreAddressingMode;
+use super::addressing_modes::BITAddressingMode;
+use super::addressing_modes::CompareAddressingMode;
+use super::addressing_modes::FlexibleAddressingMode;
+use super::addressing_modes::IncDecAddressingMode;
+use super::addressing_modes::JumpAddressingMode;
+use super::addressing_modes::LDXAddressingMode;
+use super::addressing_modes::LDYAddressingMode;
+use super::addressing_modes::STXAddressingMode;
+use super::addressing_modes::STYAddressingMode;
+use super::addressing_modes::ShiftAddressingMode;
+use super::addressing_modes::StoreAddressingMode;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Instruction {

@@ -1,9 +1,12 @@
+mod addressing_modes;
+mod instructions;
+mod opcodes;
+
+use self::addressing_modes::ShiftAddressingMode;
+use self::instructions::Instruction;
+pub use self::opcodes::OpCode;
 use crate::address::Address;
-use crate::addressing_modes::ReferenceAddressingMode;
-use crate::addressing_modes::ShiftAddressingMode;
-use crate::instructions::Instruction;
 use crate::memory::Memory;
-use crate::opcodes::OpCode;
 use log::trace;
 use std::fmt;
 
@@ -49,7 +52,7 @@ impl<M: Memory> CPU<M> {
         self.read_reference(Reference::Address(address))
     }
 
-    pub fn read_address(&self, address: Address) -> Address {
+    fn read_address(&self, address: Address) -> Address {
         let lower = self.read(address);
         let higher = self.read(address + 1u16);
         Address::from_bytes(higher, lower)
@@ -64,7 +67,7 @@ impl<M: Memory> CPU<M> {
     }
 
     pub fn run_instruction(&mut self) {
-        use crate::instructions::Instruction::*;
+        use self::instructions::Instruction::*;
 
         match self.instr() {
             // Load/Store Operations
@@ -305,7 +308,7 @@ impl<M: Memory> CPU<M> {
         self.set_reference(reference, value);
     }
 
-    pub fn program_counter(&self) -> Address {
+    fn program_counter(&self) -> Address {
         self.program_counter
     }
 
@@ -313,11 +316,11 @@ impl<M: Memory> CPU<M> {
         &mut self.program_counter
     }
 
-    pub fn x(&self) -> u8 {
+    fn x(&self) -> u8 {
         self.x
     }
 
-    pub fn y(&self) -> u8 {
+    fn y(&self) -> u8 {
         self.y
     }
 
@@ -337,11 +340,11 @@ impl<M: Memory> CPU<M> {
         self.set_reference(Reference::Accumulator, value);
     }
 
-    pub fn set_x(&mut self, value: u8) {
+    fn set_x(&mut self, value: u8) {
         self.set_reference(Reference::X, value);
     }
 
-    pub fn set_y(&mut self, value: u8) {
+    fn set_y(&mut self, value: u8) {
         self.set_reference(Reference::Y, value);
     }
 
@@ -361,7 +364,7 @@ impl<M: Memory> CPU<M> {
         self.read_reference(reference)
     }
 
-    pub fn read_reference(&self, reference: Reference) -> u8 {
+    fn read_reference(&self, reference: Reference) -> u8 {
         match reference {
             Reference::Address(address) => self.memory.read(address),
             Reference::Accumulator => self.accumulator,
@@ -387,22 +390,26 @@ impl<M: Memory> CPU<M> {
         instruction
     }
 
-    pub fn fetch_at_program_counter(&mut self) -> u8 {
+    fn fetch_at_program_counter(&mut self) -> u8 {
         let data = self.read(self.program_counter);
         trace!("{}  {:#04x}", self.program_counter, data);
         self.program_counter += 1u16;
         data
     }
 
-    pub fn fetch_address_at_program_counter(&mut self) -> Address {
+    fn fetch_address_at_program_counter(&mut self) -> Address {
         let lower = self.fetch_at_program_counter();
         let higher = self.fetch_at_program_counter();
         Address::from_bytes(higher, lower)
     }
 }
 
+trait ReferenceAddressingMode {
+    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference;
+}
+
 #[derive(Copy, Clone)]
-pub enum Reference {
+enum Reference {
     Address(Address),
     Accumulator,
     X,
