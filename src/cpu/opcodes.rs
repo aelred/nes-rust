@@ -275,7 +275,7 @@ pub enum OpCode {
 
 impl OpCode {
     pub fn from_byte(byte: u8) -> Self {
-        OpCode::from_u8(byte).expect("Unrecognised opcode")
+        OpCode::from_u8(byte).unwrap_or_else(|| panic!("Unrecognised opcode: {:#x}", byte))
     }
 
     pub fn new(instr: Instruction) -> Self {
