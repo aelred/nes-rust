@@ -37,7 +37,7 @@ impl Memory for PRG {
     fn read(&self, address: Address) -> u8 {
         match address.index() {
             0x6000...0x7fff => self.prg_ram[address.index() - 0x6000],
-            0x8000...0xffff => self.prg_rom[address.index() - 0x8000],
+            0x8000...0xffff => self.prg_rom[(address.index() - 0x8000) % self.prg_rom.len()],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -122,6 +122,23 @@ mod tests {
         }
 
         for value in 0x8000..=0xffff {
+            assert_eq!(prg.read(Address::new(value)), value as u8);
+        }
+    }
+
+    #[test]
+    fn nrom_cartridge_mirrors_rom_if_not_large_enough() {
+        let mut prg_rom = Box::new([0u8; 0x4000]);
+        let chr_rom = Box::new([0u8; 0x8000]);
+        let mapper = Mapper::NROM;
+
+        for (i, item) in prg_rom.iter_mut().enumerate() {
+            *item = i as u8;
+        }
+
+        let prg = Cartridge::new(prg_rom, chr_rom, mapper).prg;
+
+        for value in 0xc000..=0xffff {
             assert_eq!(prg.read(Address::new(value)), value as u8);
         }
     }
