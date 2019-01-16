@@ -62,6 +62,10 @@ impl<M: Memory> CPU<M> {
         self.write_reference(Reference::Address(address), byte);
     }
 
+    pub fn set_program_counter(&mut self, address: Address) {
+        self.program_counter = address;
+    }
+
     fn accumulator(&self) -> u8 {
         self.accumulator
     }

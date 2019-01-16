@@ -37,6 +37,14 @@ impl<'a> NES<'a> {
         NES { cpu, ppu }
     }
 
+    pub fn set_program_counter(&mut self, address: Address) {
+        self.cpu.set_program_counter(address);
+    }
+
+    pub fn read_cpu(&mut self, address: Address) -> u8 {
+        self.cpu.read(address)
+    }
+
     pub fn tick(&mut self) {
         self.cpu.run_instruction();
     }
