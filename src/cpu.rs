@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn instr_adc_adds_numbers() {
-        let cpu = run_instr(mem!(ADCImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(42);
         });
 
@@ -527,7 +527,7 @@ mod tests {
 
     #[test]
     fn instr_adc_sets_carry_flag_on_unsigned_overflow() {
-        let cpu = run_instr(mem!(ADCImmediate, 255u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMMEDIATE, 255u8), |cpu| {
             cpu.set_accumulator(42);
         });
 
@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn instr_adc_sets_overflow_flag_on_signed_overflow() {
-        let cpu = run_instr(mem!(ADCImmediate, 127u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMMEDIATE, 127u8), |cpu| {
             cpu.set_accumulator(42i8 as u8);
         });
 
@@ -549,7 +549,7 @@ mod tests {
 
     #[test]
     fn instr_and_performs_bitwise_and() {
-        let cpu = run_instr(mem!(ANDImmediate, 0b1100_u8), |cpu| {
+        let cpu = run_instr(mem!(AND_IMMEDIATE, 0b1100_u8), |cpu| {
             cpu.set_accumulator(0b1010);
         });
 
@@ -558,7 +558,7 @@ mod tests {
 
     #[test]
     fn instr_asl_shifts_left() {
-        let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
+        let cpu = run_instr(mem!(ASL_ACCUMULATOR), |cpu| {
             cpu.set_accumulator(0b100);
         });
 
@@ -568,7 +568,7 @@ mod tests {
 
     #[test]
     fn instr_asl_sets_carry_flag_on_overflow() {
-        let cpu = run_instr(mem!(ASLAccumulator), |cpu| {
+        let cpu = run_instr(mem!(ASL_ACCUMULATOR), |cpu| {
             cpu.set_accumulator(0b1010_1010);
         });
 
@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn instr_asl_can_operate_on_memory() {
-        let cpu = run_instr(mem!(ASLAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(ASL_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 0b100);
         });
 
@@ -650,7 +650,7 @@ mod tests {
 
     #[test]
     fn instr_bit_sets_zero_flag_when_bitwise_and_is_zero() {
-        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+        let cpu = run_instr(mem!(BIT_ABSOLUTE, 54, 0), |cpu| {
             cpu.set_accumulator(0b1111_0000u8);
             cpu.set(Address::new(54), 0b0000_1111u8);
         });
@@ -660,7 +660,7 @@ mod tests {
 
     #[test]
     fn instr_bit_clears_zero_flag_when_bitwise_and_is_not_zero() {
-        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+        let cpu = run_instr(mem!(BIT_ABSOLUTE, 54, 0), |cpu| {
             cpu.set_accumulator(0b1111_1100u8);
             cpu.set(Address::new(54), 0b0011_1111u8);
         });
@@ -670,13 +670,13 @@ mod tests {
 
     #[test]
     fn instr_bit_sets_overflow_bit_based_on_bit_6_of_operand() {
-        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+        let cpu = run_instr(mem!(BIT_ABSOLUTE, 54, 0), |cpu| {
             cpu.set(Address::new(54), 0u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Overflow), false);
 
-        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+        let cpu = run_instr(mem!(BIT_ABSOLUTE, 54, 0), |cpu| {
             cpu.set(Address::new(54), 0b0100_0000u8);
         });
 
@@ -685,13 +685,13 @@ mod tests {
 
     #[test]
     fn instr_bit_sets_negative_bit_based_on_bit_7_of_operand() {
-        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+        let cpu = run_instr(mem!(BIT_ABSOLUTE, 54, 0), |cpu| {
             cpu.set(Address::new(54), 0u8);
         });
 
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
-        let cpu = run_instr(mem!(BITAbsolute, 54, 0), |cpu| {
+        let cpu = run_instr(mem!(BIT_ABSOLUTE, 54, 0), |cpu| {
             cpu.set(Address::new(54), 0b1000_0000u8);
         });
 
@@ -841,19 +841,19 @@ mod tests {
 
     #[test]
     fn instr_cmp_sets_carry_flag_if_accumulator_greater_or_equal_to_operand() {
-        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(1);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), false);
 
-        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(10);
         });
 
         assert_eq!(cpu.status.get(Flag::Carry), true);
 
-        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(100);
         });
 
@@ -862,19 +862,19 @@ mod tests {
 
     #[test]
     fn instr_cmp_sets_zero_flag_if_accumulator_equals_operand() {
-        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(1);
         });
 
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
-        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(10);
         });
 
         assert_eq!(cpu.status.get(Flag::Zero), true);
 
-        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(100);
         });
 
@@ -883,19 +883,19 @@ mod tests {
 
     #[test]
     fn instr_cmp_sets_negative_flag_if_bit_7_of_accumulator_sub_operand_is_set() {
-        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(1);
         });
 
         assert_eq!(cpu.status.get(Flag::Negative), true);
 
-        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(10);
         });
 
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
-        let cpu = run_instr(mem!(CMPImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.set_accumulator(100);
         });
 
@@ -904,7 +904,7 @@ mod tests {
 
     #[test]
     fn instr_cpx_compares_using_x_register() {
-        let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CPX_IMMEDIATE, 10u8), |cpu| {
             cpu.set_x(1);
         });
 
@@ -912,7 +912,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Zero), false);
         assert_eq!(cpu.status.get(Flag::Negative), true);
 
-        let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CPX_IMMEDIATE, 10u8), |cpu| {
             cpu.set_x(10);
         });
 
@@ -920,7 +920,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Zero), true);
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
-        let cpu = run_instr(mem!(CPXImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CPX_IMMEDIATE, 10u8), |cpu| {
             cpu.set_x(100);
         });
 
@@ -931,7 +931,7 @@ mod tests {
 
     #[test]
     fn instr_cpy_compares_using_y_register() {
-        let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CPY_IMMEDIATE, 10u8), |cpu| {
             cpu.set_y(1);
         });
 
@@ -939,7 +939,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Zero), false);
         assert_eq!(cpu.status.get(Flag::Negative), true);
 
-        let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CPY_IMMEDIATE, 10u8), |cpu| {
             cpu.set_y(10);
         });
 
@@ -947,7 +947,7 @@ mod tests {
         assert_eq!(cpu.status.get(Flag::Zero), true);
         assert_eq!(cpu.status.get(Flag::Negative), false);
 
-        let cpu = run_instr(mem!(CPYImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(CPY_IMMEDIATE, 10u8), |cpu| {
             cpu.set_y(100);
         });
 
@@ -958,7 +958,7 @@ mod tests {
 
     #[test]
     fn instr_dec_decrements_operand() {
-        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
@@ -967,14 +967,14 @@ mod tests {
 
     #[test]
     fn instr_dec_sets_zero_flag_based_on_result() {
-        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
-        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 1);
         });
 
@@ -984,14 +984,14 @@ mod tests {
 
     #[test]
     fn instr_dec_sets_negative_flag_based_on_result() {
-        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 44);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
-        let cpu = run_instr(mem!(DECAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 0);
         });
 
@@ -1087,7 +1087,7 @@ mod tests {
 
     #[test]
     fn instr_eor_performs_bitwise_xor() {
-        let cpu = run_instr(mem!(EORImmediate, 0b1100_u8), |cpu| {
+        let cpu = run_instr(mem!(EOR_IMMEDIATE, 0b1100_u8), |cpu| {
             cpu.set_accumulator(0b1010);
         });
 
@@ -1096,7 +1096,7 @@ mod tests {
 
     #[test]
     fn instr_inc_increments_operand() {
-        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
@@ -1105,14 +1105,14 @@ mod tests {
 
     #[test]
     fn instr_inc_sets_zero_flag_based_on_result() {
-        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 46);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
-        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), -1i8 as u8);
         });
 
@@ -1122,14 +1122,14 @@ mod tests {
 
     #[test]
     fn instr_inc_sets_negative_flag_based_on_result() {
-        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 46);
         assert_eq!(cpu.status.get(Flag::Zero), false);
 
-        let cpu = run_instr(mem!(INCAbsolute, 100, 0), |cpu| {
+        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), -10i8 as u8);
         });
 
@@ -1157,7 +1157,7 @@ mod tests {
 
     #[test]
     fn instr_jmp_jumps_to_immediate_operand() {
-        let cpu = run_instr(mem!(200 => { JMPAbsolute, 100, 0 }), |cpu| {
+        let cpu = run_instr(mem!(200 => { JMP_ABSOLUTE, 100, 0 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(200);
         });
 
@@ -1168,7 +1168,7 @@ mod tests {
     fn instr_jmp_jumps_to_indirect_operand() {
         let cpu = run_instr(
             mem!(
-                20 => { JMPIndirect, 30, 0 }
+                20 => { JMP_INDIRECT, 30, 0 }
                 30 => { 10, 0 }
             ),
             |cpu| {
@@ -1210,29 +1210,29 @@ mod tests {
     }
 
     #[test]
-    fn instr_lda_loads_operand_into_accumulator() {
-        let cpu = run_instr(mem!(LDAImmediate, 5u8), |_| {});
+    fn instr_lda_loads_operand_into_accunmulator() {
+        let cpu = run_instr(mem!(LDA_IMMEDIATE, 5u8), |_| {});
 
         assert_eq!(cpu.accumulator(), 5);
     }
 
     #[test]
     fn instr_ldx_loads_operand_into_x_register() {
-        let cpu = run_instr(mem!(LDXImmediate, 5u8), |_| {});
+        let cpu = run_instr(mem!(LDX_IMMEDIATE, 5u8), |_| {});
 
         assert_eq!(cpu.x(), 5);
     }
 
     #[test]
     fn instr_ldy_loads_operand_into_y_register() {
-        let cpu = run_instr(mem!(LDYImmediate, 5u8), |_| {});
+        let cpu = run_instr(mem!(LDY_IMMEDIATE, 5u8), |_| {});
 
         assert_eq!(cpu.y(), 5);
     }
 
     #[test]
     fn instr_lsr_shifts_right() {
-        let cpu = run_instr(mem!(LSRAccumulator), |cpu| {
+        let cpu = run_instr(mem!(LSR_ACCUMULATOR), |cpu| {
             cpu.set_accumulator(0b100);
         });
 
@@ -1242,7 +1242,7 @@ mod tests {
 
     #[test]
     fn instr_lsr_sets_carry_flag_on_underflow() {
-        let cpu = run_instr(mem!(LSRAccumulator), |cpu| {
+        let cpu = run_instr(mem!(LSR_ACCUMULATOR), |cpu| {
             cpu.set_accumulator(0b101_0101);
         });
 
@@ -1252,7 +1252,7 @@ mod tests {
 
     #[test]
     fn instr_nop_increments_program_counter() {
-        let cpu = run_instr(mem!(20 => LSRAccumulator), |cpu| {
+        let cpu = run_instr(mem!(20 => LSR_ACCUMULATOR), |cpu| {
             *cpu.program_counter_mut() = Address::new(20);
         });
 
@@ -1261,7 +1261,7 @@ mod tests {
 
     #[test]
     fn instr_ora_performs_bitwise_or() {
-        let cpu = run_instr(mem!(ORAImmediate, 0b1100_u8), |cpu| {
+        let cpu = run_instr(mem!(ORA_IMMEDIATE, 0b1100_u8), |cpu| {
             cpu.set_accumulator(0b1010);
         });
 
@@ -1345,7 +1345,7 @@ mod tests {
 
     #[test]
     fn instr_rol_rotates_left_with_carry_flag() {
-        let cpu = run_instr(mem!(ROLAccumulator), |cpu| {
+        let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
             cpu.status.clear(Flag::Carry);
             cpu.set_accumulator(0b100);
         });
@@ -1353,7 +1353,7 @@ mod tests {
         assert_eq!(cpu.accumulator(), 0b1000);
         assert_eq!(cpu.status.get(Flag::Carry), false);
 
-        let cpu = run_instr(mem!(ROLAccumulator), |cpu| {
+        let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
             cpu.status.set(Flag::Carry);
             cpu.set_accumulator(0b100);
         });
@@ -1361,7 +1361,7 @@ mod tests {
         assert_eq!(cpu.accumulator(), 0b1001);
         assert_eq!(cpu.status.get(Flag::Carry), false);
 
-        let cpu = run_instr(mem!(ROLAccumulator), |cpu| {
+        let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
             cpu.status.clear(Flag::Carry);
             cpu.set_accumulator(0b1000_0000);
         });
@@ -1372,7 +1372,7 @@ mod tests {
 
     #[test]
     fn instr_ror_rotates_left_with_carry_flag() {
-        let cpu = run_instr(mem!(RORAccumulator), |cpu| {
+        let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
             cpu.status.clear(Flag::Carry);
             cpu.set_accumulator(0b100);
         });
@@ -1380,7 +1380,7 @@ mod tests {
         assert_eq!(cpu.accumulator(), 0b10);
         assert_eq!(cpu.status.get(Flag::Carry), false);
 
-        let cpu = run_instr(mem!(RORAccumulator), |cpu| {
+        let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
             cpu.status.set(Flag::Carry);
             cpu.set_accumulator(0b100);
         });
@@ -1388,7 +1388,7 @@ mod tests {
         assert_eq!(cpu.accumulator(), 0b1000_0010);
         assert_eq!(cpu.status.get(Flag::Carry), false);
 
-        let cpu = run_instr(mem!(RORAccumulator), |cpu| {
+        let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
             cpu.status.clear(Flag::Carry);
             cpu.set_accumulator(0b1);
         });
@@ -1419,7 +1419,7 @@ mod tests {
 
     #[test]
     fn instr_sbc_subtracts_numbers() {
-        let cpu = run_instr(mem!(SBCImmediate, 10u8), |cpu| {
+        let cpu = run_instr(mem!(SBC_IMMEDIATE, 10u8), |cpu| {
             cpu.status.set(Flag::Carry);
             cpu.set_accumulator(42);
         });
@@ -1431,7 +1431,7 @@ mod tests {
     #[test]
     fn instr_sbc_sets_overflow_bit_when_sign_is_wrong() {
         fn sub(accumulator: i8, value: i8) -> (i8, bool) {
-            let cpu = run_instr(mem!(SBCImmediate, value as u8), |cpu| {
+            let cpu = run_instr(mem!(SBC_IMMEDIATE, value as u8), |cpu| {
                 cpu.status.set(Flag::Carry);
                 cpu.set_accumulator(accumulator as u8);
             });
@@ -1478,7 +1478,7 @@ mod tests {
 
     #[test]
     fn instr_sta_stores_accumulator_in_memory() {
-        let cpu = run_instr(mem!(STAAbsolute, 0x32, 0), |cpu| {
+        let cpu = run_instr(mem!(STA_ABSOLUTE, 0x32, 0), |cpu| {
             cpu.set_accumulator(65);
         });
 
@@ -1487,7 +1487,7 @@ mod tests {
 
     #[test]
     fn instr_stx_stores_x_register_in_memory() {
-        let cpu = run_instr(mem!(STXAbsolute, 0x32, 0), |cpu| {
+        let cpu = run_instr(mem!(STX_ABSOLUTE, 0x32, 0), |cpu| {
             cpu.set_x(65);
         });
 
@@ -1496,7 +1496,7 @@ mod tests {
 
     #[test]
     fn instr_sty_stores_y_register_in_memory() {
-        let cpu = run_instr(mem!(STYAbsolute, 0x32, 0), |cpu| {
+        let cpu = run_instr(mem!(STY_ABSOLUTE, 0x32, 0), |cpu| {
             cpu.set_y(65);
         });
 
@@ -1645,7 +1645,7 @@ mod tests {
         for x in values.iter() {
             for y in values.iter() {
                 for carry_in in carry_values.iter() {
-                    let cpu = run_instr(mem!(ADCImmediate, *y), |cpu| {
+                    let cpu = run_instr(mem!(ADC_IMMEDIATE, *y), |cpu| {
                         cpu.status.set_to(Flag::Carry, *carry_in);
                         cpu.set_accumulator(*x);
                     });
@@ -1670,7 +1670,7 @@ mod tests {
         for x in values.iter() {
             for y in values.iter() {
                 for carry_in in carry_values.iter() {
-                    let cpu = run_instr(mem!(SBCImmediate, *y), |cpu| {
+                    let cpu = run_instr(mem!(SBC_IMMEDIATE, *y), |cpu| {
                         cpu.status.set_to(Flag::Carry, *carry_in);
                         cpu.set_accumulator(*x);
                     });
@@ -1697,7 +1697,7 @@ mod tests {
 
     #[test]
     fn zero_flag_is_not_set_when_accumulator_is_non_zero() {
-        let cpu = run_instr(mem!(ADCImmediate, 1u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMMEDIATE, 1u8), |cpu| {
             cpu.set_accumulator(42);
         });
 
@@ -1707,7 +1707,7 @@ mod tests {
 
     #[test]
     fn zero_flag_is_set_when_accumulator_is_zero() {
-        let cpu = run_instr(mem!(ADCImmediate, 214u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMMEDIATE, 214u8), |cpu| {
             cpu.set_accumulator(42);
         });
 
@@ -1717,7 +1717,7 @@ mod tests {
 
     #[test]
     fn negative_flag_is_not_set_when_accumulator_is_positive() {
-        let cpu = run_instr(mem!(ADCImmediate, 1u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMMEDIATE, 1u8), |cpu| {
             cpu.set_accumulator(42);
         });
 
@@ -1727,7 +1727,7 @@ mod tests {
 
     #[test]
     fn negative_flag_is_set_when_accumulator_is_negative() {
-        let cpu = run_instr(mem!(ADCImmediate, -1i8 as u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMMEDIATE, -1i8 as u8), |cpu| {
             cpu.set_accumulator(0);
         });
 
@@ -1737,7 +1737,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_1_when_executing_1_byte_instr() {
-        let cpu = run_instr(mem!(100 => ASLAccumulator), |cpu| {
+        let cpu = run_instr(mem!(100 => ASL_ACCUMULATOR), |cpu| {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
@@ -1746,7 +1746,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_2_when_executing_2_byte_instr() {
-        let cpu = run_instr(mem!(100 => { ADCImmediate, 0u8 }), |cpu| {
+        let cpu = run_instr(mem!(100 => { ADC_IMMEDIATE, 0u8 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
@@ -1755,7 +1755,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_3_when_executing_3_byte_instr() {
-        let cpu = run_instr(mem!(100 => { ASLAbsolute, 0, 0 }), |cpu| {
+        let cpu = run_instr(mem!(100 => { ASL_ABSOLUTE, 0, 0 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(100)
         });
 
@@ -1813,7 +1813,7 @@ mod tests {
 
     #[test]
     fn instructions_can_wrap_on_program_counter_overflow() {
-        let cpu = run_instr(mem!(0xfffe => { JMPAbsolute, 0x34, 0x12 }), |cpu| {
+        let cpu = run_instr(mem!(0xfffe => { JMP_ABSOLUTE, 0x34, 0x12 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(0xfffe);
         });
 
