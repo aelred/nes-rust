@@ -87,6 +87,12 @@ impl<M: Memory> PPU<M> {
 #[derive(Debug, Eq, PartialEq)]
 pub struct Color(u8);
 
+impl Color {
+    pub fn to_byte(&self) -> u8 {
+        self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::Address;

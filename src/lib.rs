@@ -11,6 +11,7 @@ pub use crate::memory::ArrayMemory;
 pub use crate::memory::Memory;
 use crate::memory::NESCPUMemory;
 use crate::memory::NESPPUMemory;
+pub use crate::ppu::Color;
 use crate::ppu::PPU;
 pub use crate::serialize::SerializeByte;
 
@@ -23,18 +24,29 @@ mod memory;
 mod ppu;
 mod serialize;
 
-pub struct NES<'a> {
-    cpu: CPU<NESCPUMemory<&'a mut PRG>>,
-    ppu: PPU<NESPPUMemory<&'a mut CHR>>,
+pub trait NESDisplay {
+    fn draw_pixel(&mut self, color: Color);
 }
 
-impl<'a> NES<'a> {
-    pub fn new(cartridge: &'a mut Cartridge) -> Self {
+pub struct NoDisplay;
+
+impl NESDisplay for NoDisplay {
+    fn draw_pixel(&mut self, _: Color) {}
+}
+
+pub struct NES<'a, D> {
+    cpu: CPU<NESCPUMemory<&'a mut PRG>>,
+    ppu: PPU<NESPPUMemory<&'a mut CHR>>,
+    display: D,
+}
+
+impl<'a, D: NESDisplay> NES<'a, D> {
+    pub fn new(cartridge: &'a mut Cartridge, display: D) -> Self {
         let cpu_memory = NESCPUMemory::new(&mut cartridge.prg);
         let cpu = CPU::with_memory(cpu_memory);
         let ppu_memory = NESPPUMemory::new(&mut cartridge.chr);
         let ppu = PPU::with_memory(ppu_memory);
-        NES { cpu, ppu }
+        NES { cpu, ppu, display }
     }
 
     pub fn program_counter(&mut self) -> Address {
@@ -51,6 +63,8 @@ impl<'a> NES<'a> {
 
     pub fn tick(&mut self) {
         self.cpu.run_instruction();
+        let color = self.ppu.tick();
+        self.display.draw_pixel(color);
     }
 }
 

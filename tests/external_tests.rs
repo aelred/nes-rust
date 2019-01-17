@@ -3,6 +3,7 @@ use std::io::Cursor;
 use nes_rust::Address;
 use nes_rust::INes;
 use nes_rust::NES;
+use nes_rust::NoDisplay;
 
 const NESTEST: &[u8] = include_bytes!("nestest.nes");
 
@@ -15,7 +16,7 @@ fn nestest() {
     let ines = INes::read(cursor).unwrap();
     let mut cartridge = ines.into_cartridge();
 
-    let mut nes = NES::new(&mut cartridge);
+    let mut nes = NES::new(&mut cartridge, NoDisplay);
 
     nes.set_program_counter(Address::new(0xc000));
 
