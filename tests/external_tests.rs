@@ -1,8 +1,9 @@
+use std::io::Cursor;
+use std::time::Duration;
+
+use nes_rust::Address;
 use nes_rust::INes;
 use nes_rust::NES;
-use std::time::Duration;
-use std::io::Cursor;
-use nes_rust::Address;
 
 const NESTEST: &'static [u8] = include_bytes!("nestest.nes");
 
@@ -25,12 +26,8 @@ fn nestest() {
 
         match &[byte0, byte1] {
             &[0, 0] => {}
-            b"OK" => {
-                break
-            },
-            _ => {
-                panic!("Failed, error code: {}{}", byte0, byte1)
-            }
+            b"OK" => break,
+            _ => panic!("Failed, error code: {}{}", byte0, byte1),
         }
 
         nes.tick();

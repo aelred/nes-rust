@@ -5,134 +5,109 @@ use super::CPU;
 use super::Reference;
 use super::ReferenceAddressingMode;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum FlexibleAddressingMode {
-    Immediate,
-    ZeroPage,
-    ZeroPageX,
-    Absolute,
-    AbsoluteX,
-    AbsoluteY,
-    IndexedIndirect,
-    IndirectIndexed,
-}
-
-impl ReferenceAddressingMode for FlexibleAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            FlexibleAddressingMode::Immediate => cpu.immediate(),
-            FlexibleAddressingMode::ZeroPage => cpu.zero_page(),
-            FlexibleAddressingMode::ZeroPageX => cpu.zero_page_x(),
-            FlexibleAddressingMode::Absolute => cpu.absolute(),
-            FlexibleAddressingMode::AbsoluteX => cpu.absolute_x(),
-            FlexibleAddressingMode::AbsoluteY => cpu.absolute_y(),
-            FlexibleAddressingMode::IndexedIndirect => cpu.indexed_indirect(),
-            FlexibleAddressingMode::IndirectIndexed => cpu.indirect_indexed(),
+macro_rules! def_addressing_modes {
+    ($($name:ident { $($mode:ident),* $(,)* })*) => {
+        $(
+        #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+        pub enum $name {
+            $(
+            $mode,
+            )*
         }
-    }
-}
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum StoreAddressingMode {
-    ZeroPage,
-    ZeroPageX,
-    Absolute,
-    AbsoluteX,
-    AbsoluteY,
-    IndexedIndirect,
-    IndirectIndexed,
-}
-
-impl ReferenceAddressingMode for StoreAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            StoreAddressingMode::ZeroPage => cpu.zero_page(),
-            StoreAddressingMode::ZeroPageX => cpu.zero_page_x(),
-            StoreAddressingMode::Absolute => cpu.absolute(),
-            StoreAddressingMode::AbsoluteX => cpu.absolute_x(),
-            StoreAddressingMode::AbsoluteY => cpu.absolute_y(),
-            StoreAddressingMode::IndexedIndirect => cpu.indexed_indirect(),
-            StoreAddressingMode::IndirectIndexed => cpu.indirect_indexed(),
+        impl ReferenceAddressingMode for $name {
+            fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
+                match self {
+                    $(
+                    $name::$mode => cpu.exec_addressing_mode(AddressingMode::$mode),
+                    )*
+                }
+            }
         }
+        )*
+    };
+}
+
+def_addressing_modes! {
+    FlexibleAddressingMode {
+        Immediate,
+        ZeroPage,
+        ZeroPageX,
+        Absolute,
+        AbsoluteX,
+        AbsoluteY,
+        IndexedIndirect,
+        IndirectIndexed,
     }
-}
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ShiftAddressingMode {
-    Accumulator,
-    ZeroPage,
-    ZeroPageX,
-    Absolute,
-    AbsoluteX,
-}
-
-impl ReferenceAddressingMode for ShiftAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            ShiftAddressingMode::Accumulator => Reference::Accumulator,
-            ShiftAddressingMode::ZeroPage => cpu.zero_page(),
-            ShiftAddressingMode::ZeroPageX => cpu.zero_page_x(),
-            ShiftAddressingMode::Absolute => cpu.absolute(),
-            ShiftAddressingMode::AbsoluteX => cpu.absolute_x(),
-        }
+    StoreAddressingMode {
+        ZeroPage,
+        ZeroPageX,
+        Absolute,
+        AbsoluteX,
+        AbsoluteY,
+        IndexedIndirect,
+        IndirectIndexed,
     }
-}
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum BITAddressingMode {
-    ZeroPage,
-    Absolute,
-}
-
-impl ReferenceAddressingMode for BITAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            BITAddressingMode::ZeroPage => cpu.zero_page(),
-            BITAddressingMode::Absolute => cpu.absolute(),
-        }
+    ShiftAddressingMode {
+        Accumulator,
+        ZeroPage,
+        ZeroPageX,
+        Absolute,
+        AbsoluteX,
     }
-}
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum CompareAddressingMode {
-    Immediate,
-    ZeroPage,
-    Absolute,
-}
-
-impl ReferenceAddressingMode for CompareAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            CompareAddressingMode::Immediate => cpu.immediate(),
-            CompareAddressingMode::ZeroPage => cpu.zero_page(),
-            CompareAddressingMode::Absolute => cpu.absolute(),
-        }
+    BITAddressingMode {
+        ZeroPage,
+        Absolute,
     }
-}
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum IncDecAddressingMode {
-    ZeroPage,
-    ZeroPageX,
-    Absolute,
-    AbsoluteX,
-}
-
-impl ReferenceAddressingMode for IncDecAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            IncDecAddressingMode::ZeroPage => cpu.zero_page(),
-            IncDecAddressingMode::ZeroPageX => cpu.zero_page_x(),
-            IncDecAddressingMode::Absolute => cpu.absolute(),
-            IncDecAddressingMode::AbsoluteX => cpu.absolute_x(),
-        }
+    CompareAddressingMode {
+        Immediate,
+        ZeroPage,
+        Absolute,
     }
-}
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum JumpAddressingMode {
-    Absolute,
-    Indirect,
+    IncDecAddressingMode {
+        ZeroPage,
+        ZeroPageX,
+        Absolute,
+        AbsoluteX,
+    }
+
+    JumpAddressingMode {
+        Absolute,
+        Indirect,
+    }
+
+    LDXAddressingMode {
+        Immediate,
+        ZeroPage,
+        ZeroPageY,
+        Absolute,
+        AbsoluteY,
+    }
+
+    LDYAddressingMode {
+        Immediate,
+        ZeroPage,
+        ZeroPageX,
+        Absolute,
+        AbsoluteX,
+    }
+
+    STXAddressingMode {
+        ZeroPage,
+        ZeroPageY,
+        Absolute,
+    }
+
+    STYAddressingMode {
+        ZeroPage,
+        ZeroPageX,
+        Absolute,
+    }
 }
 
 impl JumpAddressingMode {
@@ -144,136 +119,79 @@ impl JumpAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum LDXAddressingMode {
-    Immediate,
-    ZeroPage,
-    ZeroPageY,
-    Absolute,
-    AbsoluteY,
-}
-
-impl ReferenceAddressingMode for LDXAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            LDXAddressingMode::Immediate => cpu.immediate(),
-            LDXAddressingMode::ZeroPage => cpu.zero_page(),
-            LDXAddressingMode::ZeroPageY => cpu.zero_page_y(),
-            LDXAddressingMode::Absolute => cpu.absolute(),
-            LDXAddressingMode::AbsoluteY => cpu.absolute_y(),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum LDYAddressingMode {
+enum AddressingMode {
+    Accumulator,
     Immediate,
     ZeroPage,
     ZeroPageX,
+    ZeroPageY,
     Absolute,
     AbsoluteX,
-}
-
-impl ReferenceAddressingMode for LDYAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            LDYAddressingMode::Immediate => cpu.immediate(),
-            LDYAddressingMode::ZeroPage => cpu.zero_page(),
-            LDYAddressingMode::ZeroPageX => cpu.zero_page_x(),
-            LDYAddressingMode::Absolute => cpu.absolute(),
-            LDYAddressingMode::AbsoluteX => cpu.absolute_x(),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum STXAddressingMode {
-    ZeroPage,
-    ZeroPageY,
-    Absolute,
-}
-
-impl ReferenceAddressingMode for STXAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            STXAddressingMode::ZeroPage => cpu.zero_page(),
-            STXAddressingMode::ZeroPageY => cpu.zero_page_y(),
-            STXAddressingMode::Absolute => cpu.absolute(),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum STYAddressingMode {
-    ZeroPage,
-    ZeroPageX,
-    Absolute,
-}
-
-impl ReferenceAddressingMode for STYAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
-        match self {
-            STYAddressingMode::ZeroPage => cpu.zero_page(),
-            STYAddressingMode::ZeroPageX => cpu.zero_page_x(),
-            STYAddressingMode::Absolute => cpu.absolute(),
-        }
-    }
+    AbsoluteY,
+    Indirect,
+    IndexedIndirect,
+    IndirectIndexed,
 }
 
 impl<M: Memory> CPU<M> {
-    fn immediate(&mut self) -> Reference {
-        let reference = Reference::Address(self.program_counter());
-        self.fetch_at_program_counter();
-        reference
-    }
-
-    fn zero_page(&mut self) -> Reference {
-        Reference::Address(Address::from_bytes(0, self.fetch_at_program_counter()))
-    }
-
-    fn zero_page_x(&mut self) -> Reference {
-        let operand: u8 = self.fetch_at_program_counter();
-        let address = Address::from_bytes(0, operand.wrapping_add(self.x()));
-        Reference::Address(address)
-    }
-
-    fn zero_page_y(&mut self) -> Reference {
-        let operand: u8 = self.fetch_at_program_counter();
-        let address = Address::from_bytes(0, operand.wrapping_add(self.y()));
-        Reference::Address(address)
-    }
-
-    fn absolute(&mut self) -> Reference {
-        Reference::Address(self.absolute_address())
+    fn exec_addressing_mode(&mut self, addressing_mode: AddressingMode) -> Reference {
+        match addressing_mode {
+            AddressingMode::Accumulator => Reference::Accumulator,
+            AddressingMode::Immediate => {
+                let reference = Reference::Address(self.program_counter());
+                self.fetch_at_program_counter();
+                reference
+            }
+            AddressingMode::ZeroPage => {
+                let address = Address::from_bytes(0, self.fetch_at_program_counter());
+                Reference::Address(address)
+            }
+            AddressingMode::ZeroPageX => {
+                let operand: u8 = self.fetch_at_program_counter();
+                let address = Address::from_bytes(0, operand.wrapping_add(self.x()));
+                Reference::Address(address)
+            }
+            AddressingMode::ZeroPageY => {
+                let operand: u8 = self.fetch_at_program_counter();
+                let address = Address::from_bytes(0, operand.wrapping_add(self.y()));
+                Reference::Address(address)
+            }
+            AddressingMode::Absolute => {
+                let address = self.absolute_address();
+                Reference::Address(address)
+            },
+            AddressingMode::AbsoluteX => {
+                let address = self.absolute_address() + u16::from(self.x());
+                Reference::Address(address)
+            }
+            AddressingMode::AbsoluteY => {
+                let address = self.absolute_address() + u16::from(self.y());
+                Reference::Address(address)
+            }
+            AddressingMode::Indirect => {
+                let address = self.indirect_address();
+                Reference::Address(address)
+            },
+            AddressingMode::IndexedIndirect => {
+                let offset = self.fetch_at_program_counter().wrapping_add(self.x());
+                let address = self.read_zero_page_address(offset);
+                Reference::Address(address)
+            }
+            AddressingMode::IndirectIndexed => {
+                let offset = self.fetch_at_program_counter();
+                let address = self.read_zero_page_address(offset) + u16::from(self.y());
+                Reference::Address(address)
+            }
+        }
     }
 
     fn absolute_address(&mut self) -> Address {
         self.fetch_address_at_program_counter()
     }
 
-    fn absolute_x(&mut self) -> Reference {
-        Reference::Address(self.absolute_address() + u16::from(self.x()))
-    }
-
-    fn absolute_y(&mut self) -> Reference {
-        Reference::Address(self.absolute_address() + u16::from(self.y()))
-    }
-
     fn indirect_address(&mut self) -> Address {
         let address_of_address = self.fetch_address_at_program_counter();
         self.read_address(address_of_address)
-    }
-
-    fn indexed_indirect(&mut self) -> Reference {
-        let offset = self.fetch_at_program_counter().wrapping_add(self.x());
-        let address = self.read_zero_page_address(offset);
-        Reference::Address(address)
-    }
-
-    fn indirect_indexed(&mut self) -> Reference {
-        let offset = self.fetch_at_program_counter();
-        let address = self.read_zero_page_address(offset) + u16::from(self.y());
-        Reference::Address(address)
     }
 
     fn read_zero_page_address(&self, offset: u8) -> Address {
@@ -289,12 +207,13 @@ mod tests {
     use crate::mem;
 
     use super::*;
+    use super::AddressingMode::*;
 
     #[test]
     fn immediate_addressing_mode_fetches_given_value() {
         let mut cpu = CPU::with_memory(mem! {56u8});
 
-        let reference = cpu.immediate();
+        let reference = cpu.exec_addressing_mode(Immediate);
         assert_eq!(cpu.read_reference(reference), 56);
     }
 
@@ -312,7 +231,7 @@ mod tests {
             15 => { 35u8 }
         ));
 
-        let reference = cpu.zero_page();
+        let reference = cpu.exec_addressing_mode(ZeroPage);
         assert_eq!(cpu.read_reference(reference), 35);
     }
 
@@ -324,7 +243,7 @@ mod tests {
         ));
         cpu.set_x(3);
 
-        let reference = cpu.zero_page_x();
+        let reference = cpu.exec_addressing_mode(ZeroPageX);
         assert_eq!(cpu.read_reference(reference), 35);
     }
 
@@ -335,7 +254,7 @@ mod tests {
         ));
         cpu.set_x(1);
 
-        let reference = cpu.zero_page_x();
+        let reference = cpu.exec_addressing_mode(ZeroPageX);
         assert_eq!(cpu.read_reference(reference), 0xFF);
     }
 
@@ -347,7 +266,7 @@ mod tests {
         ));
         cpu.set_y(3);
 
-        let reference = cpu.zero_page_y();
+        let reference = cpu.exec_addressing_mode(ZeroPageY);
         assert_eq!(cpu.read_reference(reference), 35);
     }
 
@@ -358,7 +277,7 @@ mod tests {
         ));
         cpu.set_y(1);
 
-        let reference = cpu.zero_page_y();
+        let reference = cpu.exec_addressing_mode(ZeroPageY);
         assert_eq!(cpu.read_reference(reference), 0xFF);
     }
 
@@ -369,7 +288,7 @@ mod tests {
             0x432 => { 35u8 }
         ));
 
-        let reference = cpu.absolute();
+        let reference = cpu.exec_addressing_mode(Absolute);
         assert_eq!(cpu.read_reference(reference), 35);
     }
 
@@ -381,7 +300,7 @@ mod tests {
         ));
         cpu.set_x(3);
 
-        let reference = cpu.absolute_x();
+        let reference = cpu.exec_addressing_mode(AbsoluteX);
         assert_eq!(cpu.read_reference(reference), 35);
     }
 
@@ -393,7 +312,7 @@ mod tests {
         ));
         cpu.set_y(3);
 
-        let reference = cpu.absolute_y();
+        let reference = cpu.exec_addressing_mode(AbsoluteY);
         assert_eq!(cpu.read_reference(reference), 35);
     }
 
@@ -429,7 +348,7 @@ mod tests {
         ));
         cpu.set_x(3);
 
-        let reference = cpu.indexed_indirect();
+        let reference = cpu.exec_addressing_mode(IndexedIndirect);
         assert_eq!(cpu.read_reference(reference), 57);
     }
 
@@ -442,7 +361,7 @@ mod tests {
         ));
         cpu.set_x(255);
 
-        let reference = cpu.indexed_indirect();
+        let reference = cpu.exec_addressing_mode(IndexedIndirect);
         assert_eq!(cpu.read_reference(reference), 57);
     }
 
@@ -455,7 +374,7 @@ mod tests {
         ));
         cpu.set_x(0);
 
-        let reference = cpu.indexed_indirect();
+        let reference = cpu.exec_addressing_mode(IndexedIndirect);
         assert_eq!(cpu.read_reference(reference), 57);
     }
 
@@ -468,7 +387,7 @@ mod tests {
         ));
         cpu.set_y(3);
 
-        let reference = cpu.indirect_indexed();
+        let reference = cpu.exec_addressing_mode(IndirectIndexed);
         assert_eq!(cpu.read_reference(reference), 57);
     }
 
@@ -481,7 +400,7 @@ mod tests {
         ));
         cpu.set_y(0);
 
-        let reference = cpu.indirect_indexed();
+        let reference = cpu.exec_addressing_mode(IndirectIndexed);
         assert_eq!(cpu.read_reference(reference), 57);
     }
 }
