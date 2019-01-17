@@ -1,8 +1,12 @@
-use crate::cartridge::Cartridge;
-use crate::mapper::Mapper;
-use num_traits::cast::FromPrimitive;
+use std::error::Error;
+use std::fmt;
 use std::io;
 use std::io::Read;
+
+use num_traits::cast::FromPrimitive;
+
+use crate::cartridge::Cartridge;
+use crate::mapper::Mapper;
 
 const PRG_ROM_SIZE_LOCATION: usize = 4;
 const CHR_ROM_SIZE_LOCATION: usize = 5;
@@ -17,6 +21,21 @@ pub enum INesReadError {
     IO(io::Error),
     UnrecognisedMapper(u8),
 }
+
+impl fmt::Display for INesReadError {
+    fn fmt<'a>(&self, f: &mut fmt::Formatter<'a>) -> fmt::Result {
+        match self {
+            INesReadError::IO(error) => {
+                fmt::Display::fmt(error, f)
+            }
+            INesReadError::UnrecognisedMapper(mapper) => {
+                write!(f, "Unrecognised mapper: {}", mapper)
+            }
+        }
+    }
+}
+
+impl Error for INesReadError {}
 
 impl From<io::Error> for INesReadError {
     fn from(error: io::Error) -> Self {
@@ -68,8 +87,9 @@ impl INes {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Cursor;
+
+    use super::*;
 
     #[test]
     fn can_read_prg_rom_data_from_ines_file() {
