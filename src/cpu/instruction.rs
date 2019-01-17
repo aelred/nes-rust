@@ -5,10 +5,10 @@ use super::addressing_modes::IncDecAddressingMode;
 use super::addressing_modes::JumpAddressingMode;
 use super::addressing_modes::LDXAddressingMode;
 use super::addressing_modes::LDYAddressingMode;
-use super::addressing_modes::STXAddressingMode;
-use super::addressing_modes::STYAddressingMode;
 use super::addressing_modes::ShiftAddressingMode;
 use super::addressing_modes::StoreAddressingMode;
+use super::addressing_modes::STXAddressingMode;
+use super::addressing_modes::STYAddressingMode;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Instruction {
@@ -417,4 +417,191 @@ pub enum Instruction {
     /// The RTI instruction is used at the end of an interrupt processing routine. It pulls the
     /// processor flags from the stack followed by the program counter.
     RTI,
+}
+
+macro_rules! def_opcodes {
+    ($($num:tt => $name:ident => $instr:ident$(($mode_cat:ident::$mode:ident))*),* $(,)*) => {
+        pub mod instructions {
+            use super::*;
+
+            $(
+                pub const $name: Instruction = Instruction::$instr$(($mode_cat::$mode))*;
+            )*
+        }
+
+        impl Instruction {
+            pub fn from_opcode(opcode: u8) -> Self {
+                use self::Instruction::*;
+
+                match opcode {
+                    $(
+                        $num => $instr$(($mode_cat::$mode))*,
+                    )*
+                    _ => panic!("Unrecognised opcode: {:#04x}", opcode)
+                }
+            }
+
+            pub fn to_opcode(self) -> u8 {
+                match self {
+                    $(
+                        Instruction::$instr $(($mode_cat::$mode))* => $num,
+                    )*
+                }
+            }
+        }
+    }
+}
+
+def_opcodes! {
+    0x00 => BRK => BRK,
+    0x01 => ORAIndexedIndirect => ORA(FlexibleAddressingMode::IndexedIndirect),
+    0x05 => ORAZeroPage => ORA(FlexibleAddressingMode::ZeroPage),
+    0x06 => ASLZeroPage => ASL(ShiftAddressingMode::ZeroPage),
+    0x08 => PHP => PHP,
+    0x09 => ORAImmediate => ORA(FlexibleAddressingMode::Immediate),
+    0x0A => ASLAccumulator => ASL(ShiftAddressingMode::Accumulator),
+    0x0D => ORAAbsolute => ORA(FlexibleAddressingMode::Absolute),
+    0x0E => ASLAbsolute => ASL(ShiftAddressingMode::Absolute),
+    0x10 => BPL => BPL,
+    0x11 => ORAIndirectIndexed => ORA(FlexibleAddressingMode::IndirectIndexed),
+    0x15 => ORAZeroPageX => ORA(FlexibleAddressingMode::ZeroPageX),
+    0x16 => ASLZeroPageX => ASL(ShiftAddressingMode::ZeroPageX),
+    0x18 => CLC => CLC,
+    0x19 => ORAAbsoluteY => ORA(FlexibleAddressingMode::AbsoluteY),
+    0x1D => ORAAbsoluteX => ORA(FlexibleAddressingMode::AbsoluteX),
+    0x1E => ASLAbsoluteX => ASL(ShiftAddressingMode::AbsoluteX),
+    0x20 => JSR => JSR,
+    0x21 => ANDIndexedIndirect => AND(FlexibleAddressingMode::IndexedIndirect),
+    0x24 => BITZeroPage => BIT(BITAddressingMode::ZeroPage),
+    0x25 => ANDZeroPage => AND(FlexibleAddressingMode::ZeroPage),
+    0x26 => ROLZeroPage => ROL(ShiftAddressingMode::ZeroPage),
+    0x28 => PLP => PLP,
+    0x29 => ANDImmediate => AND(FlexibleAddressingMode::Immediate),
+    0x2A => ROLAccumulator => ROL(ShiftAddressingMode::Accumulator),
+    0x2C => BITAbsolute => BIT(BITAddressingMode::Absolute),
+    0x2D => ANDAbsolute => AND(FlexibleAddressingMode::Absolute),
+    0x2E => ROLAbsolute => ROL(ShiftAddressingMode::Absolute),
+    0x30 => BMI => BMI,
+    0x31 => ANDIndirectIndexed => AND(FlexibleAddressingMode::IndirectIndexed),
+    0x35 => ANDZeroPageX => AND(FlexibleAddressingMode::ZeroPageX),
+    0x36 => ROLZeroPageX => ROL(ShiftAddressingMode::ZeroPageX),
+    0x38 => SEC => SEC,
+    0x39 => ANDAbsoluteY => AND(FlexibleAddressingMode::AbsoluteY),
+    0x3D => ANDAbsoluteX => AND(FlexibleAddressingMode::AbsoluteX),
+    0x3E => ROLAbsoluteX => ROL(ShiftAddressingMode::AbsoluteX),
+    0x40 => RTI => RTI,
+    0x41 => EORIndexedIndirect => EOR(FlexibleAddressingMode::IndexedIndirect),
+    0x45 => EORZeroPage => EOR(FlexibleAddressingMode::ZeroPage),
+    0x46 => LSRZeroPage => LSR(ShiftAddressingMode::ZeroPage),
+    0x48 => PHA => PHA,
+    0x49 => EORImmediate => EOR(FlexibleAddressingMode::Immediate),
+    0x4A => LSRAccumulator => LSR(ShiftAddressingMode::Accumulator),
+    0x4C => JMPAbsolute => JMP(JumpAddressingMode::Absolute),
+    0x4D => EORAbsolute => EOR(FlexibleAddressingMode::Absolute),
+    0x4E => LSRAbsolute => LSR(ShiftAddressingMode::Absolute),
+    0x50 => BVC => BVC,
+    0x51 => EORIndirectIndexed => EOR(FlexibleAddressingMode::IndirectIndexed),
+    0x55 => EORZeroPageX => EOR(FlexibleAddressingMode::ZeroPageX),
+    0x56 => LSRZeroPageX => LSR(ShiftAddressingMode::ZeroPageX),
+    0x58 => CLI => CLI,
+    0x59 => EORAbsoluteY => EOR(FlexibleAddressingMode::AbsoluteY),
+    0x5D => EORAbsoluteX => EOR(FlexibleAddressingMode::AbsoluteX),
+    0x5E => LSRAbsoluteX => LSR(ShiftAddressingMode::AbsoluteX),
+    0x60 => RTS => RTS,
+    0x61 => ADCIndexedIndirect => ADC(FlexibleAddressingMode::IndexedIndirect),
+    0x65 => ADCZeroPage => ADC(FlexibleAddressingMode::ZeroPage),
+    0x66 => RORZeroPage => ROR(ShiftAddressingMode::ZeroPage),
+    0x68 => PLA => PLA,
+    0x69 => ADCImmediate => ADC(FlexibleAddressingMode::Immediate),
+    0x6A => RORAccumulator => ROR(ShiftAddressingMode::Accumulator),
+    0x6C => JMPIndirect => JMP(JumpAddressingMode::Indirect),
+    0x6D => ADCAbsolute => ADC(FlexibleAddressingMode::Absolute),
+    0x6E => RORAbsolute => ROR(ShiftAddressingMode::Absolute),
+    0x70 => BVS => BVS,
+    0x71 => ADCIndirectIndexed => ADC(FlexibleAddressingMode::IndirectIndexed),
+    0x75 => ADCZeroPageX => ADC(FlexibleAddressingMode::ZeroPageX),
+    0x76 => RORZeroPageX => ROR(ShiftAddressingMode::ZeroPageX),
+    0x78 => SEI => SEI,
+    0x79 => ADCAbsoluteY => ADC(FlexibleAddressingMode::AbsoluteY),
+    0x7D => ADCAbsoluteX => ADC(FlexibleAddressingMode::AbsoluteX),
+    0x7E => RORAbsoluteX => ROR(ShiftAddressingMode::AbsoluteX),
+    0x81 => STAIndexedIndirect => STA(StoreAddressingMode::IndexedIndirect),
+    0x84 => STYZeroPage => STY(STYAddressingMode::ZeroPage),
+    0x85 => STAZeroPage => STA(StoreAddressingMode::ZeroPage),
+    0x86 => STXZeroPage => STX(STXAddressingMode::ZeroPage),
+    0x88 => DEY => DEY,
+    0x8A => TXA => TXA,
+    0x8C => STYAbsolute => STY(STYAddressingMode::Absolute),
+    0x8D => STAAbsolute => STA(StoreAddressingMode::Absolute),
+    0x8E => STXAbsolute => STX(STXAddressingMode::Absolute),
+    0x90 => BCC => BCC,
+    0x91 => STAIndirectIndexed => STA(StoreAddressingMode::IndirectIndexed),
+    0x94 => STYZeroPageX => STY(STYAddressingMode::ZeroPageX),
+    0x95 => STAZeroPageX => STA(StoreAddressingMode::ZeroPageX),
+    0x96 => STXZeroPageY => STX(STXAddressingMode::ZeroPageY),
+    0x98 => TYA => TYA,
+    0x99 => STAAbsoluteY => STA(StoreAddressingMode::AbsoluteY),
+    0x9A => TXS => TXS,
+    0x9D => STAAbsoluteX => STA(StoreAddressingMode::AbsoluteX),
+    0xA0 => LDYImmediate => LDY(LDYAddressingMode::Immediate),
+    0xA1 => LDAIndexedIndirect => LDA(FlexibleAddressingMode::IndexedIndirect),
+    0xA2 => LDXImmediate => LDX(LDXAddressingMode::Immediate),
+    0xA4 => LDYZeroPage => LDY(LDYAddressingMode::ZeroPage),
+    0xA5 => LDAZeroPage => LDA(FlexibleAddressingMode::ZeroPage),
+    0xA6 => LDXZeroPage => LDX(LDXAddressingMode::ZeroPage),
+    0xA8 => TAY => TAY,
+    0xA9 => LDAImmediate => LDA(FlexibleAddressingMode::Immediate),
+    0xAA => TAX => TAX,
+    0xAC => LDYAbsolute => LDY(LDYAddressingMode::Absolute),
+    0xAD => LDAAbsolute => LDA(FlexibleAddressingMode::Absolute),
+    0xAE => LDXAbsolute => LDX(LDXAddressingMode::Absolute),
+    0xB0 => BCS => BCS,
+    0xB1 => LDAIndirectIndexed => LDA(FlexibleAddressingMode::IndirectIndexed),
+    0xB4 => LDYZeroPageX => LDY(LDYAddressingMode::ZeroPageX),
+    0xB5 => LDAZeroPageX => LDA(FlexibleAddressingMode::ZeroPageX),
+    0xB6 => LDXZeroPageY => LDX(LDXAddressingMode::ZeroPageY),
+    0xB8 => CLV => CLV,
+    0xB9 => LDAAbsoluteY => LDA(FlexibleAddressingMode::AbsoluteY),
+    0xBA => TSX => TSX,
+    0xBC => LDYAbsoluteX => LDY(LDYAddressingMode::AbsoluteX),
+    0xBD => LDAAbsoluteX => LDA(FlexibleAddressingMode::AbsoluteX),
+    0xBE => LDXAbsoluteY => LDX(LDXAddressingMode::AbsoluteY),
+    0xC0 => CPYImmediate => CPY(CompareAddressingMode::Immediate),
+    0xC1 => CMPIndexedIndirect => CMP(FlexibleAddressingMode::IndexedIndirect),
+    0xC4 => CPYZeroPage => CPY(CompareAddressingMode::ZeroPage),
+    0xC5 => CMPZeroPage => CMP(FlexibleAddressingMode::ZeroPage),
+    0xC6 => DECZeroPage => DEC(IncDecAddressingMode::ZeroPage),
+    0xC8 => INY => INY,
+    0xC9 => CMPImmediate => CMP(FlexibleAddressingMode::Immediate),
+    0xCA => DEX => DEX,
+    0xCC => CPYAbsolute => CPY(CompareAddressingMode::Absolute),
+    0xCD => CMPAbsolute => CMP(FlexibleAddressingMode::Absolute),
+    0xCE => DECAbsolute => DEC(IncDecAddressingMode::Absolute),
+    0xD0 => BNE => BNE,
+    0xD1 => CMPIndirectIndexed => CMP(FlexibleAddressingMode::IndirectIndexed),
+    0xD5 => CMPZeroPageX => CMP(FlexibleAddressingMode::ZeroPageX),
+    0xD6 => DECZeroPageX => DEC(IncDecAddressingMode::ZeroPageX),
+    0xD8 => CLD => CLD,
+    0xD9 => CMPAbsoluteY => CMP(FlexibleAddressingMode::AbsoluteY),
+    0xDD => CMPAbsoluteX => CMP(FlexibleAddressingMode::AbsoluteX),
+    0xDE => DECAbsoluteX => DEC(IncDecAddressingMode::AbsoluteX),
+    0xE0 => CPXImmediate => CPX(CompareAddressingMode::Immediate),
+    0xE1 => SBCIndexedIndirect => SBC(FlexibleAddressingMode::IndexedIndirect),
+    0xE4 => CPXZeroPage => CPX(CompareAddressingMode::ZeroPage),
+    0xE5 => SBCZeroPage => SBC(FlexibleAddressingMode::ZeroPage),
+    0xE6 => INCZeroPage => INC(IncDecAddressingMode::ZeroPage),
+    0xE8 => INX => INX,
+    0xE9 => SBCImmediate => SBC(FlexibleAddressingMode::Immediate),
+    0xEA => NOP => NOP,
+    0xEC => CPXAbsolute => CPX(CompareAddressingMode::Absolute),
+    0xED => SBCAbsolute => SBC(FlexibleAddressingMode::Absolute),
+    0xEE => INCAbsolute => INC(IncDecAddressingMode::Absolute),
+    0xF0 => BEQ => BEQ,
+    0xF1 => SBCIndirectIndexed => SBC(FlexibleAddressingMode::IndirectIndexed),
+    0xF5 => SBCZeroPageX => SBC(FlexibleAddressingMode::ZeroPageX),
+    0xF6 => INCZeroPageX => INC(IncDecAddressingMode::ZeroPageX),
+    0xF8 => SED => SED,
+    0xF9 => SBCAbsoluteY => SBC(FlexibleAddressingMode::AbsoluteY),
+    0xFD => SBCAbsoluteX => SBC(FlexibleAddressingMode::AbsoluteX),
+    0xFE => INCAbsoluteX => INC(IncDecAddressingMode::AbsoluteX),
 }

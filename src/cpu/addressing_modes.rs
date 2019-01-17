@@ -1,8 +1,9 @@
-use super::Reference;
-use super::ReferenceAddressingMode;
-use super::CPU;
 use crate::address::Address;
 use crate::Memory;
+
+use super::CPU;
+use super::Reference;
+use super::ReferenceAddressingMode;
 
 #[derive(Debug, Copy, Clone)]
 pub enum FlexibleAddressingMode {
@@ -284,9 +285,10 @@ impl<M: Memory> CPU<M> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::instructions::*;
     use crate::mem;
-    use crate::OpCode::*;
+
+    use super::*;
 
     #[test]
     fn immediate_addressing_mode_fetches_given_value() {

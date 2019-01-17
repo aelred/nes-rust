@@ -1,3 +1,19 @@
+pub use crate::address::Address;
+pub use crate::cartridge::Cartridge;
+use crate::cartridge::CHR;
+use crate::cartridge::PRG;
+pub use crate::cpu::CPU;
+pub use crate::cpu::Instruction;
+pub use crate::cpu::instructions;
+pub use crate::i_nes::INes;
+pub use crate::i_nes::INesReadError;
+pub use crate::memory::ArrayMemory;
+pub use crate::memory::Memory;
+use crate::memory::NESCPUMemory;
+use crate::memory::NESPPUMemory;
+use crate::ppu::PPU;
+pub use crate::serialize::SerializeByte;
+
 mod address;
 mod cartridge;
 mod cpu;
@@ -6,22 +22,6 @@ mod mapper;
 mod memory;
 mod ppu;
 mod serialize;
-
-pub use crate::address::Address;
-pub use crate::cartridge::Cartridge;
-pub use crate::cpu::OpCode;
-pub use crate::cpu::CPU;
-pub use crate::i_nes::INes;
-pub use crate::i_nes::INesReadError;
-pub use crate::memory::ArrayMemory;
-pub use crate::memory::Memory;
-pub use crate::serialize::SerializeByte;
-
-use crate::cartridge::PRG;
-use crate::memory::NESCPUMemory;
-use crate::memory::NESPPUMemory;
-use crate::cartridge::CHR;
-use crate::ppu::PPU;
 
 pub struct NES<'a> {
     cpu: CPU<NESCPUMemory<&'a mut PRG>>,

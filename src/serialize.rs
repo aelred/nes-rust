@@ -1,4 +1,4 @@
-use crate::OpCode;
+use crate::cpu::Instruction;
 
 pub trait SerializeByte {
     fn to_byte(self) -> u8;
@@ -10,8 +10,8 @@ impl SerializeByte for u8 {
     }
 }
 
-impl SerializeByte for OpCode {
+impl SerializeByte for Instruction {
     fn to_byte(self) -> u8 {
-        self as u8
+        self.to_opcode()
     }
 }

@@ -1,14 +1,16 @@
-mod addressing_modes;
-mod instructions;
-mod opcodes;
+use std::fmt;
 
-use self::addressing_modes::ShiftAddressingMode;
-use self::instructions::Instruction;
-pub use self::opcodes::OpCode;
+use log::trace;
+
 use crate::address::Address;
 use crate::memory::Memory;
-use log::trace;
-use std::fmt;
+
+use self::addressing_modes::ShiftAddressingMode;
+pub use self::instruction::Instruction;
+pub use self::instruction::instructions;
+
+mod addressing_modes;
+mod instruction;
 
 const STACK: Address = Address::new(0x0100);
 const RESET_VECTOR: Address = Address::new(0xFFFC);
@@ -71,7 +73,7 @@ impl<M: Memory> CPU<M> {
     }
 
     pub fn run_instruction(&mut self) {
-        use self::instructions::Instruction::*;
+        use self::instruction::Instruction::*;
 
         match self.instr() {
             // Load/Store Operations
@@ -388,8 +390,7 @@ impl<M: Memory> CPU<M> {
     }
 
     fn instr(&mut self) -> Instruction {
-        let opcode: OpCode = OpCode::from_byte(self.fetch_at_program_counter());
-        let instruction = opcode.instruction();
+        let instruction = Instruction::from_opcode(self.fetch_at_program_counter());
         trace!("        {:?}", instruction);
         instruction
     }
@@ -485,10 +486,11 @@ enum Flag {
 
 #[cfg(test)]
 mod tests {
-    use super::OpCode::*;
-    use super::*;
-    use crate::mem;
     use crate::ArrayMemory;
+    use crate::mem;
+
+    use super::*;
+    use super::instructions::*;
 
     #[test]
     fn cpu_initialises_in_default_state() {
