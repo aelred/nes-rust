@@ -655,6 +655,7 @@ def_opcodes! {
     0xE8 => INX                  => INX,
     0xE9 => SBC_IMMEDIATE        => SBC(FlexibleAddressingMode::Immediate),
     0xEA => NOP                  => NOP,
+    0xEB => ADC_IMMEDIATE,
     0xEC => CPX_ABSOLUTE         => CPX(CompareAddressingMode::Absolute),
     0xED => SBC_ABSOLUTE         => SBC(FlexibleAddressingMode::Absolute),
     0xEE => INC_ABSOLUTE         => INC(IncDecAddressingMode::Absolute),
