@@ -265,6 +265,11 @@ impl<M: Memory> CPU<M> {
             SKB => {
                 self.fetch_at_program_counter();
             }
+            LAX(addressing_mode) => {
+                let value = self.fetch(addressing_mode);
+                self.set_accumulator(value);
+                self.set_x(value);
+            }
         }
     }
 

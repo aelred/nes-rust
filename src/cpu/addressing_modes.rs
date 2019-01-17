@@ -108,6 +108,15 @@ def_addressing_modes! {
         ZeroPageX,
         Absolute,
     }
+
+    LAXAddressingMode {
+        ZeroPage,
+        ZeroPageY,
+        Absolute,
+        AbsoluteY,
+        IndexedIndirect,
+        IndirectIndexed,
+    }
 }
 
 impl JumpAddressingMode {

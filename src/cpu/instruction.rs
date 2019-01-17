@@ -3,6 +3,7 @@ use super::addressing_modes::CompareAddressingMode;
 use super::addressing_modes::FlexibleAddressingMode;
 use super::addressing_modes::IncDecAddressingMode;
 use super::addressing_modes::JumpAddressingMode;
+use super::addressing_modes::LAXAddressingMode;
 use super::addressing_modes::LDXAddressingMode;
 use super::addressing_modes::LDYAddressingMode;
 use super::addressing_modes::ShiftAddressingMode;
@@ -433,6 +434,9 @@ pub enum Instruction {
     /// These unofficial opcodes just read an immediate byte and skip it, like a different address
     /// mode of NOP.
     SKB,
+
+    /// Load accumulator and X register with memory.
+    LAX(LAXAddressingMode),
 }
 
 macro_rules! def_opcodes {
@@ -581,26 +585,32 @@ def_opcodes! {
     0xA0 => LDY_IMMEDIATE        => LDY(LDYAddressingMode::Immediate),
     0xA1 => LDA_INDEXED_INDIRECT => LDA(FlexibleAddressingMode::IndexedIndirect),
     0xA2 => LDX_IMMEDIATE        => LDX(LDXAddressingMode::Immediate),
+    0xA3 => LAX_INDEXED_INDIRECT => LAX(LAXAddressingMode::IndexedIndirect),
     0xA4 => LDY_ZERO_PAGE        => LDY(LDYAddressingMode::ZeroPage),
     0xA5 => LDA_ZERO_PAGE        => LDA(FlexibleAddressingMode::ZeroPage),
     0xA6 => LDX_ZERO_PAGE        => LDX(LDXAddressingMode::ZeroPage),
+    0xA7 => LAX_ZERO_PAGE        => LAX(LAXAddressingMode::ZeroPage),
     0xA8 => TAY                  => TAY,
     0xA9 => LDA_IMMEDIATE        => LDA(FlexibleAddressingMode::Immediate),
     0xAA => TAX                  => TAX,
     0xAC => LDY_ABSOLUTE         => LDY(LDYAddressingMode::Absolute),
     0xAD => LDA_ABSOLUTE         => LDA(FlexibleAddressingMode::Absolute),
     0xAE => LDX_ABSOLUTE         => LDX(LDXAddressingMode::Absolute),
+    0xAF => LAX_ABSOLUTE         => LAX(LAXAddressingMode::Absolute),
     0xB0 => BCS                  => BCS,
     0xB1 => LDA_INDIRECT_INDEXED => LDA(FlexibleAddressingMode::IndirectIndexed),
+    0xB3 => LAX_INDIRECT_INDEXED => LAX(LAXAddressingMode::IndirectIndexed),
     0xB4 => LDY_ZERO_PAGE_X      => LDY(LDYAddressingMode::ZeroPageX),
     0xB5 => LDA_ZERO_PAGE_X      => LDA(FlexibleAddressingMode::ZeroPageX),
     0xB6 => LDX_ZERO_PAGE_Y      => LDX(LDXAddressingMode::ZeroPageY),
+    0xB7 => LAX_ZERO_PAGE_Y      => LAX(LAXAddressingMode::ZeroPageY),
     0xB8 => CLV                  => CLV,
     0xB9 => LDA_ABSOLUTE_Y       => LDA(FlexibleAddressingMode::AbsoluteY),
     0xBA => TSX                  => TSX,
     0xBC => LDY_ABSOLUTE_X       => LDY(LDYAddressingMode::AbsoluteX),
     0xBD => LDA_ABSOLUTE_X       => LDA(FlexibleAddressingMode::AbsoluteX),
     0xBE => LDX_ABSOLUTE_Y       => LDX(LDXAddressingMode::AbsoluteY),
+    0xBF => LAX_ABSOLUTE_Y       => LAX(LAXAddressingMode::AbsoluteY),
     0xC0 => CPY_IMMEDIATE        => CPY(CompareAddressingMode::Immediate),
     0xC1 => CMP_INDEXED_INDIRECT => CMP(FlexibleAddressingMode::IndexedIndirect),
     0xC2 => SKB,
