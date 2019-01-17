@@ -117,6 +117,13 @@ def_addressing_modes! {
         IndexedIndirect,
         IndirectIndexed,
     }
+
+    SAXAddressingMode {
+        ZeroPage,
+        ZeroPageY,
+        Absolute,
+        IndexedIndirect,
+    }
 }
 
 impl JumpAddressingMode {

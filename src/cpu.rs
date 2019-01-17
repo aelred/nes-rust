@@ -270,6 +270,10 @@ impl<M: Memory> CPU<M> {
                 self.set_accumulator(value);
                 self.set_x(value);
             }
+            SAX(addressing_mode) => {
+                let reference = self.fetch_ref(addressing_mode);
+                self.write_reference(reference, self.accumulator() & self.x());
+            }
         }
     }
 

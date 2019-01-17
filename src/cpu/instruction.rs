@@ -6,6 +6,7 @@ use super::addressing_modes::JumpAddressingMode;
 use super::addressing_modes::LAXAddressingMode;
 use super::addressing_modes::LDXAddressingMode;
 use super::addressing_modes::LDYAddressingMode;
+use super::addressing_modes::SAXAddressingMode;
 use super::addressing_modes::ShiftAddressingMode;
 use super::addressing_modes::StoreAddressingMode;
 use super::addressing_modes::STXAddressingMode;
@@ -437,6 +438,9 @@ pub enum Instruction {
 
     /// Load accumulator and X register with memory.
     LAX(LAXAddressingMode),
+
+    /// AND X register with accumulator and store result in memory.
+    SAX(SAXAddressingMode),
 }
 
 macro_rules! def_opcodes {
@@ -453,18 +457,22 @@ macro_rules! def_opcodes {
 
         impl Instruction {
             pub fn from_opcode(opcode: u8) -> Self {
+                use super::instructions::*;
+
                 match opcode {
                     $(
-                        $num => instructions::$name,
+                        $num => $name,
                     )*
                     _ => panic!("Unrecognised opcode: {:#04x}", opcode)
                 }
             }
 
             pub fn to_opcode(self) -> u8 {
+                use super::instructions::*;
+
                 match self {
                     $(
-                        instructions::$name => $num,
+                        $name => $num,
                     )*
                 }
             }
@@ -564,20 +572,24 @@ def_opcodes! {
     0x80 => SKB                  => SKB,
     0x81 => STA_INDEXED_INDIRECT => STA(StoreAddressingMode::IndexedIndirect),
     0x82 => SKB,
+    0x83 => SAX_INDEXED_INDIRECT => SAX(SAXAddressingMode::IndexedIndirect),
     0x84 => STY_ZERO_PAGE        => STY(STYAddressingMode::ZeroPage),
     0x85 => STA_ZERO_PAGE        => STA(StoreAddressingMode::ZeroPage),
     0x86 => STX_ZERO_PAGE        => STX(STXAddressingMode::ZeroPage),
+    0x87 => SAX_ZERO_PAGE        => SAX(SAXAddressingMode::ZeroPage),
     0x88 => DEY                  => DEY,
     0x89 => SKB,
     0x8A => TXA                  => TXA,
     0x8C => STY_ABSOLUTE         => STY(STYAddressingMode::Absolute),
     0x8D => STA_ABSOLUTE         => STA(StoreAddressingMode::Absolute),
     0x8E => STX_ABSOLUTE         => STX(STXAddressingMode::Absolute),
+    0x8F => SAX_ABSOLUTE         => SAX(SAXAddressingMode::Absolute),
     0x90 => BCC                  => BCC,
     0x91 => STA_INDIRECT_INDEXED => STA(StoreAddressingMode::IndirectIndexed),
     0x94 => STY_ZERO_PAGE_X      => STY(STYAddressingMode::ZeroPageX),
     0x95 => STA_ZERO_PAGE_X      => STA(StoreAddressingMode::ZeroPageX),
     0x96 => STX_ZERO_PAGE_Y      => STX(STXAddressingMode::ZeroPageY),
+    0x97 => SAX_ZERO_PAGE_Y      => SAX(SAXAddressingMode::ZeroPageY),
     0x98 => TYA                  => TYA,
     0x99 => STA_ABSOLUTE_Y       => STA(StoreAddressingMode::AbsoluteY),
     0x9A => TXS                  => TXS,
