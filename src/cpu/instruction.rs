@@ -420,22 +420,20 @@ pub enum Instruction {
 }
 
 macro_rules! def_opcodes {
-    ($($num:tt => $name:ident => $instr:ident$(($mode_cat:ident::$mode:ident))*),* $(,)*) => {
+    ($($num:tt => $name:ident => $instr:ident$(($mode:path))*),* $(,)*) => {
         pub mod instructions {
             use super::*;
 
             $(
-                pub const $name: Instruction = Instruction::$instr$(($mode_cat::$mode))*;
+                pub const $name: Instruction = Instruction::$instr$(($mode))*;
             )*
         }
 
         impl Instruction {
             pub fn from_opcode(opcode: u8) -> Self {
-                use self::Instruction::*;
-
                 match opcode {
                     $(
-                        $num => $instr$(($mode_cat::$mode))*,
+                        $num => Instruction::$instr$(($mode))*,
                     )*
                     _ => panic!("Unrecognised opcode: {:#04x}", opcode)
                 }
@@ -444,7 +442,7 @@ macro_rules! def_opcodes {
             pub fn to_opcode(self) -> u8 {
                 match self {
                     $(
-                        Instruction::$instr $(($mode_cat::$mode))* => $num,
+                        Instruction::$instr $(($mode))* => $num,
                     )*
                 }
             }
