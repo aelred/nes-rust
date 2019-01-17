@@ -44,7 +44,7 @@ impl<M: Memory> PPU<M> {
 
         let address = BACKGROUND_PALETTES + color_index;
 
-        self.cycle_count += 1;
+        self.cycle_count = self.cycle_count.wrapping_add(1);
 
         if self.cycle_count % 8 == 0 {
             let coarse_x = self.horizontal_scroll;
@@ -73,7 +73,7 @@ impl<M: Memory> PPU<M> {
             self.palette_select0 |= u16::from(palette0) << 8;
             self.palette_select1 |= u16::from(palette1) << 8;
 
-            self.horizontal_scroll += 1;
+            self.horizontal_scroll = self.horizontal_scroll.wrapping_add(1);
         }
 
         Color(self.memory.read(address))
