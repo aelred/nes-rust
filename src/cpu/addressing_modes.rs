@@ -135,6 +135,7 @@ impl JumpAddressingMode {
     }
 }
 
+#[derive(Copy, Clone)]
 enum AddressingMode {
     Accumulator,
     Immediate,
@@ -175,7 +176,7 @@ impl<M: Memory> CPU<M> {
             AddressingMode::Absolute => {
                 let address = self.absolute_address();
                 Reference::Address(address)
-            },
+            }
             AddressingMode::AbsoluteX => {
                 let address = self.absolute_address() + u16::from(self.x());
                 Reference::Address(address)
@@ -187,7 +188,7 @@ impl<M: Memory> CPU<M> {
             AddressingMode::Indirect => {
                 let address = self.indirect_address();
                 Reference::Address(address)
-            },
+            }
             AddressingMode::IndexedIndirect => {
                 let offset = self.fetch_at_program_counter().wrapping_add(self.x());
                 let address = self.read_zero_page_address(offset);

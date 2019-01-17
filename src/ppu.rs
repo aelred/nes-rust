@@ -30,7 +30,7 @@ impl<M: Memory> PPU<M> {
         }
     }
 
-    fn tick(&mut self) -> Color {
+    pub fn tick(&mut self) -> Color {
         let bit0 = self.tile_pattern0 & 1;
         let bit1 = (self.tile_pattern1 & 1) << 1;
         let bit2 = (self.palette_select0 & 1) << 2;
@@ -53,23 +53,25 @@ impl<M: Memory> PPU<M> {
             let tile_index = coarse_x + coarse_y as u8 * 32;
             let attribute_index = ((coarse_y / 4) & 0b111) << 3 | (coarse_x / 4) & 0b111;
 
-            let pattern_index = self.memory.read(NAMETABLES + tile_index as u16);
-            let attribute_byte = self.memory.read(ATTRIBUTE_TABLE + attribute_index as u16);
-            let attribute_bit_index0 = ((tile_index >> 1) & 0b1 + (tile_index >> 5) & 0b10) * 2;
+            let pattern_index = self.memory.read(NAMETABLES + u16::from(tile_index));
+            let attribute_byte = self
+                .memory
+                .read(ATTRIBUTE_TABLE + u16::from(attribute_index));
+            let attribute_bit_index0 = ((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) * 2;
             let attribute_bit_index1 = attribute_bit_index0 + 1;
 
             let pattern_address0 =
-                Address::new((pattern_index as u16) << 4) + self.vertical_scroll % 8;
+                Address::new(u16::from(pattern_index) << 4) + self.vertical_scroll % 8;
             let pattern_address1 = pattern_address0 + 8;
 
-            self.tile_pattern0 |= (self.memory.read(pattern_address0) as u16) << 8;
-            self.tile_pattern1 |= (self.memory.read(pattern_address1) as u16) << 8;
+            self.tile_pattern0 |= u16::from(self.memory.read(pattern_address0)) << 8;
+            self.tile_pattern1 |= u16::from(self.memory.read(pattern_address1)) << 8;
 
             let palette0 = Self::set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
             let palette1 = Self::set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
 
-            self.palette_select0 |= (palette0 as u16) << 8;
-            self.palette_select1 |= (palette1 as u16) << 8;
+            self.palette_select0 |= u16::from(palette0) << 8;
+            self.palette_select1 |= u16::from(palette1) << 8;
 
             self.horizontal_scroll += 1;
         }
@@ -83,15 +85,15 @@ impl<M: Memory> PPU<M> {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct Color(u8);
+pub struct Color(u8);
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::mem;
-    use crate::memory::Memory;
     use crate::Address;
     use crate::ArrayMemory;
+    use crate::mem;
+
+    use super::*;
 
     #[test]
     fn each_tick_produces_a_color() {
@@ -102,7 +104,7 @@ mod tests {
 
     #[test]
     fn color_is_read_using_background_tile_bitmap_and_palette() {
-        let mut memory = mem! {
+        let memory = mem! {
             0x3f00 => {
                 0xa1, 0xa2, 0xa3, 0xa4,
                 0xa5, 0xa6, 0xa7, 0xa8,

@@ -5,7 +5,6 @@ use log::trace;
 use crate::address::Address;
 use crate::memory::Memory;
 
-use self::addressing_modes::ShiftAddressingMode;
 pub use self::instruction::Instruction;
 pub use self::instruction::instructions;
 
@@ -135,7 +134,7 @@ impl<M: Memory> CPU<M> {
                 let mut status = self.status;
                 status.set(Flag::Break);
                 self.push_stack(status.0);
-            },
+            }
 
             // Logical
             AND(addressing_mode) => {
@@ -171,15 +170,15 @@ impl<M: Memory> CPU<M> {
             CMP(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
                 self.compare(self.accumulator(), value);
-            },
+            }
             CPX(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
                 self.compare(self.x(), value);
-            },
+            }
             CPY(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
                 self.compare(self.y(), value)
-            },
+            }
 
             // Increments & Decrements
             INC(addressing_mode) => {
@@ -199,11 +198,11 @@ impl<M: Memory> CPU<M> {
             ASL(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.asl(reference)
-            },
+            }
             LSR(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.lsr(reference);
-            },
+            }
             ROL(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.rol(reference);
