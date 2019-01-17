@@ -131,7 +131,11 @@ impl<M: Memory> CPU<M> {
                 self.status = Status(self.pull_stack());
             }
             PHA => self.push_stack(self.accumulator()),
-            PHP => self.push_stack(self.status.0),
+            PHP => {
+                let mut status = self.status;
+                status.set(Flag::Break);
+                self.push_stack(status.0);
+            },
 
             // Logical
             AND(addressing_mode) => {
@@ -253,8 +257,6 @@ impl<M: Memory> CPU<M> {
 
             // System Functions
             BRK => {
-                self.status.set(Flag::Break);
-
                 let addr = self.read_address(INTERRUPT_VECTOR);
 
                 // For some reason the spec says the pointer must be to the last byte of the BRK
@@ -263,7 +265,10 @@ impl<M: Memory> CPU<M> {
 
                 self.push_stack(data.higher());
                 self.push_stack(data.lower());
-                self.push_stack(self.status.0);
+
+                let mut status = self.status;
+                status.set(Flag::Break);
+                self.push_stack(status.0);
 
                 *self.program_counter_mut() = addr;
             }
@@ -397,7 +402,7 @@ impl<M: Memory> CPU<M> {
         self.set_reference(reference, value);
     }
 
-    fn program_counter(&self) -> Address {
+    pub fn program_counter(&self) -> Address {
         self.program_counter
     }
 
@@ -559,7 +564,7 @@ impl Into<u8> for Status {
 enum Flag {
     Negative = 0b1000_0000,
     Overflow = 0b0100_0000,
-    Break = 0b0001_0000,
+    Break = 0b0011_0000,
     Decimal = 0b0000_1000,
     InterruptDisable = 0b0000_0100,
     Zero = 0b0000_0010,
@@ -1370,13 +1375,13 @@ mod tests {
     }
 
     #[test]
-    fn instr_php_writes_status_to_stack_pointer() {
+    fn instr_php_writes_status_to_stack_pointer_with_break_always_set() {
         let cpu = run_instr(mem!(PHP), |cpu| {
-            cpu.status = Status(142);
+            cpu.status = Status(0b1100_0101);
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.get(STACK + 6), 142);
+        assert_eq!(cpu.get(STACK + 6), 0b1111_0101);
     }
 
     #[test]
@@ -1665,16 +1670,16 @@ mod tests {
     }
 
     #[test]
-    fn instr_brk_writes_program_counter_and_status_to_stack_pointer() {
+    fn instr_brk_writes_program_counter_and_status_with_break_flag_set_to_stack_pointer() {
         let cpu = run_instr(mem!(0x1234 => { BRK }), |cpu| {
             *cpu.program_counter_mut() = Address::new(0x1234);
-            cpu.status = Status(0x56);
+            cpu.status = Status(0b1001_1000);
             cpu.stack_pointer = 6;
         });
 
         assert_eq!(cpu.get(STACK + 6), 0x12);
         assert_eq!(cpu.get(STACK + 5), 0x34);
-        assert_eq!(cpu.get(STACK + 4), 0x56);
+        assert_eq!(cpu.get(STACK + 4), 0b1011_1000);
     }
 
     #[test]
