@@ -164,9 +164,18 @@ impl<M: Memory> CPU<M> {
                 let value = !self.fetch(addressing_mode);
                 self.add_to_accumulator(value);
             }
-            CMP(addressing_mode) => self.compare(self.accumulator(), addressing_mode),
-            CPX(addressing_mode) => self.compare(self.x(), addressing_mode),
-            CPY(addressing_mode) => self.compare(self.y(), addressing_mode),
+            CMP(addressing_mode) => {
+                let value = self.fetch(addressing_mode);
+                self.compare(self.accumulator(), value);
+            },
+            CPX(addressing_mode) => {
+                let value = self.fetch(addressing_mode);
+                self.compare(self.x(), value);
+            },
+            CPY(addressing_mode) => {
+                let value = self.fetch(addressing_mode);
+                self.compare(self.y(), value)
+            },
 
             // Increments & Decrements
             INC(addressing_mode) => {
@@ -274,6 +283,11 @@ impl<M: Memory> CPU<M> {
                 let reference = self.fetch_ref(addressing_mode);
                 self.write_reference(reference, self.accumulator() & self.x());
             }
+            DCP(addressing_mode) => {
+                let reference = self.fetch_ref(addressing_mode);
+                self.decrement(reference);
+                self.compare(self.accumulator(), self.read_reference(reference));
+            }
         }
     }
 
@@ -347,8 +361,7 @@ impl<M: Memory> CPU<M> {
         self.y
     }
 
-    fn compare<T: ReferenceAddressingMode>(&mut self, register: u8, addressing_mode: T) {
-        let value = self.fetch(addressing_mode);
+    fn compare(&mut self, register: u8, value: u8) {
         let (result, carry) = register.overflowing_sub(value);
         self.status.set_to(Flag::Carry, !carry);
         self.status.set_flags(result);

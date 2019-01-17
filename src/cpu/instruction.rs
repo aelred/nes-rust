@@ -441,6 +441,11 @@ pub enum Instruction {
 
     /// AND X register with accumulator and store result in memory.
     SAX(SAXAddressingMode),
+
+    /// Equivalent to DEC value then CMP value, except supporting more addressing modes. LDA #$FF
+    /// followed by DCP can be used to check if the decrement underflows, which is useful for
+    /// multi-byte decrements.
+    DCP(StoreAddressingMode),
 }
 
 macro_rules! def_opcodes {
@@ -470,6 +475,9 @@ macro_rules! def_opcodes {
             pub fn to_opcode(self) -> u8 {
                 use super::instructions::*;
 
+                // Some instructions have multiple opcodes associated.
+                // We only return the first (lowest) one.
+                #[allow(unreachable_patterns)]
                 match self {
                     $(
                         $name => $num,
@@ -626,26 +634,33 @@ def_opcodes! {
     0xC0 => CPY_IMMEDIATE        => CPY(CompareAddressingMode::Immediate),
     0xC1 => CMP_INDEXED_INDIRECT => CMP(FlexibleAddressingMode::IndexedIndirect),
     0xC2 => SKB,
+    0xC3 => DCP_INDEXED_INDIRECT => DCP(StoreAddressingMode::IndexedIndirect),
     0xC4 => CPY_ZERO_PAGE        => CPY(CompareAddressingMode::ZeroPage),
     0xC5 => CMP_ZERO_PAGE        => CMP(FlexibleAddressingMode::ZeroPage),
     0xC6 => DEC_ZERO_PAGE        => DEC(IncDecAddressingMode::ZeroPage),
+    0xC7 => DCP_ZERO_PAGE        => DCP(StoreAddressingMode::ZeroPage),
     0xC8 => INY                  => INY,
     0xC9 => CMP_IMMEDIATE        => CMP(FlexibleAddressingMode::Immediate),
     0xCA => DEX                  => DEX,
     0xCC => CPY_ABSOLUTE         => CPY(CompareAddressingMode::Absolute),
     0xCD => CMP_ABSOLUTE         => CMP(FlexibleAddressingMode::Absolute),
     0xCE => DEC_ABSOLUTE         => DEC(IncDecAddressingMode::Absolute),
+    0xCF => DCP_ABSOLUTE         => DCP(StoreAddressingMode::Absolute),
     0xD0 => BNE                  => BNE,
     0xD1 => CMP_INDIRECT_INDEXED => CMP(FlexibleAddressingMode::IndirectIndexed),
+    0xD3 => DCP_INDIRECT_INDEXED => DCP(StoreAddressingMode::IndirectIndexed),
     0xD4 => IGN_ZERO_PAGE_X,
     0xD5 => CMP_ZERO_PAGE_X      => CMP(FlexibleAddressingMode::ZeroPageX),
     0xD6 => DEC_ZERO_PAGE_X      => DEC(IncDecAddressingMode::ZeroPageX),
+    0xD7 => DCP_ZERO_PAGE_X      => DCP(StoreAddressingMode::ZeroPageX),
     0xD8 => CLD                  => CLD,
     0xD9 => CMP_ABSOLUTE_Y       => CMP(FlexibleAddressingMode::AbsoluteY),
     0xDA => NOP,
+    0xDB => DCP_ABSOLUTE_Y       => DCP(StoreAddressingMode::AbsoluteY),
     0xDC => IGN_ABSOLUTE_X,
     0xDD => CMP_ABSOLUTE_X       => CMP(FlexibleAddressingMode::AbsoluteX),
     0xDE => DEC_ABSOLUTE_X       => DEC(IncDecAddressingMode::AbsoluteX),
+    0xDF => DCP_ABSOLUTE_X       => DCP(StoreAddressingMode::AbsoluteX),
     0xE0 => CPX_IMMEDIATE        => CPX(CompareAddressingMode::Immediate),
     0xE1 => SBC_INDEXED_INDIRECT => SBC(FlexibleAddressingMode::IndexedIndirect),
     0xE2 => SKB,
