@@ -447,6 +447,11 @@ pub enum Instruction {
     ///
     /// Equivalent to DEC value then CMP value, except supporting more addressing modes.
     DCP(StoreAddressingMode),
+
+    /// Increment Memory And Subtract With Carry
+    ///
+    /// Equivalent to INC value then SBC value, except supporting more addressing modes.
+    ISC(StoreAddressingMode),
 }
 
 macro_rules! def_opcodes {
@@ -665,9 +670,11 @@ def_opcodes! {
     0xE0 => CPX_IMMEDIATE        => CPX(CompareAddressingMode::Immediate),
     0xE1 => SBC_INDEXED_INDIRECT => SBC(FlexibleAddressingMode::IndexedIndirect),
     0xE2 => SKB,
+    0xE3 => ISC_INDEXED_INDIRECT => ISC(StoreAddressingMode::IndexedIndirect),
     0xE4 => CPX_ZERO_PAGE        => CPX(CompareAddressingMode::ZeroPage),
     0xE5 => SBC_ZERO_PAGE        => SBC(FlexibleAddressingMode::ZeroPage),
     0xE6 => INC_ZERO_PAGE        => INC(IncDecAddressingMode::ZeroPage),
+    0xE7 => ISC_ZERO_PAGE        => ISC(StoreAddressingMode::ZeroPage),
     0xE8 => INX                  => INX,
     0xE9 => SBC_IMMEDIATE        => SBC(FlexibleAddressingMode::Immediate),
     0xEA => NOP                  => NOP,
@@ -675,15 +682,20 @@ def_opcodes! {
     0xEC => CPX_ABSOLUTE         => CPX(CompareAddressingMode::Absolute),
     0xED => SBC_ABSOLUTE         => SBC(FlexibleAddressingMode::Absolute),
     0xEE => INC_ABSOLUTE         => INC(IncDecAddressingMode::Absolute),
+    0xEF => ISC_ABSOLUTE         => ISC(StoreAddressingMode::Absolute),
     0xF0 => BEQ                  => BEQ,
     0xF1 => SBC_INDIRECT_INDEXED => SBC(FlexibleAddressingMode::IndirectIndexed),
+    0xF3 => ISC_INDIRECT_INDEXED => ISC(StoreAddressingMode::IndirectIndexed),
     0xF4 => IGN_ZERO_PAGE_X,
     0xF5 => SBC_ZERO_PAGE_X      => SBC(FlexibleAddressingMode::ZeroPageX),
     0xF6 => INC_ZERO_PAGE_X      => INC(IncDecAddressingMode::ZeroPageX),
+    0xF7 => ISC_ZERO_PAGE_X      => ISC(StoreAddressingMode::ZeroPageX),
     0xF8 => SED                  => SED,
     0xF9 => SBC_ABSOLUTE_Y       => SBC(FlexibleAddressingMode::AbsoluteY),
     0xFA => NOP,
+    0xFB => ISC_ABSOLUTE_Y       => ISC(StoreAddressingMode::AbsoluteY),
     0xFC => IGN_ABSOLUTE_X,
     0xFD => SBC_ABSOLUTE_X       => SBC(FlexibleAddressingMode::AbsoluteX),
     0xFE => INC_ABSOLUTE_X       => INC(IncDecAddressingMode::AbsoluteX),
+    0xFF => ISC_ABSOLUTE_X       => ISC(StoreAddressingMode::AbsoluteX),
 }

@@ -161,8 +161,8 @@ impl<M: Memory> CPU<M> {
                 self.add_to_accumulator(value);
             }
             SBC(addressing_mode) => {
-                let value = !self.fetch(addressing_mode);
-                self.add_to_accumulator(value);
+                let value = self.fetch(addressing_mode);
+                self.sub_from_accumulator(value);
             }
             CMP(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
@@ -288,7 +288,16 @@ impl<M: Memory> CPU<M> {
                 self.decrement(reference);
                 self.compare(self.accumulator(), self.read_reference(reference));
             }
+            ISC(addressing_mode) => {
+                let reference = self.fetch_ref(addressing_mode);
+                self.increment(reference);
+                self.sub_from_accumulator(self.read_reference(reference));
+            }
         }
+    }
+
+    fn sub_from_accumulator(&mut self, value: u8) {
+        self.add_to_accumulator(!value);
     }
 
     fn add_to_accumulator(&mut self, value: u8) {
