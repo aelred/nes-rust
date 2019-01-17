@@ -21,13 +21,15 @@ fn nestest() {
     nes.set_program_counter(Address::new(0xc000));
 
     loop {
-        let byte0 = nes.read_cpu(Address::new(0x02));
-        let byte1 = nes.read_cpu(Address::new(0x03));
+        if nes.program_counter() == Address::new(0xc66e) {
+            let byte0 = nes.read_cpu(Address::new(0x02));
+            let byte1 = nes.read_cpu(Address::new(0x03));
 
-        match &[byte0, byte1] {
-            &[0, 0] => {}
-            b"OK" => break,
-            _ => panic!("Failed, error code: {}{}", byte0, byte1),
+            if (byte0, byte1) == (0, 0) {
+                break;
+            } else {
+                panic!("Failed, error code: 0x{:02x}{:02x}", byte0, byte1)
+            }
         }
 
         nes.tick();
