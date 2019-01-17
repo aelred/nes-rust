@@ -407,6 +407,18 @@ mod tests {
     }
 
     #[test]
+    fn indirect_addressing_mode_wraps_at_end_of_page() {
+        let mut cpu = CPU::with_memory(mem!(
+            0 => { 0xff, 0x04 }
+            0x4ff => { 0x34 }
+            0x400 => { 0x12 }
+        ));
+
+        let address = cpu.indirect_address();
+        assert_eq!(address, Address::new(0x1234));
+    }
+
+    #[test]
     fn indexed_indirect_addressing_mode_fetches_address_at_given_zero_page_address_offset_by_x() {
         let mut cpu = CPU::with_memory(mem!(
             0 => { 0x32 }

@@ -26,6 +26,10 @@ impl Address {
     pub fn lower(self) -> u8 {
         self.0 as u8
     }
+
+    pub fn incr_lower(self) -> Self {
+        Address::from_bytes(self.higher(), self.lower().wrapping_add(1))
+    }
 }
 
 impl fmt::Debug for Address {

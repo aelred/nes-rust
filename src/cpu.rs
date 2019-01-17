@@ -54,7 +54,7 @@ impl<M: Memory> CPU<M> {
 
     fn read_address(&self, address: Address) -> Address {
         let lower = self.read(address);
-        let higher = self.read(address + 1u16);
+        let higher = self.read(address.incr_lower());
         Address::from_bytes(higher, lower)
     }
 
