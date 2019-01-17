@@ -429,6 +429,10 @@ pub enum Instruction {
     /// Sometimes called TOP (triple-byte no-op), SKW (skip word), DOP (double-byte no-op), or SKB
     /// (skip byte).
     IGN(IncDecAddressingMode),
+
+    /// These unofficial opcodes just read an immediate byte and skip it, like a different address
+    /// mode of NOP.
+    SKB,
 }
 
 macro_rules! def_opcodes {
@@ -553,11 +557,14 @@ def_opcodes! {
     0x7C => IGN_ABSOLUTE_X,
     0x7D => ADC_ABSOLUTE_X       => ADC(FlexibleAddressingMode::AbsoluteX),
     0x7E => ROR_ABSOLUTE_X       => ROR(ShiftAddressingMode::AbsoluteX),
+    0x80 => SKB                  => SKB,
     0x81 => STA_INDEXED_INDIRECT => STA(StoreAddressingMode::IndexedIndirect),
+    0x82 => SKB,
     0x84 => STY_ZERO_PAGE        => STY(STYAddressingMode::ZeroPage),
     0x85 => STA_ZERO_PAGE        => STA(StoreAddressingMode::ZeroPage),
     0x86 => STX_ZERO_PAGE        => STX(STXAddressingMode::ZeroPage),
     0x88 => DEY                  => DEY,
+    0x89 => SKB,
     0x8A => TXA                  => TXA,
     0x8C => STY_ABSOLUTE         => STY(STYAddressingMode::Absolute),
     0x8D => STA_ABSOLUTE         => STA(StoreAddressingMode::Absolute),
@@ -596,6 +603,7 @@ def_opcodes! {
     0xBE => LDX_ABSOLUTE_Y       => LDX(LDXAddressingMode::AbsoluteY),
     0xC0 => CPY_IMMEDIATE        => CPY(CompareAddressingMode::Immediate),
     0xC1 => CMP_INDEXED_INDIRECT => CMP(FlexibleAddressingMode::IndexedIndirect),
+    0xC2 => SKB,
     0xC4 => CPY_ZERO_PAGE        => CPY(CompareAddressingMode::ZeroPage),
     0xC5 => CMP_ZERO_PAGE        => CMP(FlexibleAddressingMode::ZeroPage),
     0xC6 => DEC_ZERO_PAGE        => DEC(IncDecAddressingMode::ZeroPage),
@@ -618,6 +626,7 @@ def_opcodes! {
     0xDE => DEC_ABSOLUTE_X       => DEC(IncDecAddressingMode::AbsoluteX),
     0xE0 => CPX_IMMEDIATE        => CPX(CompareAddressingMode::Immediate),
     0xE1 => SBC_INDEXED_INDIRECT => SBC(FlexibleAddressingMode::IndexedIndirect),
+    0xE2 => SKB,
     0xE4 => CPX_ZERO_PAGE        => CPX(CompareAddressingMode::ZeroPage),
     0xE5 => SBC_ZERO_PAGE        => SBC(FlexibleAddressingMode::ZeroPage),
     0xE6 => INC_ZERO_PAGE        => INC(IncDecAddressingMode::ZeroPage),

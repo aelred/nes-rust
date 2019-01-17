@@ -262,6 +262,9 @@ impl<M: Memory> CPU<M> {
             IGN(addressing_mode) => {
                 self.fetch_ref(addressing_mode);
             }
+            SKB => {
+                self.fetch_at_program_counter();
+            }
         }
     }
 
