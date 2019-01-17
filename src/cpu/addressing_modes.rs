@@ -5,7 +5,7 @@ use super::CPU;
 use super::Reference;
 use super::ReferenceAddressingMode;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum FlexibleAddressingMode {
     Immediate,
     ZeroPage,
@@ -32,7 +32,7 @@ impl ReferenceAddressingMode for FlexibleAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum StoreAddressingMode {
     ZeroPage,
     ZeroPageX,
@@ -57,7 +57,7 @@ impl ReferenceAddressingMode for StoreAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ShiftAddressingMode {
     Accumulator,
     ZeroPage,
@@ -78,7 +78,7 @@ impl ReferenceAddressingMode for ShiftAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum BITAddressingMode {
     ZeroPage,
     Absolute,
@@ -93,7 +93,7 @@ impl ReferenceAddressingMode for BITAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CompareAddressingMode {
     Immediate,
     ZeroPage,
@@ -110,7 +110,7 @@ impl ReferenceAddressingMode for CompareAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum IncDecAddressingMode {
     ZeroPage,
     ZeroPageX,
@@ -129,7 +129,7 @@ impl ReferenceAddressingMode for IncDecAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum JumpAddressingMode {
     Absolute,
     Indirect,
@@ -144,7 +144,7 @@ impl JumpAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum LDXAddressingMode {
     Immediate,
     ZeroPage,
@@ -165,7 +165,7 @@ impl ReferenceAddressingMode for LDXAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum LDYAddressingMode {
     Immediate,
     ZeroPage,
@@ -186,7 +186,7 @@ impl ReferenceAddressingMode for LDYAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum STXAddressingMode {
     ZeroPage,
     ZeroPageY,
@@ -203,7 +203,7 @@ impl ReferenceAddressingMode for STXAddressingMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum STYAddressingMode {
     ZeroPage,
     ZeroPageX,

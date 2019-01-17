@@ -10,7 +10,7 @@ use super::addressing_modes::StoreAddressingMode;
 use super::addressing_modes::STXAddressingMode;
 use super::addressing_modes::STYAddressingMode;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Instruction {
     // Load / Store Operations
     /// Load Accumulator
@@ -420,12 +420,14 @@ pub enum Instruction {
 }
 
 macro_rules! def_opcodes {
-    ($($num:tt => $name:ident => $instr:ident$(($mode:path))*),* $(,)*) => {
+    ($($num:tt => $name:ident $(=> $instr:ident$(($mode:path))*)*),* $(,)*) => {
         pub mod instructions {
             use super::*;
 
             $(
-                pub const $name: Instruction = Instruction::$instr$(($mode))*;
+                $(
+                    pub const $name: Instruction = Instruction::$instr$(($mode))*;
+                )*
             )*
         }
 
@@ -433,7 +435,7 @@ macro_rules! def_opcodes {
             pub fn from_opcode(opcode: u8) -> Self {
                 match opcode {
                     $(
-                        $num => Instruction::$instr$(($mode))*,
+                        $num => instructions::$name,
                     )*
                     _ => panic!("Unrecognised opcode: {:#04x}", opcode)
                 }
@@ -442,7 +444,7 @@ macro_rules! def_opcodes {
             pub fn to_opcode(self) -> u8 {
                 match self {
                     $(
-                        Instruction::$instr $(($mode))* => $num,
+                        instructions::$name => $num,
                     )*
                 }
             }
