@@ -467,6 +467,11 @@ pub enum Instruction {
     ///
     /// Equivalent to LSR value then EOR value, except supporting more addressing modes.
     SRE(StoreAddressingMode),
+
+    /// Rotate Right And Add With Carry
+    ///
+    /// Equivalent to ROR value then ADC value, except supporting more addressing modes.
+    RRA(StoreAddressingMode),
 }
 
 macro_rules! def_opcodes {
@@ -599,26 +604,33 @@ def_opcodes! {
     0x5F => SRE_ABSOLUTE_X       => SRE(StoreAddressingMode::AbsoluteX),
     0x60 => RTS                  => RTS,
     0x61 => ADC_INDEXED_INDIRECT => ADC(FlexibleAddressingMode::IndexedIndirect),
+    0x63 => RRA_INDEXED_INDIRECT => RRA(StoreAddressingMode::IndexedIndirect),
     0x64 => IGN_ZERO_PAGE,
     0x65 => ADC_ZERO_PAGE        => ADC(FlexibleAddressingMode::ZeroPage),
     0x66 => ROR_ZERO_PAGE        => ROR(ShiftAddressingMode::ZeroPage),
+    0x67 => RRA_ZERO_PAGE        => RRA(StoreAddressingMode::ZeroPage),
     0x68 => PLA                  => PLA,
     0x69 => ADC_IMMEDIATE        => ADC(FlexibleAddressingMode::Immediate),
     0x6A => ROR_ACCUMULATOR      => ROR(ShiftAddressingMode::Accumulator),
     0x6C => JMP_INDIRECT         => JMP(JumpAddressingMode::Indirect),
     0x6D => ADC_ABSOLUTE         => ADC(FlexibleAddressingMode::Absolute),
     0x6E => ROR_ABSOLUTE         => ROR(ShiftAddressingMode::Absolute),
+    0x6F => RRA_ABSOLUTE         => RRA(StoreAddressingMode::Absolute),
     0x70 => BVS                  => BVS,
     0x71 => ADC_INDIRECT_INDEXED => ADC(FlexibleAddressingMode::IndirectIndexed),
+    0x73 => RRA_INDIRECT_INDEXED => RRA(StoreAddressingMode::IndirectIndexed),
     0x74 => IGN_ZERO_PAGE_X,
     0x75 => ADC_ZERO_PAGE_X      => ADC(FlexibleAddressingMode::ZeroPageX),
     0x76 => ROR_ZERO_PAGE_X      => ROR(ShiftAddressingMode::ZeroPageX),
+    0x77 => RRA_ZERO_PAGE_X      => RRA(StoreAddressingMode::ZeroPageX),
     0x78 => SEI                  => SEI,
     0x79 => ADC_ABSOLUTE_Y       => ADC(FlexibleAddressingMode::AbsoluteY),
     0x7A => NOP,
+    0x7B => RRA_ABSOLUTE_Y       => RRA(StoreAddressingMode::AbsoluteY),
     0x7C => IGN_ABSOLUTE_X,
     0x7D => ADC_ABSOLUTE_X       => ADC(FlexibleAddressingMode::AbsoluteX),
     0x7E => ROR_ABSOLUTE_X       => ROR(ShiftAddressingMode::AbsoluteX),
+    0x7F => RRA_ABSOLUTE_X       => RRA(StoreAddressingMode::AbsoluteX),
     0x80 => SKB                  => SKB,
     0x81 => STA_INDEXED_INDIRECT => STA(StoreAddressingMode::IndexedIndirect),
     0x82 => SKB,

@@ -206,7 +206,7 @@ impl<M: Memory> CPU<M> {
             }
             ROR(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
-                self.shift(reference, 0, |val, carry| val >> 1 | carry << 7);
+                self.ror(reference);
             }
 
             // Jumps & Calls
@@ -316,6 +316,11 @@ impl<M: Memory> CPU<M> {
                 self.lsr(reference);
                 self.set_accumulator(self.accumulator() ^ self.read_reference(reference));
             }
+            RRA(addressing_mode) => {
+                let reference = self.fetch_ref(addressing_mode);
+                self.ror(reference);
+                self.add_to_accumulator(self.read_reference(reference));
+            }
         }
     }
 
@@ -329,6 +334,10 @@ impl<M: Memory> CPU<M> {
 
     fn rol(&mut self, reference: Reference) {
         self.shift(reference, 7, |val, carry| val << 1 | carry);
+    }
+
+    fn ror(&mut self, reference: Reference) {
+        self.shift(reference, 0, |val, carry| val >> 1 | carry << 7);
     }
 
     fn sub_from_accumulator(&mut self, value: u8) {
