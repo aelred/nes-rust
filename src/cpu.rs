@@ -192,13 +192,21 @@ impl<M: Memory> CPU<M> {
             DEY => self.decrement(Reference::Y),
 
             // Shifts
-            ASL(addressing_mode) => self.shift(addressing_mode, 7, |val, _| val << 1),
-            LSR(addressing_mode) => self.shift(addressing_mode, 0, |val, _| val >> 1),
+            ASL(addressing_mode) => {
+                let reference = self.fetch_ref(addressing_mode);
+                self.asl(reference)
+            },
+            LSR(addressing_mode) => {
+                let reference = self.fetch_ref(addressing_mode);
+                self.shift(reference, 0, |val, _| val >> 1)
+            },
             ROL(addressing_mode) => {
-                self.shift(addressing_mode, 7, |val, carry| val << 1 | carry);
+                let reference = self.fetch_ref(addressing_mode);
+                self.shift(reference, 7, |val, carry| val << 1 | carry);
             }
             ROR(addressing_mode) => {
-                self.shift(addressing_mode, 0, |val, carry| val >> 1 | carry << 7);
+                let reference = self.fetch_ref(addressing_mode);
+                self.shift(reference, 0, |val, carry| val >> 1 | carry << 7);
             }
 
             // Jumps & Calls
@@ -293,7 +301,16 @@ impl<M: Memory> CPU<M> {
                 self.increment(reference);
                 self.sub_from_accumulator(self.read_reference(reference));
             }
+            SLO(addressing_mode) => {
+                let reference = self.fetch_ref(addressing_mode);
+                self.asl(reference);
+                self.set_accumulator(self.accumulator() | self.read_reference(reference));
+            }
         }
+    }
+
+    fn asl(&mut self, reference: Reference) {
+        self.shift(reference, 7, |val, _| val << 1);
     }
 
     fn sub_from_accumulator(&mut self, value: u8) {
@@ -320,9 +337,8 @@ impl<M: Memory> CPU<M> {
         self.status.set_to(Flag::Carry, carry_out);
     }
 
-    fn shift(&mut self, mode: ShiftAddressingMode, carry_bit: u8, op: impl FnOnce(u8, u8) -> (u8)) {
+    fn shift(&mut self, reference: Reference, carry_bit: u8, op: impl FnOnce(u8, u8) -> (u8)) {
         let carry = self.status.get(Flag::Carry);
-        let reference = self.fetch_ref(mode);
 
         let old_value = self.read_reference(reference);
         let new_value = op(old_value, carry as u8);

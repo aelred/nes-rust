@@ -452,6 +452,11 @@ pub enum Instruction {
     ///
     /// Equivalent to INC value then SBC value, except supporting more addressing modes.
     ISC(StoreAddressingMode),
+
+    /// Arithmetic Shift Left And Logical Inclusive OR
+    ///
+    /// Equivalent to ASL value then ORA value, except supporting more addressing modes.
+    SLO(StoreAddressingMode),
 }
 
 macro_rules! def_opcodes {
@@ -497,26 +502,33 @@ macro_rules! def_opcodes {
 def_opcodes! {
     0x00 => BRK                  => BRK,
     0x01 => ORA_INDEXED_INDIRECT => ORA(FlexibleAddressingMode::IndexedIndirect),
+    0x03 => SLO_INDEXED_INDIRECT => SLO(StoreAddressingMode::IndexedIndirect),
     0x04 => IGN_ZERO_PAGE        => IGN(IncDecAddressingMode::ZeroPage),
     0x05 => ORA_ZERO_PAGE        => ORA(FlexibleAddressingMode::ZeroPage),
     0x06 => ASL_ZERO_PAGE        => ASL(ShiftAddressingMode::ZeroPage),
+    0x07 => SLO_ZERO_PAGE        => SLO(StoreAddressingMode::ZeroPage),
     0x08 => PHP                  => PHP,
     0x09 => ORA_IMMEDIATE        => ORA(FlexibleAddressingMode::Immediate),
     0x0A => ASL_ACCUMULATOR      => ASL(ShiftAddressingMode::Accumulator),
     0x0C => IGN_ABSOLUTE         => IGN(IncDecAddressingMode::Absolute),
     0x0D => ORA_ABSOLUTE         => ORA(FlexibleAddressingMode::Absolute),
     0x0E => ASL_ABSOLUTE         => ASL(ShiftAddressingMode::Absolute),
+    0x0F => SLO_ABSOLUTE         => SLO(StoreAddressingMode::Absolute),
     0x10 => BPL                  => BPL,
     0x11 => ORA_INDIRECT_INDEXED => ORA(FlexibleAddressingMode::IndirectIndexed),
+    0x13 => SOL_INDIRECT_INDEXED => SLO(StoreAddressingMode::IndirectIndexed),
     0x15 => ORA_ZERO_PAGE_X      => ORA(FlexibleAddressingMode::ZeroPageX),
     0x14 => IGN_ZERO_PAGE_X      => IGN(IncDecAddressingMode::ZeroPageX),
     0x16 => ASL_ZERO_PAGE_X      => ASL(ShiftAddressingMode::ZeroPageX),
+    0x17 => SLO_ZERO_PAGE_X      => SLO(StoreAddressingMode::ZeroPageX),
     0x18 => CLC                  => CLC,
     0x19 => ORA_ABSOLUTE_Y       => ORA(FlexibleAddressingMode::AbsoluteY),
     0x1A => NOP,
+    0x1B => SLO_ABSOLUTE_Y       => SLO(StoreAddressingMode::AbsoluteY),
     0x1C => IGN_ABSOLUTE_X       => IGN(IncDecAddressingMode::AbsoluteX),
     0x1D => ORA_ABSOLUTE_X       => ORA(FlexibleAddressingMode::AbsoluteX),
     0x1E => ASL_ABSOLUTE_X       => ASL(ShiftAddressingMode::AbsoluteX),
+    0x1F => SLO_ABSOLUTE_X       => SLO(StoreAddressingMode::AbsoluteX),
     0x20 => JSR                  => JSR,
     0x21 => AND_INDEXED_INDIRECT => AND(FlexibleAddressingMode::IndexedIndirect),
     0x24 => BIT_ZERO_PAGE        => BIT(BITAddressingMode::ZeroPage),
