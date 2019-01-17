@@ -421,30 +421,31 @@ pub enum Instruction {
     RTI,
 
     // Unofficial Opcodes
+    /// Ignore
+    ///
     /// Reads from memory at the specified address and ignores the value. Affects no register nor
-    /// flags. The absolute version can be used to increment PPUADDR or reset the PPUSTATUS latch as
-    /// an alternative to BIT. The zero page version has no side effects.
-    ///
-    /// IGN d,X reads from both d and (d+X)&255. IGN a,X additionally reads from a+X-256 it crosses
-    /// a page boundary (i.e. if ((a & 255) + X) > 255)
-    ///
-    /// Sometimes called TOP (triple-byte no-op), SKW (skip word), DOP (double-byte no-op), or SKB
-    /// (skip byte).
+    /// flags.
     IGN(IncDecAddressingMode),
 
+    /// Skip Byte
+    ///
     /// These unofficial opcodes just read an immediate byte and skip it, like a different address
     /// mode of NOP.
     SKB,
 
-    /// Load accumulator and X register with memory.
+    /// Load Accumulator And X Register
+    ///
+    /// Shortcut for LDA value then TAX.
     LAX(LAXAddressingMode),
 
-    /// AND X register with accumulator and store result in memory.
+    /// Store Accumulator And X Register
+    ///
+    /// Stores the bitwise AND of A and X. As with STA and STX, no flags are affected.
     SAX(SAXAddressingMode),
 
-    /// Equivalent to DEC value then CMP value, except supporting more addressing modes. LDA #$FF
-    /// followed by DCP can be used to check if the decrement underflows, which is useful for
-    /// multi-byte decrements.
+    /// Decrement Memory And Compare
+    ///
+    /// Equivalent to DEC value then CMP value, except supporting more addressing modes.
     DCP(StoreAddressingMode),
 }
 
