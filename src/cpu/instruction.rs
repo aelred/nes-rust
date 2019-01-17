@@ -457,6 +457,11 @@ pub enum Instruction {
     ///
     /// Equivalent to ASL value then ORA value, except supporting more addressing modes.
     SLO(StoreAddressingMode),
+
+    /// Rotate Left And Logical AND
+    ///
+    /// Equivalent to ROL value then AND value, except supporting more addressing modes.
+    RLA(StoreAddressingMode),
 }
 
 macro_rules! def_opcodes {
@@ -531,26 +536,33 @@ def_opcodes! {
     0x1F => SLO_ABSOLUTE_X       => SLO(StoreAddressingMode::AbsoluteX),
     0x20 => JSR                  => JSR,
     0x21 => AND_INDEXED_INDIRECT => AND(FlexibleAddressingMode::IndexedIndirect),
+    0x23 => RLA_INDEXED_INDIRECT => RLA(StoreAddressingMode::IndexedIndirect),
     0x24 => BIT_ZERO_PAGE        => BIT(BITAddressingMode::ZeroPage),
     0x25 => AND_ZERO_PAGE        => AND(FlexibleAddressingMode::ZeroPage),
     0x26 => ROL_ZERO_PAGE        => ROL(ShiftAddressingMode::ZeroPage),
+    0x27 => RLA_ZERO_PAGE        => RLA(StoreAddressingMode::ZeroPage),
     0x28 => PLP                  => PLP,
     0x29 => AND_IMMEDIATE        => AND(FlexibleAddressingMode::Immediate),
     0x2A => ROL_ACCUMULATOR      => ROL(ShiftAddressingMode::Accumulator),
     0x2C => BIT_ABSOLUTE         => BIT(BITAddressingMode::Absolute),
     0x2D => AND_ABSOLUTE         => AND(FlexibleAddressingMode::Absolute),
     0x2E => ROL_ABSOLUTE         => ROL(ShiftAddressingMode::Absolute),
+    0x2F => RLA_ABSOLUTE         => RLA(StoreAddressingMode::Absolute),
     0x30 => BMI                  => BMI,
     0x31 => AND_INDIRECT_INDEXED => AND(FlexibleAddressingMode::IndirectIndexed),
+    0x33 => RLA_INDIRECT_INDEXED => RLA(StoreAddressingMode::IndirectIndexed),
     0x34 => IGN_ZERO_PAGE_X,
     0x35 => AND_ZERO_PAGE_X      => AND(FlexibleAddressingMode::ZeroPageX),
     0x36 => ROL_ZERO_PAGE_X      => ROL(ShiftAddressingMode::ZeroPageX),
+    0x37 => RLA_ZERO_PAGE_X      => RLA(StoreAddressingMode::ZeroPageX),
     0x38 => SEC                  => SEC,
     0x39 => AND_ABSOLUTE_Y       => AND(FlexibleAddressingMode::AbsoluteY),
     0x3A => NOP,
+    0x3B => RLA_ABSOLUTE_Y       => RLA(StoreAddressingMode::AbsoluteY),
     0x3C => IGN_ABSOLUTE_X,
     0x3D => AND_ABSOLUTE_X       => AND(FlexibleAddressingMode::AbsoluteX),
     0x3E => ROL_ABSOLUTE_X       => ROL(ShiftAddressingMode::AbsoluteX),
+    0x3F => RLA_ABSOLUTE_X       => RLA(StoreAddressingMode::AbsoluteX),
     0x40 => RTI                  => RTI,
     0x41 => EOR_INDEXED_INDIRECT => EOR(FlexibleAddressingMode::IndexedIndirect),
     0x44 => IGN_ZERO_PAGE,
