@@ -257,6 +257,11 @@ impl<M: Memory> CPU<M> {
                 let higher = self.pull_stack();
                 *self.program_counter_mut() = Address::from_bytes(higher, lower);
             }
+
+            // Unofficial Opcodes
+            IGN(addressing_mode) => {
+                self.fetch_ref(addressing_mode);
+            }
         }
     }
 

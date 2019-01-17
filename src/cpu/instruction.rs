@@ -417,6 +417,18 @@ pub enum Instruction {
     /// The RTI instruction is used at the end of an interrupt processing routine. It pulls the
     /// processor flags from the stack followed by the program counter.
     RTI,
+
+    // Unofficial Opcodes
+    /// Reads from memory at the specified address and ignores the value. Affects no register nor
+    /// flags. The absolute version can be used to increment PPUADDR or reset the PPUSTATUS latch as
+    /// an alternative to BIT. The zero page version has no side effects.
+    ///
+    /// IGN d,X reads from both d and (d+X)&255. IGN a,X additionally reads from a+X-256 it crosses
+    /// a page boundary (i.e. if ((a & 255) + X) > 255)
+    ///
+    /// Sometimes called TOP (triple-byte no-op), SKW (skip word), DOP (double-byte no-op), or SKB
+    /// (skip byte).
+    IGN(IncDecAddressingMode),
 }
 
 macro_rules! def_opcodes {
@@ -455,19 +467,23 @@ macro_rules! def_opcodes {
 def_opcodes! {
     0x00 => BRK                  => BRK,
     0x01 => ORA_INDEXED_INDIRECT => ORA(FlexibleAddressingMode::IndexedIndirect),
+    0x04 => IGN_ZERO_PAGE        => IGN(IncDecAddressingMode::ZeroPage),
     0x05 => ORA_ZERO_PAGE        => ORA(FlexibleAddressingMode::ZeroPage),
     0x06 => ASL_ZERO_PAGE        => ASL(ShiftAddressingMode::ZeroPage),
     0x08 => PHP                  => PHP,
     0x09 => ORA_IMMEDIATE        => ORA(FlexibleAddressingMode::Immediate),
     0x0A => ASL_ACCUMULATOR      => ASL(ShiftAddressingMode::Accumulator),
+    0x0C => IGN_ABSOLUTE         => IGN(IncDecAddressingMode::Absolute),
     0x0D => ORA_ABSOLUTE         => ORA(FlexibleAddressingMode::Absolute),
     0x0E => ASL_ABSOLUTE         => ASL(ShiftAddressingMode::Absolute),
     0x10 => BPL                  => BPL,
     0x11 => ORA_INDIRECT_INDEXED => ORA(FlexibleAddressingMode::IndirectIndexed),
     0x15 => ORA_ZERO_PAGE_X      => ORA(FlexibleAddressingMode::ZeroPageX),
+    0x14 => IGN_ZERO_PAGE_X      => IGN(IncDecAddressingMode::ZeroPageX),
     0x16 => ASL_ZERO_PAGE_X      => ASL(ShiftAddressingMode::ZeroPageX),
     0x18 => CLC                  => CLC,
     0x19 => ORA_ABSOLUTE_Y       => ORA(FlexibleAddressingMode::AbsoluteY),
+    0x1C => IGN_ABSOLUTE_X       => IGN(IncDecAddressingMode::AbsoluteX),
     0x1D => ORA_ABSOLUTE_X       => ORA(FlexibleAddressingMode::AbsoluteX),
     0x1E => ASL_ABSOLUTE_X       => ASL(ShiftAddressingMode::AbsoluteX),
     0x20 => JSR                  => JSR,
@@ -483,14 +499,17 @@ def_opcodes! {
     0x2E => ROL_ABSOLUTE         => ROL(ShiftAddressingMode::Absolute),
     0x30 => BMI                  => BMI,
     0x31 => AND_INDIRECT_INDEXED => AND(FlexibleAddressingMode::IndirectIndexed),
+    0x34 => IGN_ZERO_PAGE_X,
     0x35 => AND_ZERO_PAGE_X      => AND(FlexibleAddressingMode::ZeroPageX),
     0x36 => ROL_ZERO_PAGE_X      => ROL(ShiftAddressingMode::ZeroPageX),
     0x38 => SEC                  => SEC,
     0x39 => AND_ABSOLUTE_Y       => AND(FlexibleAddressingMode::AbsoluteY),
+    0x3C => IGN_ABSOLUTE_X,
     0x3D => AND_ABSOLUTE_X       => AND(FlexibleAddressingMode::AbsoluteX),
     0x3E => ROL_ABSOLUTE_X       => ROL(ShiftAddressingMode::AbsoluteX),
     0x40 => RTI                  => RTI,
     0x41 => EOR_INDEXED_INDIRECT => EOR(FlexibleAddressingMode::IndexedIndirect),
+    0x44 => IGN_ZERO_PAGE,
     0x45 => EOR_ZERO_PAGE        => EOR(FlexibleAddressingMode::ZeroPage),
     0x46 => LSR_ZERO_PAGE        => LSR(ShiftAddressingMode::ZeroPage),
     0x48 => PHA                  => PHA,
@@ -501,14 +520,17 @@ def_opcodes! {
     0x4E => LSR_ABSOLUTE         => LSR(ShiftAddressingMode::Absolute),
     0x50 => BVC                  => BVC,
     0x51 => EOR_INDIRECT_INDEXED => EOR(FlexibleAddressingMode::IndirectIndexed),
+    0x54 => IGN_ZERO_PAGE_X,
     0x55 => EOR_ZERO_PAGE_X      => EOR(FlexibleAddressingMode::ZeroPageX),
     0x56 => LSR_ZERO_PAGE_X      => LSR(ShiftAddressingMode::ZeroPageX),
     0x58 => CLI                  => CLI,
     0x59 => EOR_ABSOLUTE_Y       => EOR(FlexibleAddressingMode::AbsoluteY),
+    0x5C => IGN_ABSOLUTE_X,
     0x5D => EOR_ABSOLUTE_X       => EOR(FlexibleAddressingMode::AbsoluteX),
     0x5E => LSR_ABSOLUTE_X       => LSR(ShiftAddressingMode::AbsoluteX),
     0x60 => RTS                  => RTS,
     0x61 => ADC_INDEXED_INDIRECT => ADC(FlexibleAddressingMode::IndexedIndirect),
+    0x64 => IGN_ZERO_PAGE,
     0x65 => ADC_ZERO_PAGE        => ADC(FlexibleAddressingMode::ZeroPage),
     0x66 => ROR_ZERO_PAGE        => ROR(ShiftAddressingMode::ZeroPage),
     0x68 => PLA                  => PLA,
@@ -519,10 +541,12 @@ def_opcodes! {
     0x6E => ROR_ABSOLUTE         => ROR(ShiftAddressingMode::Absolute),
     0x70 => BVS                  => BVS,
     0x71 => ADC_INDIRECT_INDEXED => ADC(FlexibleAddressingMode::IndirectIndexed),
+    0x74 => IGN_ZERO_PAGE_X,
     0x75 => ADC_ZERO_PAGE_X      => ADC(FlexibleAddressingMode::ZeroPageX),
     0x76 => ROR_ZERO_PAGE_X      => ROR(ShiftAddressingMode::ZeroPageX),
     0x78 => SEI                  => SEI,
     0x79 => ADC_ABSOLUTE_Y       => ADC(FlexibleAddressingMode::AbsoluteY),
+    0x7C => IGN_ABSOLUTE_X,
     0x7D => ADC_ABSOLUTE_X       => ADC(FlexibleAddressingMode::AbsoluteX),
     0x7E => ROR_ABSOLUTE_X       => ROR(ShiftAddressingMode::AbsoluteX),
     0x81 => STA_INDEXED_INDIRECT => STA(StoreAddressingMode::IndexedIndirect),
@@ -579,10 +603,12 @@ def_opcodes! {
     0xCE => DEC_ABSOLUTE         => DEC(IncDecAddressingMode::Absolute),
     0xD0 => BNE                  => BNE,
     0xD1 => CMP_INDIRECT_INDEXED => CMP(FlexibleAddressingMode::IndirectIndexed),
+    0xD4 => IGN_ZERO_PAGE_X,
     0xD5 => CMP_ZERO_PAGE_X      => CMP(FlexibleAddressingMode::ZeroPageX),
     0xD6 => DEC_ZERO_PAGE_X      => DEC(IncDecAddressingMode::ZeroPageX),
     0xD8 => CLD                  => CLD,
     0xD9 => CMP_ABSOLUTE_Y       => CMP(FlexibleAddressingMode::AbsoluteY),
+    0xDC => IGN_ABSOLUTE_X,
     0xDD => CMP_ABSOLUTE_X       => CMP(FlexibleAddressingMode::AbsoluteX),
     0xDE => DEC_ABSOLUTE_X       => DEC(IncDecAddressingMode::AbsoluteX),
     0xE0 => CPX_IMMEDIATE        => CPX(CompareAddressingMode::Immediate),
@@ -598,10 +624,12 @@ def_opcodes! {
     0xEE => INC_ABSOLUTE         => INC(IncDecAddressingMode::Absolute),
     0xF0 => BEQ                  => BEQ,
     0xF1 => SBC_INDIRECT_INDEXED => SBC(FlexibleAddressingMode::IndirectIndexed),
+    0xF4 => IGN_ZERO_PAGE_X,
     0xF5 => SBC_ZERO_PAGE_X      => SBC(FlexibleAddressingMode::ZeroPageX),
     0xF6 => INC_ZERO_PAGE_X      => INC(IncDecAddressingMode::ZeroPageX),
     0xF8 => SED                  => SED,
     0xF9 => SBC_ABSOLUTE_Y       => SBC(FlexibleAddressingMode::AbsoluteY),
+    0xFC => IGN_ABSOLUTE_X,
     0xFD => SBC_ABSOLUTE_X       => SBC(FlexibleAddressingMode::AbsoluteX),
     0xFE => INC_ABSOLUTE_X       => INC(IncDecAddressingMode::AbsoluteX),
 }
