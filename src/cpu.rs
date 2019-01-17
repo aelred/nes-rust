@@ -253,7 +253,7 @@ impl<M: Memory> CPU<M> {
                 self.status = Status(self.pull_stack());
                 let lower = self.pull_stack();
                 let higher = self.pull_stack();
-                *self.program_counter_mut() = Address::from_bytes(higher, lower) + 1;
+                *self.program_counter_mut() = Address::from_bytes(higher, lower);
             }
         }
     }
@@ -1614,7 +1614,7 @@ mod tests {
     }
 
     #[test]
-    fn instr_rti_reads_status_and_program_counter_plus_one_from_stack() {
+    fn instr_rti_reads_status_and_program_counter_from_stack() {
         let cpu = run_instr(mem!(RTI), |cpu| {
             cpu.stack_pointer = 100;
             cpu.set(STACK + 103, 0x12);
@@ -1622,7 +1622,7 @@ mod tests {
             cpu.set(STACK + 101, 0x56);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(0x1235));
+        assert_eq!(cpu.program_counter(), Address::new(0x1234));
         assert_eq!(cpu.status.0, 0x56);
     }
 
