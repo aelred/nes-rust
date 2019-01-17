@@ -198,7 +198,7 @@ impl<M: Memory> CPU<M> {
             },
             LSR(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
-                self.shift(reference, 0, |val, _| val >> 1)
+                self.lsr(reference);
             },
             ROL(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
@@ -311,11 +311,20 @@ impl<M: Memory> CPU<M> {
                 self.rol(reference);
                 self.set_accumulator(self.accumulator() & self.read_reference(reference));
             }
+            SRE(addressing_mode) => {
+                let reference = self.fetch_ref(addressing_mode);
+                self.lsr(reference);
+                self.set_accumulator(self.accumulator() ^ self.read_reference(reference));
+            }
         }
     }
 
     fn asl(&mut self, reference: Reference) {
         self.shift(reference, 7, |val, _| val << 1);
+    }
+
+    fn lsr(&mut self, reference: Reference) {
+        self.shift(reference, 0, |val, _| val >> 1)
     }
 
     fn rol(&mut self, reference: Reference) {
