@@ -1,5 +1,6 @@
 use crate::Address;
 use crate::Memory;
+use crate::memory::PPURegisters;
 
 const NAMETABLES: Address = Address::new(0x2000);
 const ATTRIBUTE_TABLE: Address = Address::new(0x23c0);
@@ -81,6 +82,48 @@ impl<M: Memory> PPU<M> {
 
     fn set_all_bits_to_bit_at_index(byte: u8, index: u8) -> u8 {
         (!((byte >> index) & 1)).wrapping_add(1)
+    }
+}
+
+impl<M> PPURegisters for PPU<M> {
+    fn write_control(&mut self, byte: u8) {
+        unimplemented!()
+    }
+
+    fn write_mask(&mut self, byte: u8) {
+        unimplemented!()
+    }
+
+    fn read_status(&mut self) -> u8 {
+        unimplemented!()
+    }
+
+    fn write_oam_address(&mut self, byte: u8) {
+        unimplemented!()
+    }
+
+    fn read_oam_data(&mut self) -> u8 {
+        unimplemented!()
+    }
+
+    fn write_oam_data(&mut self, byte: u8) {
+        unimplemented!()
+    }
+
+    fn write_scroll(&mut self, byte: u8) {
+        unimplemented!()
+    }
+
+    fn write_address(&mut self, byte: u8) {
+        unimplemented!()
+    }
+
+    fn read_data(&mut self) -> u8 {
+        unimplemented!()
+    }
+
+    fn write_data(&mut self, byte: u8) {
+        unimplemented!()
     }
 }
 

@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
 use crate::cartridge::CHR;
@@ -34,18 +37,23 @@ impl NESDisplay for NoDisplay {
     fn draw_pixel(&mut self, _: Color) {}
 }
 
+type StandardPPU<'a> = Rc<RefCell<PPU<NESPPUMemory<&'a mut CHR>>>>;
+type StandardCPU<'a> = CPU<NESCPUMemory<&'a mut PRG, StandardPPU<'a>>>;
+
 pub struct NES<'a, D> {
-    cpu: CPU<NESCPUMemory<&'a mut PRG>>,
-    ppu: PPU<NESPPUMemory<&'a mut CHR>>,
+    cpu: StandardCPU<'a>,
+    ppu: StandardPPU<'a>,
     display: D,
 }
 
 impl<'a, D: NESDisplay> NES<'a, D> {
     pub fn new(cartridge: &'a mut Cartridge, display: D) -> Self {
-        let cpu_memory = NESCPUMemory::new(&mut cartridge.prg);
-        let cpu = CPU::with_memory(cpu_memory);
         let ppu_memory = NESPPUMemory::new(&mut cartridge.chr);
-        let ppu = PPU::with_memory(ppu_memory);
+        let ppu = Rc::new(RefCell::new(PPU::with_memory(ppu_memory)));
+
+        let cpu_memory = NESCPUMemory::new(&mut cartridge.prg, Rc::clone(&ppu));
+        let cpu = CPU::with_memory(cpu_memory);
+
         NES { cpu, ppu, display }
     }
 
@@ -63,7 +71,7 @@ impl<'a, D: NESDisplay> NES<'a, D> {
 
     pub fn tick(&mut self) {
         self.cpu.run_instruction();
-        let color = self.ppu.tick();
+        let color = self.ppu.borrow_mut().tick();
         self.display.draw_pixel(color);
     }
 }
