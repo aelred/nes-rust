@@ -34,7 +34,7 @@ pub struct CPU<M> {
 }
 
 impl<M: Memory> CPU<M> {
-    pub fn with_memory(memory: M) -> Self {
+    pub fn with_memory(mut memory: M) -> Self {
         let lower = memory.read(RESET_VECTOR);
         let higher = memory.read(RESET_VECTOR + 1);
         let program_counter = Address::from_bytes(higher, lower);
@@ -50,11 +50,11 @@ impl<M: Memory> CPU<M> {
         }
     }
 
-    pub fn read(&self, address: Address) -> u8 {
+    pub fn read(&mut self, address: Address) -> u8 {
         self.read_reference(Reference::Address(address))
     }
 
-    fn read_address(&self, address: Address) -> Address {
+    fn read_address(&mut self, address: Address) -> Address {
         let lower = self.read(address);
         let higher = self.read(address.incr_lower());
         Address::from_bytes(higher, lower)
@@ -298,32 +298,38 @@ impl<M: Memory> CPU<M> {
             DCP(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.decrement(reference);
-                self.compare(self.accumulator(), self.read_reference(reference));
+                let value = self.read_reference(reference);
+                self.compare(self.accumulator(), value);
             }
             ISC(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.increment(reference);
-                self.sub_from_accumulator(self.read_reference(reference));
+                let value = self.read_reference(reference);
+                self.sub_from_accumulator(value);
             }
             SLO(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.asl(reference);
-                self.set_accumulator(self.accumulator() | self.read_reference(reference));
+                let value = self.read_reference(reference);
+                self.set_accumulator(self.accumulator() | value);
             }
             RLA(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.rol(reference);
-                self.set_accumulator(self.accumulator() & self.read_reference(reference));
+                let value = self.read_reference(reference);
+                self.set_accumulator(self.accumulator() & value);
             }
             SRE(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.lsr(reference);
-                self.set_accumulator(self.accumulator() ^ self.read_reference(reference));
+                let value = self.read_reference(reference);
+                self.set_accumulator(self.accumulator() ^ value);
             }
             RRA(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.ror(reference);
-                self.add_to_accumulator(self.read_reference(reference));
+                let value = self.read_reference(reference);
+                self.add_to_accumulator(value);
             }
         }
     }
@@ -456,7 +462,7 @@ impl<M: Memory> CPU<M> {
         self.read_reference(reference)
     }
 
-    fn read_reference(&self, reference: Reference) -> u8 {
+    fn read_reference(&mut self, reference: Reference) -> u8 {
         match reference {
             Reference::Address(address) => self.memory.read(address),
             Reference::Accumulator => self.accumulator,
@@ -631,7 +637,7 @@ mod tests {
 
     #[test]
     fn instr_asl_can_operate_on_memory() {
-        let cpu = run_instr(mem!(ASL_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(ASL_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 0b100);
         });
 
@@ -1011,7 +1017,7 @@ mod tests {
 
     #[test]
     fn instr_dec_decrements_operand() {
-        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
@@ -1020,14 +1026,14 @@ mod tests {
 
     #[test]
     fn instr_dec_sets_zero_flag_based_on_result() {
-        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 44);
         assert_eq!(cpu.status.contains(Status::ZERO), false);
 
-        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 1);
         });
 
@@ -1037,14 +1043,14 @@ mod tests {
 
     #[test]
     fn instr_dec_sets_negative_flag_based_on_result() {
-        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 44);
         assert_eq!(cpu.status.contains(Status::ZERO), false);
 
-        let cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(DEC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 0);
         });
 
@@ -1149,7 +1155,7 @@ mod tests {
 
     #[test]
     fn instr_inc_increments_operand() {
-        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
@@ -1158,14 +1164,14 @@ mod tests {
 
     #[test]
     fn instr_inc_sets_zero_flag_based_on_result() {
-        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 46);
         assert_eq!(cpu.status.contains(Status::ZERO), false);
 
-        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), -1i8 as u8);
         });
 
@@ -1175,14 +1181,14 @@ mod tests {
 
     #[test]
     fn instr_inc_sets_negative_flag_based_on_result() {
-        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), 45);
         });
 
         assert_eq!(cpu.get(Address::new(100)), 46);
         assert_eq!(cpu.status.contains(Status::ZERO), false);
 
-        let cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
+        let mut cpu = run_instr(mem!(INC_ABSOLUTE, 100, 0), |cpu| {
             cpu.set(Address::new(100), -10i8 as u8);
         });
 
@@ -1243,7 +1249,7 @@ mod tests {
 
     #[test]
     fn instr_jsr_writes_program_counter_to_stack_pointer() {
-        let cpu = run_instr(mem!(0x1234 => { JSR, 100, 0 }), |cpu| {
+        let mut cpu = run_instr(mem!(0x1234 => { JSR, 100, 0 }), |cpu| {
             *cpu.program_counter_mut() = Address::new(0x1234);
             cpu.stack_pointer = 6;
         });
@@ -1323,7 +1329,7 @@ mod tests {
 
     #[test]
     fn instr_pha_writes_accumulator_to_stack_pointer() {
-        let cpu = run_instr(mem!(PHA), |cpu| {
+        let mut cpu = run_instr(mem!(PHA), |cpu| {
             cpu.set_accumulator(20);
             cpu.stack_pointer = 6;
         });
@@ -1342,7 +1348,7 @@ mod tests {
 
     #[test]
     fn instr_php_writes_status_to_stack_pointer_with_break_always_set() {
-        let cpu = run_instr(mem!(PHP), |cpu| {
+        let mut cpu = run_instr(mem!(PHP), |cpu| {
             cpu.status = Status::from_bits_truncate(0b1100_0101);
             cpu.stack_pointer = 6;
         });
@@ -1531,7 +1537,7 @@ mod tests {
 
     #[test]
     fn instr_sta_stores_accumulator_in_memory() {
-        let cpu = run_instr(mem!(STA_ABSOLUTE, 0x32, 0), |cpu| {
+        let mut cpu = run_instr(mem!(STA_ABSOLUTE, 0x32, 0), |cpu| {
             cpu.set_accumulator(65);
         });
 
@@ -1540,7 +1546,7 @@ mod tests {
 
     #[test]
     fn instr_stx_stores_x_register_in_memory() {
-        let cpu = run_instr(mem!(STX_ABSOLUTE, 0x32, 0), |cpu| {
+        let mut cpu = run_instr(mem!(STX_ABSOLUTE, 0x32, 0), |cpu| {
             cpu.set_x(65);
         });
 
@@ -1549,7 +1555,7 @@ mod tests {
 
     #[test]
     fn instr_sty_stores_y_register_in_memory() {
-        let cpu = run_instr(mem!(STY_ABSOLUTE, 0x32, 0), |cpu| {
+        let mut cpu = run_instr(mem!(STY_ABSOLUTE, 0x32, 0), |cpu| {
             cpu.set_y(65);
         });
 
@@ -1637,7 +1643,7 @@ mod tests {
 
     #[test]
     fn instr_brk_writes_program_counter_and_status_with_break_flag_set_to_stack_pointer() {
-        let cpu = run_instr(mem!(0x1234 => { BRK }), |cpu| {
+        let mut cpu = run_instr(mem!(0x1234 => { BRK }), |cpu| {
             *cpu.program_counter_mut() = Address::new(0x1234);
             cpu.status = Status::from_bits_truncate(0b1001_1000);
             cpu.stack_pointer = 6;
@@ -1659,7 +1665,7 @@ mod tests {
 
     #[test]
     fn instr_brk_sets_break_flag_on_stack() {
-        let cpu = run_instr(mem!(BRK), |cpu| {
+        let mut cpu = run_instr(mem!(BRK), |cpu| {
             cpu.status.remove(Status::BREAK);
             cpu.stack_pointer = 6;
         });
@@ -1832,7 +1838,7 @@ mod tests {
 
     #[test]
     fn stack_operations_wrap_value_on_overflow() {
-        let cpu = run_instr(mem!(0x1234 => { JSR, 100, 0 }), |cpu| {
+        let mut cpu = run_instr(mem!(0x1234 => { JSR, 100, 0 }), |cpu| {
             cpu.stack_pointer = 0;
             *cpu.program_counter_mut() = Address::new(0x1234);
         });
@@ -1893,7 +1899,7 @@ mod tests {
             self.write(address, byte);
         }
 
-        fn get(&self, address: Address) -> u8 {
+        fn get(&mut self, address: Address) -> u8 {
             self.read(address)
         }
     }

@@ -1,7 +1,11 @@
 use crate::Address;
 
 pub trait Memory: Sized {
-    fn read(&self, address: Address) -> u8;
+    /// This method takes a mutable reference because reading from memory can sometimes trigger
+    /// state changes.
+    ///
+    /// e.g. when reading from the PPU status register, bit 7 of the register is reset.
+    fn read(&mut self, address: Address) -> u8;
     fn write(&mut self, address: Address, byte: u8);
 }
 
@@ -20,7 +24,7 @@ impl Default for ArrayMemory {
 }
 
 impl Memory for ArrayMemory {
-    fn read(&self, address: Address) -> u8 {
+    fn read(&mut self, address: Address) -> u8 {
         self.0[address.index()]
     }
 
@@ -30,7 +34,7 @@ impl Memory for ArrayMemory {
 }
 
 impl<'a, T: Memory> Memory for &'a mut T {
-    fn read(&self, address: Address) -> u8 {
+    fn read(&mut self, address: Address) -> u8 {
         T::read(self, address)
     }
 
@@ -59,7 +63,7 @@ impl<PRG> NESCPUMemory<PRG> {
 }
 
 impl<PRG: Memory> Memory for NESCPUMemory<PRG> {
-    fn read(&self, address: Address) -> u8 {
+    fn read(&mut self, address: Address) -> u8 {
         if address >= PRG_SPACE {
             self.prg.read(address)
         } else if address >= PPU_SPACE {
@@ -90,15 +94,21 @@ pub struct NESPPUMemory<CHR> {
 
 impl<CHR> NESPPUMemory<CHR> {
     pub fn new(chr: CHR) -> Self {
+        let mut palette_ram = [0; 0x20];
+
+        for i in 0..0x20 {
+            palette_ram[i] = (i * 4) as u8;
+        }
+
         NESPPUMemory {
-            palette_ram: [0; 0x20],
+            palette_ram,
             chr,
         }
     }
 }
 
 impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
-    fn read(&self, address: Address) -> u8 {
+    fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x0000...CHR_END => self.chr.read(address),
             PALETTE_OFFSET...0x3f1f => self.palette_ram[address.index() - PALETTE_OFFSET],

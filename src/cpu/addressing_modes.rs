@@ -211,7 +211,7 @@ impl<M: Memory> CPU<M> {
         self.read_address(address_of_address)
     }
 
-    fn read_zero_page_address(&self, offset: u8) -> Address {
+    fn read_zero_page_address(&mut self, offset: u8) -> Address {
         let lower = self.read(Address::from_bytes(0, offset));
         let higher = self.read(Address::from_bytes(0, offset.wrapping_add(1)));
         Address::from_bytes(higher, lower)

@@ -34,7 +34,7 @@ pub struct PRG {
 }
 
 impl Memory for PRG {
-    fn read(&self, address: Address) -> u8 {
+    fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x6000...0x7fff => self.prg_ram[address.index() - 0x6000],
             0x8000...0xffff => self.prg_rom[(address.index() - 0x8000) % self.prg_rom.len()],
@@ -65,7 +65,7 @@ pub struct CHR {
 }
 
 impl Memory for CHR {
-    fn read(&self, address: Address) -> u8 {
+    fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x0000...0x1fff => self.chr_rom[address.index()],
             0x2000...0x2fff => self.ppu_ram[(address.index() - 0x2000) % 0x800],
@@ -136,7 +136,7 @@ mod tests {
             *item = i as u8;
         }
 
-        let prg = Cartridge::new(prg_rom, chr_rom, mapper).prg;
+        let mut prg = Cartridge::new(prg_rom, chr_rom, mapper).prg;
 
         for value in 0xc000..=0xffff {
             assert_eq!(prg.read(Address::new(value)), value as u8);
