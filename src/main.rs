@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<Error>> {
     let mut event_pump = sdl_context.event_pump()?;
 
     let window = video_subsystem
-        .window("nes-rust", 240, 260)
+        .window("nes-rust", 256, 240)
         .position_centered()
         .build()?;
 
@@ -40,7 +40,8 @@ fn main() -> Result<(), Box<Error>> {
     canvas.clear();
     canvas.present();
 
-    let display = SDLDisplay { canvas, x: 0, y: 0 };
+    // We start at the LAST tile, because the PPU is always loading data one tile ahead
+    let display = SDLDisplay { canvas, x: 248, y: 240 };
 
     let stdin = std::io::stdin();
     let handle = stdin.lock();
@@ -77,11 +78,11 @@ impl NESDisplay for SDLDisplay {
         self.canvas.draw_point(Point::new(self.x, self.y)).unwrap();
         self.x += 1;
 
-        if self.x == 248 {
+        if self.x == 256 {
             self.x = 0;
             self.y += 1;
         }
-        if self.y == 261 {
+        if self.y == 240 {
             self.y = 0;
             self.canvas.present();
         }

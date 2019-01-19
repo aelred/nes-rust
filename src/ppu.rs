@@ -68,22 +68,6 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
     }
 
     pub fn tick(&mut self) -> Color {
-        let mask = 0b1000_0000_0000_0000;
-        let bit0 = (self.tile_pattern0 & mask) >> 15;
-        let bit1 = (self.tile_pattern1 & mask) >> 14;
-        let bit2 = (self.palette_select0 & mask) >> 13;
-        let bit3 = (self.palette_select1 & mask) >> 12;
-        let color_index = bit0 | bit1 | bit2 | bit3;
-
-        self.tile_pattern0 <<= 1;
-        self.tile_pattern1 <<= 1;
-        self.palette_select0 <<= 1;
-        self.palette_select1 <<= 1;
-
-        let address = BACKGROUND_PALETTES + color_index;
-
-        self.cycle_count = self.cycle_count.wrapping_add(1);
-
         if self.cycle_count % 8 == 0 {
             let coarse_x = self.horizontal_scroll;
             let coarse_y = (self.vertical_scroll / 8) as u8;
@@ -114,11 +98,11 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
             self.horizontal_scroll += 1;
 
-            if self.horizontal_scroll > 30 {
+            if self.horizontal_scroll == 32 {
                 self.horizontal_scroll = 0;
                 self.vertical_scroll += 1;
 
-                if self.vertical_scroll == 241 {
+                if self.vertical_scroll == 220 {
                     self.status.insert(Status::VBLANK);
 
                     if self.control.contains(Control::NMI_ON_VBLANK) {
@@ -126,12 +110,28 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
                     }
                 }
 
-                if self.vertical_scroll > 260 {
+                if self.vertical_scroll == 240 {
                     self.vertical_scroll = 0;
                     self.status.remove(Status::VBLANK);
                 }
             }
         }
+
+        self.cycle_count = self.cycle_count.wrapping_add(1);
+
+        let mask = 0b1000_0000_0000_0000;
+        let bit0 = (self.tile_pattern0 & mask) >> 15;
+        let bit1 = (self.tile_pattern1 & mask) >> 14;
+        let bit2 = (self.palette_select0 & mask) >> 13;
+        let bit3 = (self.palette_select1 & mask) >> 12;
+        let color_index = bit0 | bit1 | bit2 | bit3;
+
+        self.tile_pattern0 <<= 1;
+        self.tile_pattern1 <<= 1;
+        self.palette_select0 <<= 1;
+        self.palette_select1 <<= 1;
+
+        let address = BACKGROUND_PALETTES + color_index;
 
         Color(self.memory.read(address))
     }
