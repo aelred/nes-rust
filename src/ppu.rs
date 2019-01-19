@@ -94,7 +94,8 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
             let attribute_byte = self
                 .memory
                 .read(ATTRIBUTE_TABLE + u16::from(attribute_index));
-            let attribute_bit_index0 = (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) * 2) as u8;
+            let attribute_bit_index0 =
+                (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) * 2) as u8;
             let attribute_bit_index1 = attribute_bit_index0 + 1;
 
             let pattern_address0 =

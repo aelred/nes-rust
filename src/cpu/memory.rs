@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::Address;
 use crate::ArrayMemory;
 use crate::Memory;
@@ -45,18 +42,10 @@ impl<PRG: Memory, PPU: PPURegisters> Memory for NESCPUMemory<PRG, PPU> {
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
             match mirrored {
-                PPU_STATUS => {
-                    self.ppu_registers.read_status()
-                }
-                OAM_DATA => {
-                    self.ppu_registers.read_oam_data()
-                }
-                PPU_DATA => {
-                    self.ppu_registers.read_data()
-                }
-                _ => {
-                    unimplemented!()
-                }
+                PPU_STATUS => self.ppu_registers.read_status(),
+                OAM_DATA => self.ppu_registers.read_oam_data(),
+                PPU_DATA => self.ppu_registers.read_data(),
+                _ => unimplemented!(),
             }
         } else {
             self.internal_ram[address.index() % 0x0800]

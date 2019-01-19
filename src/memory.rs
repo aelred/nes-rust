@@ -1,5 +1,4 @@
 use crate::Address;
-use crate::ppu::PPU;
 
 pub trait Memory: Sized {
     /// This method takes a mutable reference because reading from memory can sometimes trigger
@@ -83,7 +82,7 @@ impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
             0x0000...CHR_END => self.chr.write(address, byte),
             PALETTE_OFFSET...0x3f1f => {
                 self.palette_ram[address.index() - PALETTE_OFFSET] = dbg!(byte)
-            },
+            }
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }

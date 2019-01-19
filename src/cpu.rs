@@ -171,7 +171,8 @@ impl<M: Memory> CPU<M> {
                 let result = self.accumulator() & value;
                 self.status.set(Status::ZERO, result == 0);
                 self.status.set(Status::OVERFLOW, value & (1 << 6) != 0);
-                self.status.set(Status::NEGATIVE, (value as i8).is_negative());
+                self.status
+                    .set(Status::NEGATIVE, (value as i8).is_negative());
             }
 
             // Arithmetic
@@ -1528,7 +1529,10 @@ mod tests {
                 cpu.set_accumulator(accumulator as u8);
             });
 
-            (cpu.accumulator() as i8, cpu.status.contains(Status::OVERFLOW))
+            (
+                cpu.accumulator() as i8,
+                cpu.status.contains(Status::OVERFLOW),
+            )
         }
 
         assert_eq!(sub(80, -16), (96, false));
