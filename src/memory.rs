@@ -75,10 +75,6 @@ impl<PRG, PPU> NESCPUMemory<PRG, PPU> {
             the_rest: ArrayMemory::default(),
         }
     }
-
-    pub fn ppu_registers(&mut self) -> &mut PPU {
-        &mut self.ppu_registers
-    }
 }
 
 impl<PRG: Memory, PPU: PPURegisters> Memory for NESCPUMemory<PRG, PPU> {
