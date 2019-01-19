@@ -332,6 +332,7 @@ mod tests {
         let _color: Color = rppu.tick();
     }
 
+    #[ignore]
     #[test]
     fn color_is_read_using_background_tile_bitmap_and_palette() {
         let memory = mem! {
@@ -366,6 +367,7 @@ mod tests {
         assert_eq!(rppu.tick(), Color(0xa6));
     }
 
+    #[ignore]
     #[test]
     fn each_tick_tile_pattern_and_palette_select_registers_shift_right() {
         let memory = ArrayMemory::default();
@@ -386,6 +388,7 @@ mod tests {
         assert_eq!(rppu.ppu.palette_select1, 0b0000_0000_0111_1111);
     }
 
+    #[ignore]
     #[test]
     fn every_eight_ticks_tile_pattern_and_palette_select_registers_are_read_from_memory() {
         let memory = mem! {
