@@ -74,8 +74,10 @@ impl<'a, D: NESDisplay> NES<'a, D> {
         self.cpu.run_instruction();
         let borrow_ppu: &mut PPU<NESPPUMemory<&mut CHR>> = &mut *self.ppu.borrow_mut();
         let mut ppu = RunningPPU::new(borrow_ppu, &mut self.cpu);
-        let color = ppu.tick();
-        self.display.draw_pixel(color);
+        for _ in 0..10 {
+            let color = ppu.tick();
+            self.display.draw_pixel(color);
+        }
     }
 }
 
