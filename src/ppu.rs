@@ -68,16 +68,17 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
     }
 
     pub fn tick(&mut self) -> Color {
-        let bit0 = self.tile_pattern0 & 1;
-        let bit1 = (self.tile_pattern1 & 1) << 1;
-        let bit2 = (self.palette_select0 & 1) << 2;
-        let bit3 = (self.palette_select1 & 1) << 3;
+        let mask = 0b1000_0000_0000_0000;
+        let bit0 = (self.tile_pattern0 & mask) >> 15;
+        let bit1 = (self.tile_pattern1 & mask) >> 14;
+        let bit2 = (self.palette_select0 & mask) >> 13;
+        let bit3 = (self.palette_select1 & mask) >> 12;
         let color_index = bit0 | bit1 | bit2 | bit3;
 
-        self.tile_pattern0 >>= 1;
-        self.tile_pattern1 >>= 1;
-        self.palette_select0 >>= 1;
-        self.palette_select1 >>= 1;
+        self.tile_pattern0 <<= 1;
+        self.tile_pattern1 <<= 1;
+        self.palette_select0 <<= 1;
+        self.palette_select1 <<= 1;
 
         let address = BACKGROUND_PALETTES + color_index;
 
@@ -99,17 +100,17 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
             let attribute_bit_index1 = attribute_bit_index0 + 1;
 
             let pattern_address0 =
-                Address::new(0x1000 + u16::from(pattern_index) << 4) + self.vertical_scroll % 8;
-            let pattern_address1 = pattern_address0 + 8;
+                Address::new(0x1000 | u16::from(pattern_index) << 4 | (self.vertical_scroll & 0b0111));
+            let pattern_address1 = pattern_address0 + 0b1000;
 
-            self.tile_pattern0 |= u16::from(self.memory.read(pattern_address0)) << 8;
-            self.tile_pattern1 |= u16::from(self.memory.read(pattern_address1)) << 8;
+            self.tile_pattern0 |= u16::from(self.memory.read(pattern_address0));
+            self.tile_pattern1 |= u16::from(self.memory.read(pattern_address1));
 
             let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
             let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
 
-            self.palette_select0 |= u16::from(palette0) << 8;
-            self.palette_select1 |= u16::from(palette1) << 8;
+            self.palette_select0 |= u16::from(palette0);
+            self.palette_select1 |= u16::from(palette1);
 
             self.horizontal_scroll += 1;
 
