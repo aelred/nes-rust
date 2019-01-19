@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<Error>> {
     let mut event_pump = sdl_context.event_pump()?;
 
     let window = video_subsystem
-        .window("nes-rust", 256, 240)
+        .window("nes-rust", 240, 260)
         .position_centered()
         .build()?;
 
@@ -77,11 +77,11 @@ impl NESDisplay for SDLDisplay {
         self.canvas.draw_point(Point::new(self.x, self.y)).unwrap();
         self.x += 1;
 
-        if self.x == 256 {
+        if self.x == 248 {
             self.x = 0;
             self.y += 1;
         }
-        if self.y == 240 {
+        if self.y == 261 {
             self.y = 0;
             self.canvas.present();
         }
@@ -89,7 +89,7 @@ impl NESDisplay for SDLDisplay {
 }
 
 fn ppu_to_sdl(color: PPUColor) -> SDLColor {
-    COLOR_LOOKUP[color.to_byte() as usize]
+    COLOR_LOOKUP[(color.to_byte() % 56) as usize]
 }
 
 const COLOR_LOOKUP: [SDLColor; 56] = [

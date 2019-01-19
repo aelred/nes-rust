@@ -53,16 +53,9 @@ pub struct NESPPUMemory<CHR> {
 
 impl<CHR> NESPPUMemory<CHR> {
     pub fn new(chr: CHR) -> Self {
-        let mut palette_ram = [0; 0x20];
+        let palette_ram = [0; 0x20];
 
-        for i in 0..0x20 {
-            palette_ram[i] = (i * 4) as u8;
-        }
-
-        NESPPUMemory {
-            palette_ram,
-            chr,
-        }
+        NESPPUMemory { palette_ram, chr }
     }
 }
 
