@@ -15,6 +15,7 @@ mod instruction;
 mod memory;
 
 const STACK: Address = Address::new(0x0100);
+const NMI_VECTOR: Address = Address::new(0xFFFA);
 const RESET_VECTOR: Address = Address::new(0xFFFC);
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
@@ -33,6 +34,7 @@ pub struct CPU<M> {
     stack_pointer: u8,
     /// P
     status: Status,
+    non_maskable_interrupt: bool,
 }
 
 impl<M: Memory> CPU<M> {
@@ -49,6 +51,7 @@ impl<M: Memory> CPU<M> {
             y: 0,
             stack_pointer: 0xFF,
             status: Status::empty(),
+            non_maskable_interrupt: false,
         }
     }
 
@@ -75,9 +78,20 @@ impl<M: Memory> CPU<M> {
     }
 
     pub fn run_instruction(&mut self) {
+        let instruction = self.instr();
+
+        if self.non_maskable_interrupt {
+            self.non_maskable_interrupt = false;
+            self.interrupt(NMI_VECTOR, false);
+        } else {
+            self.handle_instruction(instruction);
+        }
+    }
+
+    pub fn handle_instruction(&mut self, instruction: Instruction) {
         use self::instruction::Instruction::*;
 
-        match self.instr() {
+        match instruction {
             // Load/Store Operations
             LDA(addressing_mode) => {
                 let value = self.fetch(addressing_mode);
@@ -133,11 +147,7 @@ impl<M: Memory> CPU<M> {
                 self.status = Status::from_bits_truncate(self.pull_stack());
             }
             PHA => self.push_stack(self.accumulator()),
-            PHP => {
-                let mut status = self.status;
-                status.insert(Status::BREAK);
-                self.push_stack(status.bits());
-            }
+            PHP => self.push_status(true),
 
             // Logical
             AND(addressing_mode) => {
@@ -257,22 +267,7 @@ impl<M: Memory> CPU<M> {
             SEI => self.status.insert(Status::INTERRUPT_DISABLE),
 
             // System Functions
-            BRK => {
-                let addr = self.read_address(INTERRUPT_VECTOR);
-
-                // For some reason the spec says the pointer must be to the last byte of the BRK
-                // instruction...
-                let data = self.program_counter() - 1;
-
-                self.push_stack(data.higher());
-                self.push_stack(data.lower());
-
-                let mut status = self.status;
-                status.insert(Status::BREAK);
-                self.push_stack(status.bits());
-
-                *self.program_counter_mut() = addr;
-            }
+            BRK => self.interrupt(INTERRUPT_VECTOR, true),
             NOP => {}
             RTI => {
                 self.status = Status::from_bits_truncate(self.pull_stack());
@@ -354,6 +349,27 @@ impl<M: Memory> CPU<M> {
 
     fn sub_from_accumulator(&mut self, value: u8) {
         self.add_to_accumulator(!value);
+    }
+
+    fn interrupt(&mut self, address_vector: Address, break_flag: bool) {
+        let addr = self.read_address(address_vector);
+
+        // For some reason the spec says the pointer must be to the last byte of the BRK
+        // instruction...
+        let data = self.program_counter() - 1;
+
+        self.push_stack(data.higher());
+        self.push_stack(data.lower());
+        self.push_status(break_flag);
+
+        *self.program_counter_mut() = addr;
+    }
+
+    fn push_status(&mut self, break_flag: bool) {
+        let mut status = self.status;
+        status.insert(Status::UNUSED);
+        status.set(Status::BREAK, break_flag);
+        self.push_stack(status.bits());
     }
 
     fn add_to_accumulator(&mut self, value: u8) {
@@ -530,7 +546,8 @@ bitflags! {
     struct Status: u8 {
         const NEGATIVE          = 0b1000_0000;
         const OVERFLOW          = 0b0100_0000;
-        const BREAK             = 0b0011_0000;
+        const UNUSED            = 0b0010_0000;
+        const BREAK             = 0b0001_0000;
         const DECIMAL           = 0b0000_1000;
         const INTERRUPT_DISABLE = 0b0000_0100;
         const ZERO              = 0b0000_0010;
@@ -1879,6 +1896,46 @@ mod tests {
         });
 
         assert_eq!(cpu.program_counter(), Address::new(0x1234));
+    }
+
+    #[test]
+    fn on_non_maskable_interrupt_reset_interrupt_flag() {
+        let mut cpu = run_instr(mem!(), |cpu| {
+            cpu.non_maskable_interrupt = true;
+        });
+
+        assert_eq!(cpu.non_maskable_interrupt, false);
+    }
+
+    #[test]
+    fn on_non_maskable_interrupt_push_program_counter_and_status_with_clear_break_flag_to_stack() {
+        let mut cpu = run_instr(mem!(0x1234 => { INX }), |cpu| {
+            *cpu.program_counter_mut() = Address::new(0x1234);
+            cpu.status = Status::from_bits_truncate(0b1001_1000);
+            cpu.stack_pointer = 6;
+            cpu.non_maskable_interrupt = true;
+        });
+
+        assert_eq!(cpu.get(STACK + 6), 0x12);
+        assert_eq!(cpu.get(STACK + 5), 0x34);
+        assert_eq!(cpu.get(STACK + 4), 0b1010_1000);
+        assert_eq!(cpu.stack_pointer, 3);
+    }
+
+    #[test]
+    fn on_non_maskable_interrupt_jumps_to_address_at_nmi_vector() {
+        let mut cpu = run_instr(
+            mem!(
+                0x1234 => { INX }
+                0xfffa => { 0x78, 0x56 }
+            ),
+            |cpu| {
+                *cpu.program_counter_mut() = Address::new(0x1234);
+                cpu.non_maskable_interrupt = true;
+            },
+        );
+
+        assert_eq!(cpu.program_counter(), Address::new(0x5678));
     }
 
     fn run_instr<F: FnOnce(&mut CPU<ArrayMemory>)>(
