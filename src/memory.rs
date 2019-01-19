@@ -63,7 +63,10 @@ impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x0000...CHR_END => self.chr.read(address),
-            PALETTE_OFFSET...0x3f1f => self.palette_ram[address.index() - PALETTE_OFFSET],
+            PALETTE_OFFSET...0x3fff => {
+                let index = (address.index() - PALETTE_OFFSET) % 0x0020;
+                self.palette_ram[index]
+            },
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -73,8 +76,9 @@ impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
             0x0000...CHR_END => self.chr.write(address, byte),
-            PALETTE_OFFSET...0x3f1f => {
-                self.palette_ram[address.index() - PALETTE_OFFSET] = dbg!(byte)
+            PALETTE_OFFSET...0x3fff => {
+                let index = (address.index() - PALETTE_OFFSET) % 0x0020;
+                self.palette_ram[index] = byte;
             }
             _ => {
                 panic!("Out of addressable range: {:?}", address);
@@ -111,6 +115,22 @@ mod tests {
             assert_eq!(memory.read(address), (value + 1) as u8);
             assert_eq!(
                 memory.palette_ram[address.index() - 0x3f00],
+                (value + 1) as u8
+            );
+        }
+    }
+
+    #[test]
+    fn palette_ram_mirrors_from_0x3f20_to_0x3fff() {
+        let mut memory = nes_ppu_memory();
+
+        for value in 0x3f20..=0x3fff {
+            let address = Address::new(value);
+
+            memory.write(address, (value + 1) as u8);
+            assert_eq!(memory.read(address), (value + 1) as u8);
+            assert_eq!(
+                memory.palette_ram[address.index() % 0x0020],
                 (value + 1) as u8
             );
         }
