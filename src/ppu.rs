@@ -19,6 +19,11 @@ pub struct PPU<M> {
     tile_pattern1: u16,
     palette_select0: u16,
     palette_select1: u16,
+    control: Control,
+    status: Status,
+    mask: Mask,
+    address: Address,
+    write_lower: bool,
 }
 
 impl<M: Memory> PPU<M> {
@@ -32,6 +37,11 @@ impl<M: Memory> PPU<M> {
             tile_pattern1: 0,
             palette_select0: 0,
             palette_select1: 0,
+            control: Control::empty(),
+            mask: Mask::empty(),
+            status: Status::empty(),
+            address: Address::new(0),
+            write_lower: false,
         }
     }
 
@@ -86,6 +96,14 @@ impl<M: Memory> PPU<M> {
 
     fn set_all_bits_to_bit_at_index(byte: u8, index: u8) -> u8 {
         (!((byte >> index) & 1)).wrapping_add(1)
+    }
+
+    fn address_increment(&self) -> u16 {
+        if self.control.contains(Control::ADDRESS_INCREMENT) {
+            32
+        } else {
+            1
+        }
     }
 }
 
@@ -153,17 +171,20 @@ impl<T: PPURegisters> PPURegisters for Rc<RefCell<T>> {
     }
 }
 
-impl<M> PPURegisters for PPU<M> {
+impl<M: Memory> PPURegisters for PPU<M> {
     fn write_control(&mut self, byte: u8) {
-        unimplemented!()
+        self.control = Control::from_bits_truncate(byte);
     }
 
     fn write_mask(&mut self, byte: u8) {
-        unimplemented!()
+        self.mask = Mask::from_bits_truncate(byte);
     }
 
     fn read_status(&mut self) -> u8 {
-        unimplemented!()
+        let status = self.status.clone();
+        self.status.remove(Status::VBLANK);
+        self.write_lower = false;
+        status.bits()
     }
 
     fn write_oam_address(&mut self, byte: u8) {
@@ -179,19 +200,28 @@ impl<M> PPURegisters for PPU<M> {
     }
 
     fn write_scroll(&mut self, byte: u8) {
-        unimplemented!()
+        // TODO
     }
 
     fn write_address(&mut self, byte: u8) {
-        unimplemented!()
+        self.address = if self.write_lower {
+            Address::from_bytes(self.address.higher(), byte)
+        } else {
+            Address::from_bytes(byte, self.address.lower())
+        };
+
+        self.write_lower = !self.write_lower;
     }
 
     fn read_data(&mut self) -> u8 {
-        unimplemented!()
+        let byte = self.memory.read(self.address);
+        self.address += self.address_increment();
+        byte
     }
 
     fn write_data(&mut self, byte: u8) {
-        unimplemented!()
+        self.memory.write(self.address, byte);
+        self.address += self.address_increment();
     }
 }
 
@@ -201,6 +231,39 @@ pub struct Color(u8);
 impl Color {
     pub fn to_byte(&self) -> u8 {
         self.0
+    }
+}
+
+bitflags! {
+    struct Control: u8 {
+        const NMI_ON_VBLANK            = 0b1000_0000;
+        const PPU_MASTER_SLAVE         = 0b0100_0000;
+        const SPRITE_SIZE              = 0b0010_0000;
+        const BACKGROUND_PATTERN_TABLE = 0b0001_0000;
+        const SPRITE_PATTERN_TABLE     = 0b0000_1000;
+        const ADDRESS_INCREMENT        = 0b0000_0100;
+        const NAMETABLE_SELECT         = 0b0000_0011;
+    }
+}
+
+bitflags! {
+    struct Mask: u8 {
+        const EMPHASIZE_BLUE       = 0b1000_0000;
+        const EMPHASIZE_GREEN      = 0b0100_0000;
+        const EMPHASIZE_RED        = 0b0010_0000;
+        const SHOW_SPRITES         = 0b0001_0000;
+        const SHOW_BACKGROUND      = 0b0000_1000;
+        const SHOW_SPRITES_LEFT    = 0b0000_0100;
+        const SHOW_BACKGROUND_LEFT = 0b0000_0010;
+        const GREYSCALE            = 0b0000_0001;
+    }
+}
+
+bitflags! {
+    struct Status: u8 {
+        const VBLANK          = 0b1000_0000;
+        const SPRITE_ZERO_HIT = 0b0100_0000;
+        const SPRITE_OVERFLOW = 0b0010_0000;
     }
 }
 
@@ -325,5 +388,103 @@ mod tests {
             "{:#b}",
             ppu.palette_select1
         );
+    }
+
+    #[test]
+    fn writing_ppu_control_sets_control() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_control(0b1010_1010);
+        assert_eq!(ppu.control.bits(), 0b1010_1010);
+    }
+
+    #[test]
+    fn writing_ppu_mask_sets_mask() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_mask(0b1010_1010);
+        assert_eq!(ppu.mask.bits(), 0b1010_1010);
+    }
+
+    #[test]
+    fn reading_ppu_status_returns_status() {
+        let mut ppu = PPU::with_memory(mem!());
+        ppu.status = Status::from_bits_truncate(0b1010_0000);
+        assert_eq!(ppu.read_status(), 0b1010_0000);
+    }
+
+    #[test]
+    fn reading_ppu_status_resets_vblank() {
+        let mut ppu = PPU::with_memory(mem!());
+        ppu.status = Status::from_bits_truncate(0b1010_0000);
+
+        assert_eq!(ppu.status.contains(Status::VBLANK), true);
+        ppu.read_status();
+        assert_eq!(ppu.status.contains(Status::VBLANK), false);
+    }
+
+    #[test]
+    fn reading_ppu_status_resets_address_toggle() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_address(0x12);
+        ppu.write_address(0x34);
+        ppu.write_address(0x56);
+
+        assert_eq!(ppu.address, Address::new(0x5634));
+
+        ppu.write_address(0x00);
+        ppu.write_address(0x12);
+        ppu.read_status();
+        ppu.write_address(0x34);
+        ppu.write_address(0x56);
+
+        assert_eq!(ppu.address, Address::new(0x3456));
+    }
+
+    #[test]
+    fn writing_ppu_address_twice_then_reading_data_reads_data_from_address() {
+        let mut ppu = PPU::with_memory(mem!(0x1234 => 0x54));
+
+        ppu.write_address(0x12);
+        ppu.write_address(0x34);
+        assert_eq!(ppu.read_data(), 0x54);
+    }
+
+    #[test]
+    fn writing_ppu_address_twice_then_writing_data_writes_data_to_address() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_address(0x12);
+        ppu.write_address(0x34);
+        ppu.write_data(0x54);
+        assert_eq!(ppu.memory.read(Address::new(0x1234)), 0x54);
+    }
+
+    #[test]
+    fn reading_or_writing_ppu_data_increments_address_by_increment_in_control_register() {
+        let mut ppu = PPU::with_memory(mem! {
+            0x1234 => { 0x00, 0x64, 0x00 }
+            0x1254 => { 0x84 }
+            0x1274 => { 0x00 }
+        });
+
+        ppu.write_address(0x12);
+        ppu.write_address(0x34);
+        ppu.write_control(0b0000_0000);
+
+        ppu.write_data(0x54);
+        assert_eq!(ppu.read_data(), 0x64);
+        ppu.write_data(0x74);
+        assert_eq!(ppu.memory.read(Address::new(0x1236)), 0x74);
+
+        ppu.write_address(0x12);
+        ppu.write_address(0x34);
+        ppu.write_control(0b0000_0100);
+
+        ppu.write_data(0x74);
+        assert_eq!(ppu.read_data(), 0x84);
+        ppu.write_data(0x94);
+        assert_eq!(ppu.memory.read(Address::new(0x1274)), 0x94);
     }
 }
