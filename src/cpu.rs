@@ -8,9 +8,11 @@ use crate::memory::Memory;
 
 pub use self::instruction::Instruction;
 pub use self::instruction::instructions;
+pub use self::memory::NESCPUMemory;
 
 mod addressing_modes;
 mod instruction;
+mod memory;
 
 const STACK: Address = Address::new(0x0100);
 const RESET_VECTOR: Address = Address::new(0xFFFC);

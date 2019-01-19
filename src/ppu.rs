@@ -1,6 +1,10 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use bitflags::bitflags;
+
 use crate::Address;
 use crate::Memory;
-use crate::memory::PPURegisters;
 
 const NAMETABLES: Address = Address::new(0x2000);
 const ATTRIBUTE_TABLE: Address = Address::new(0x23c0);
@@ -82,6 +86,70 @@ impl<M: Memory> PPU<M> {
 
     fn set_all_bits_to_bit_at_index(byte: u8, index: u8) -> u8 {
         (!((byte >> index) & 1)).wrapping_add(1)
+    }
+}
+
+pub trait PPURegisters {
+    fn write_control(&mut self, byte: u8);
+
+    fn write_mask(&mut self, byte: u8);
+
+    fn read_status(&mut self) -> u8;
+
+    fn write_oam_address(&mut self, byte: u8);
+
+    fn read_oam_data(&mut self) -> u8;
+
+    fn write_oam_data(&mut self, byte: u8);
+
+    fn write_scroll(&mut self, byte: u8);
+
+    fn write_address(&mut self, byte: u8);
+
+    fn read_data(&mut self) -> u8;
+
+    fn write_data(&mut self, byte: u8);
+}
+
+impl<T: PPURegisters> PPURegisters for Rc<RefCell<T>> {
+    fn write_control(&mut self, byte: u8) {
+        self.borrow_mut().write_control(byte)
+    }
+
+    fn write_mask(&mut self, byte: u8) {
+        self.borrow_mut().write_mask(byte)
+    }
+
+    fn read_status(&mut self) -> u8 {
+        self.borrow_mut().read_status()
+    }
+
+    fn write_oam_address(&mut self, byte: u8) {
+        self.borrow_mut().write_oam_address(byte)
+    }
+
+    fn read_oam_data(&mut self) -> u8 {
+        self.borrow_mut().read_oam_data()
+    }
+
+    fn write_oam_data(&mut self, byte: u8) {
+        self.borrow_mut().write_oam_data(byte)
+    }
+
+    fn write_scroll(&mut self, byte: u8) {
+        self.borrow_mut().write_scroll(byte)
+    }
+
+    fn write_address(&mut self, byte: u8) {
+        self.borrow_mut().write_address(byte)
+    }
+
+    fn read_data(&mut self) -> u8 {
+        self.borrow_mut().read_data()
+    }
+
+    fn write_data(&mut self, byte: u8) {
+        self.borrow_mut().write_data(byte)
     }
 }
 
