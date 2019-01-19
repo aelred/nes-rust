@@ -16,6 +16,7 @@ pub use crate::memory::Memory;
 use crate::memory::NESPPUMemory;
 pub use crate::ppu::Color;
 use crate::ppu::PPU;
+use crate::ppu::RunningPPU;
 pub use crate::serialize::SerializeByte;
 
 mod address;
@@ -71,7 +72,9 @@ impl<'a, D: NESDisplay> NES<'a, D> {
 
     pub fn tick(&mut self) {
         self.cpu.run_instruction();
-        let color = self.ppu.borrow_mut().tick();
+        let borrow_ppu: &mut PPU<NESPPUMemory<&mut CHR>> = &mut *self.ppu.borrow_mut();
+        let mut ppu = RunningPPU::new(borrow_ppu, &mut self.cpu);
+        let color = ppu.tick();
         self.display.draw_pixel(color);
     }
 }

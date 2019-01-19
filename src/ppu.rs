@@ -1,9 +1,12 @@
 use std::cell::RefCell;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::rc::Rc;
 
 use bitflags::bitflags;
 
 use crate::Address;
+use crate::cpu::Interruptible;
 use crate::Memory;
 
 const NAMETABLES: Address = Address::new(0x2000);
@@ -45,6 +48,25 @@ impl<M: Memory> PPU<M> {
         }
     }
 
+    fn address_increment(&self) -> u16 {
+        if self.control.contains(Control::ADDRESS_INCREMENT) {
+            32
+        } else {
+            1
+        }
+    }
+}
+
+pub struct RunningPPU<'a, M, I> {
+    ppu: &'a mut PPU<M>,
+    interruptible: &'a mut I,
+}
+
+impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
+    pub fn new(ppu: &'a mut PPU<M>, interruptible: &'a mut I) -> Self {
+        RunningPPU { ppu, interruptible }
+    }
+
     pub fn tick(&mut self) -> Color {
         let bit0 = self.tile_pattern0 & 1;
         let bit1 = (self.tile_pattern1 & 1) << 1;
@@ -65,46 +87,70 @@ impl<M: Memory> PPU<M> {
             let coarse_x = self.horizontal_scroll;
             let coarse_y = (self.vertical_scroll / 8) as u8;
 
-            let tile_index = coarse_x + coarse_y as u8 * 32;
+            let tile_index = coarse_x as u16 + coarse_y as u16 * 32;
             let attribute_index = ((coarse_y / 4) & 0b111) << 3 | (coarse_x / 4) & 0b111;
 
             let pattern_index = self.memory.read(NAMETABLES + u16::from(tile_index));
             let attribute_byte = self
                 .memory
                 .read(ATTRIBUTE_TABLE + u16::from(attribute_index));
-            let attribute_bit_index0 = ((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) * 2;
+            let attribute_bit_index0 = (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) * 2) as u8;
             let attribute_bit_index1 = attribute_bit_index0 + 1;
 
             let pattern_address0 =
-                Address::new(u16::from(pattern_index) << 4) + self.vertical_scroll % 8;
+                Address::new(0x1000 + u16::from(pattern_index) << 4) + self.vertical_scroll % 8;
             let pattern_address1 = pattern_address0 + 8;
 
             self.tile_pattern0 |= u16::from(self.memory.read(pattern_address0)) << 8;
             self.tile_pattern1 |= u16::from(self.memory.read(pattern_address1)) << 8;
 
-            let palette0 = Self::set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
-            let palette1 = Self::set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
+            let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
+            let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
 
             self.palette_select0 |= u16::from(palette0) << 8;
             self.palette_select1 |= u16::from(palette1) << 8;
 
-            self.horizontal_scroll = self.horizontal_scroll.wrapping_add(1);
+            self.horizontal_scroll += 1;
+
+            if self.horizontal_scroll > 30 {
+                self.horizontal_scroll = 0;
+                self.vertical_scroll += 1;
+
+                if self.vertical_scroll == 241 {
+                    self.status.insert(Status::VBLANK);
+
+                    if self.control.contains(Control::NMI_ON_VBLANK) {
+                        self.interruptible.non_maskable_interrupt();
+                    }
+                }
+
+                if self.vertical_scroll > 260 {
+                    self.vertical_scroll = 0;
+                    self.status.remove(Status::VBLANK);
+                }
+            }
         }
 
         Color(self.memory.read(address))
     }
+}
 
-    fn set_all_bits_to_bit_at_index(byte: u8, index: u8) -> u8 {
-        (!((byte >> index) & 1)).wrapping_add(1)
-    }
+impl<'a, M, I> Deref for RunningPPU<'a, M, I> {
+    type Target = PPU<M>;
 
-    fn address_increment(&self) -> u16 {
-        if self.control.contains(Control::ADDRESS_INCREMENT) {
-            32
-        } else {
-            1
-        }
+    fn deref(&self) -> &Self::Target {
+        &self.ppu
     }
+}
+
+impl<'a, M, I> DerefMut for RunningPPU<'a, M, I> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ppu
+    }
+}
+
+fn set_all_bits_to_bit_at_index(byte: u8, index: u8) -> u8 {
+    (!((byte >> index) & 1)).wrapping_add(1)
 }
 
 pub trait PPURegisters {
@@ -188,7 +234,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn write_oam_address(&mut self, byte: u8) {
-        unimplemented!()
+        // TODO
     }
 
     fn read_oam_data(&mut self) -> u8 {
@@ -279,7 +325,9 @@ mod tests {
     fn each_tick_produces_a_color() {
         let memory = ArrayMemory::default();
         let mut ppu = PPU::with_memory(memory);
-        let _color: Color = ppu.tick();
+        let mut stub = StubInterruptible;
+        let mut rppu = RunningPPU::new(&mut ppu, &mut stub);
+        let _color: Color = rppu.tick();
     }
 
     #[test]
@@ -294,42 +342,46 @@ mod tests {
         };
 
         let mut ppu = PPU::with_memory(memory);
+        let mut stub = StubInterruptible;
+        let mut rppu = RunningPPU::new(&mut ppu, &mut stub);
 
-        ppu.tile_pattern0 = 0xf1;
-        ppu.tile_pattern1 = 0xf0;
-        ppu.palette_select0 = 0xf0;
-        ppu.palette_select1 = 0xf1;
-        assert_eq!(ppu.tick(), Color(0xaa));
+        rppu.ppu.tile_pattern0 = 0xf1;
+        rppu.ppu.tile_pattern1 = 0xf0;
+        rppu.ppu.palette_select0 = 0xf0;
+        rppu.ppu.palette_select1 = 0xf1;
+        assert_eq!(rppu.tick(), Color(0xaa));
 
-        ppu.tile_pattern0 = 0xf0;
-        ppu.tile_pattern1 = 0xf1;
-        ppu.palette_select0 = 0xf1;
-        ppu.palette_select1 = 0xf0;
-        assert_eq!(ppu.tick(), Color(0xa7));
+        rppu.ppu.tile_pattern0 = 0xf0;
+        rppu.ppu.tile_pattern1 = 0xf1;
+        rppu.ppu.palette_select0 = 0xf1;
+        rppu.ppu.palette_select1 = 0xf0;
+        assert_eq!(rppu.tick(), Color(0xa7));
 
-        ppu.tile_pattern0 = 0xf1;
-        ppu.tile_pattern1 = 0xf0;
-        ppu.palette_select0 = 0xf1;
-        ppu.palette_select1 = 0xf0;
-        assert_eq!(ppu.tick(), Color(0xa6));
+        rppu.ppu.tile_pattern0 = 0xf1;
+        rppu.ppu.tile_pattern1 = 0xf0;
+        rppu.ppu.palette_select0 = 0xf1;
+        rppu.ppu.palette_select1 = 0xf0;
+        assert_eq!(rppu.tick(), Color(0xa6));
     }
 
     #[test]
     fn each_tick_tile_pattern_and_palette_select_registers_shift_right() {
         let memory = ArrayMemory::default();
         let mut ppu = PPU::with_memory(memory);
+        let mut stub = StubInterruptible;
+        let mut rppu = RunningPPU::new(&mut ppu, &mut stub);
 
-        ppu.tile_pattern0 = 0b1000_0000_0000_0001;
-        ppu.tile_pattern1 = 0b0101_0101_0101_0101;
-        ppu.palette_select0 = 0b1111_1111_1111_1111;
-        ppu.palette_select1 = 0b0000_0000_1111_1111;
+        rppu.ppu.tile_pattern0 = 0b1000_0000_0000_0001;
+        rppu.ppu.tile_pattern1 = 0b0101_0101_0101_0101;
+        rppu.ppu.palette_select0 = 0b1111_1111_1111_1111;
+        rppu.ppu.palette_select1 = 0b0000_0000_1111_1111;
 
-        ppu.tick();
+        rppu.tick();
 
-        assert_eq!(ppu.tile_pattern0, 0b0100_0000_0000_0000);
-        assert_eq!(ppu.tile_pattern1, 0b0010_1010_1010_1010);
-        assert_eq!(ppu.palette_select0, 0b0111_1111_1111_1111);
-        assert_eq!(ppu.palette_select1, 0b0000_0000_0111_1111);
+        assert_eq!(rppu.ppu.tile_pattern0, 0b0100_0000_0000_0000);
+        assert_eq!(rppu.ppu.tile_pattern1, 0b0010_1010_1010_1010);
+        assert_eq!(rppu.ppu.palette_select0, 0b0111_1111_1111_1111);
+        assert_eq!(rppu.ppu.palette_select1, 0b0000_0000_0111_1111);
     }
 
     #[test]
@@ -354,39 +406,41 @@ mod tests {
         };
 
         let mut ppu = PPU::with_memory(memory);
+        let mut stub = StubInterruptible;
+        let mut rppu = RunningPPU::new(&mut ppu, &mut stub);
 
         // Point PPU at 11th pixel row, 6nd column of nametable 0
-        ppu.horizontal_scroll = 5;
-        ppu.vertical_scroll = 10;
+        rppu.ppu.horizontal_scroll = 5;
+        rppu.ppu.vertical_scroll = 10;
 
-        ppu.tile_pattern0 = 0b1000_0000_0000_0001;
-        ppu.tile_pattern1 = 0b0101_0101_0010_0010;
-        ppu.palette_select0 = 0b1111_1111_0000_0000;
-        ppu.palette_select1 = 0b0000_0000_1111_1111;
+        rppu.ppu.tile_pattern0 = 0b1000_0000_0000_0001;
+        rppu.ppu.tile_pattern1 = 0b0101_0101_0010_0010;
+        rppu.ppu.palette_select0 = 0b1111_1111_0000_0000;
+        rppu.ppu.palette_select1 = 0b0000_0000_1111_1111;
 
         for _ in 0..8 {
-            ppu.tick();
+            rppu.tick();
         }
 
         assert_eq!(
-            ppu.tile_pattern0, 0b1001_1001_1000_0000,
+            rppu.ppu.tile_pattern0, 0b1001_1001_1000_0000,
             "{:#b}",
-            ppu.tile_pattern0
+            rppu.ppu.tile_pattern0
         );
         assert_eq!(
-            ppu.tile_pattern1, 0b0110_0110_0101_0101,
+            rppu.ppu.tile_pattern1, 0b0110_0110_0101_0101,
             "{:#b}",
-            ppu.tile_pattern1
+            rppu.ppu.tile_pattern1
         );
         assert_eq!(
-            ppu.palette_select0, 0b0000_0000_1111_1111,
+            rppu.ppu.palette_select0, 0b0000_0000_1111_1111,
             "{:#b}",
-            ppu.palette_select0
+            rppu.ppu.palette_select0
         );
         assert_eq!(
-            ppu.palette_select1, 0b1111_1111_0000_0000,
+            rppu.ppu.palette_select1, 0b1111_1111_0000_0000,
             "{:#b}",
-            ppu.palette_select1
+            rppu.ppu.palette_select1
         );
     }
 
@@ -486,5 +540,11 @@ mod tests {
         assert_eq!(ppu.read_data(), 0x84);
         ppu.write_data(0x94);
         assert_eq!(ppu.memory.read(Address::new(0x1274)), 0x94);
+    }
+
+    struct StubInterruptible;
+
+    impl Interruptible for StubInterruptible {
+        fn non_maskable_interrupt(&mut self) {}
     }
 }

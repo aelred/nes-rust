@@ -77,6 +77,10 @@ impl<M: Memory> CPU<M> {
         self.accumulator
     }
 
+    pub fn non_maskable_interrupt(&mut self) {
+        self.non_maskable_interrupt = true;
+    }
+
     pub fn run_instruction(&mut self) {
         let instruction = self.instr();
 
@@ -559,6 +563,16 @@ impl Status {
     fn set_flags(&mut self, value: u8) {
         self.set(Status::ZERO, value == 0);
         self.set(Status::NEGATIVE, (value as i8).is_negative());
+    }
+}
+
+pub trait Interruptible {
+    fn non_maskable_interrupt(&mut self);
+}
+
+impl<M> Interruptible for CPU<M> {
+    fn non_maskable_interrupt(&mut self) {
+        self.non_maskable_interrupt = true;
     }
 }
 
@@ -1936,6 +1950,16 @@ mod tests {
         );
 
         assert_eq!(cpu.program_counter(), Address::new(0x5678));
+    }
+
+    #[test]
+    fn calling_non_maskable_interrupt_sets_interrupt_flag() {
+        let mut cpu = CPU::with_memory(mem!());
+        cpu.non_maskable_interrupt = false;
+
+        cpu.non_maskable_interrupt();
+
+        assert_eq!(cpu.non_maskable_interrupt, true);
     }
 
     fn run_instr<F: FnOnce(&mut CPU<ArrayMemory>)>(
