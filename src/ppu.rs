@@ -11,7 +11,7 @@ const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
 pub struct PPU<M> {
     memory: M,
     horizontal_scroll: u8,
-    vertical_scroll: u16,
+    vertical_scroll: u8,
     cycle_count: u8,
     tile_pattern0: u16,
     tile_pattern1: u16,
@@ -80,7 +80,7 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
             let attribute_bit_index1 = attribute_bit_index0 + 1;
 
             let pattern_address0 = Address::new(
-                0x1000 | u16::from(pattern_index) << 4 | (self.ppu.vertical_scroll & 0b0111),
+                0x1000 | u16::from(pattern_index) << 4 | u16::from(self.ppu.vertical_scroll & 0b0111),
             );
             let pattern_address1 = pattern_address0 + 0b1000;
 
