@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
 use crate::cartridge::CHR;
@@ -9,6 +6,8 @@ pub use crate::cpu::CPU;
 pub use crate::cpu::Instruction;
 pub use crate::cpu::instructions;
 use crate::cpu::NESCPUMemory;
+pub use crate::cpu::RunningCPU;
+use crate::cpu::RunningNESCPUMemory;
 pub use crate::i_nes::INes;
 pub use crate::i_nes::INesReadError;
 pub use crate::memory::ArrayMemory;
@@ -38,24 +37,28 @@ impl NESDisplay for NoDisplay {
     fn draw_pixel(&mut self, _: Color) {}
 }
 
-type StandardPPU<'a> = Rc<RefCell<PPU<NESPPUMemory<&'a mut CHR>>>>;
-type StandardCPU<'a> = CPU<NESCPUMemory<&'a mut PRG, StandardPPU<'a>>>;
-
 pub struct NES<'a, D> {
-    cpu: StandardCPU<'a>,
-    ppu: StandardPPU<'a>,
+    cpu: CPU,
+    cpu_memory: NESCPUMemory<&'a mut PRG>,
+    ppu: PPU<NESPPUMemory<&'a mut CHR>>,
     display: D,
 }
 
 impl<'a, D: NESDisplay> NES<'a, D> {
     pub fn new(cartridge: &'a mut Cartridge, display: D) -> Self {
         let ppu_memory = NESPPUMemory::new(&mut cartridge.chr);
-        let ppu = Rc::new(RefCell::new(PPU::with_memory(ppu_memory)));
+        let mut ppu = PPU::with_memory(ppu_memory);
 
-        let cpu_memory = NESCPUMemory::new(&mut cartridge.prg, Rc::clone(&ppu));
-        let cpu = CPU::with_memory(cpu_memory);
+        let mut cpu_memory = NESCPUMemory::new(&mut cartridge.prg);
+        let mut running_cpu_memory = RunningNESCPUMemory::new(&mut cpu_memory, &mut ppu);
+        let cpu = CPU::from_memory(&mut running_cpu_memory);
 
-        NES { cpu, ppu, display }
+        NES {
+            cpu,
+            cpu_memory,
+            ppu,
+            display,
+        }
     }
 
     pub fn program_counter(&mut self) -> Address {
@@ -67,13 +70,23 @@ impl<'a, D: NESDisplay> NES<'a, D> {
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
-        self.cpu.read(address)
+        let mut memory = RunningNESCPUMemory::new(&mut self.cpu_memory, &mut self.ppu);
+        memory.read(address)
     }
 
     pub fn tick(&mut self) {
-        self.cpu.run_instruction();
-        let borrow_ppu: &mut PPU<NESPPUMemory<&mut CHR>> = &mut *self.ppu.borrow_mut();
-        let mut ppu = RunningPPU::new(borrow_ppu, &mut self.cpu);
+        self.tick_cpu();
+        self.tick_ppu();
+    }
+
+    fn tick_cpu(&mut self) {
+        let memory = RunningNESCPUMemory::new(&mut self.cpu_memory, &mut self.ppu);
+        let mut cpu = RunningCPU::new(&mut self.cpu, memory);
+        cpu.run_instruction();
+    }
+
+    fn tick_ppu(&mut self) {
+        let mut ppu = RunningPPU::new(&mut self.ppu, &mut self.cpu);
         for _ in 0..10 {
             let color = ppu.tick();
             self.display.draw_pixel(color);

@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use bitflags::bitflags;
 
 use crate::Address;
@@ -163,45 +160,45 @@ pub trait PPURegisters {
     fn write_data(&mut self, byte: u8);
 }
 
-impl<T: PPURegisters> PPURegisters for Rc<RefCell<T>> {
+impl<'a, T: PPURegisters> PPURegisters for &'a mut T {
     fn write_control(&mut self, byte: u8) {
-        self.borrow_mut().write_control(byte)
+        (*self).write_control(byte)
     }
 
     fn write_mask(&mut self, byte: u8) {
-        self.borrow_mut().write_mask(byte)
+        (*self).write_mask(byte)
     }
 
     fn read_status(&mut self) -> u8 {
-        self.borrow_mut().read_status()
+        (*self).read_status()
     }
 
     fn write_oam_address(&mut self, byte: u8) {
-        self.borrow_mut().write_oam_address(byte)
+        (*self).write_oam_address(byte)
     }
 
     fn read_oam_data(&mut self) -> u8 {
-        self.borrow_mut().read_oam_data()
+        (*self).read_oam_data()
     }
 
     fn write_oam_data(&mut self, byte: u8) {
-        self.borrow_mut().write_oam_data(byte)
+        (*self).write_oam_data(byte)
     }
 
     fn write_scroll(&mut self, byte: u8) {
-        self.borrow_mut().write_scroll(byte)
+        (*self).write_scroll(byte)
     }
 
     fn write_address(&mut self, byte: u8) {
-        self.borrow_mut().write_address(byte)
+        (*self).write_address(byte)
     }
 
     fn read_data(&mut self) -> u8 {
-        self.borrow_mut().read_data()
+        (*self).read_data()
     }
 
     fn write_data(&mut self, byte: u8) {
-        self.borrow_mut().write_data(byte)
+        (*self).write_data(byte)
     }
 }
 

@@ -1,3 +1,6 @@
+use std::borrow::BorrowMut;
+use std::marker::PhantomData;
+
 use crate::Address;
 use crate::ArrayMemory;
 use crate::Memory;
@@ -15,78 +18,96 @@ const PPU_DATA: Address = Address::new(0x2007);
 const APU_SPACE: Address = Address::new(0x4000);
 const PRG_SPACE: Address = Address::new(0x4020);
 
-pub struct NESCPUMemory<PRG, PPU> {
+pub struct NESCPUMemory<PRG> {
     internal_ram: [u8; 0x800],
     prg: PRG,
-    ppu_registers: PPU,
     the_rest: ArrayMemory, // TODO
 }
 
-impl<PRG, PPU> NESCPUMemory<PRG, PPU> {
-    pub fn new(prg: PRG, ppu_registers: PPU) -> Self {
+impl<PRG> NESCPUMemory<PRG> {
+    pub fn new(prg: PRG) -> Self {
         NESCPUMemory {
             internal_ram: [0; 0x800],
             prg,
-            ppu_registers,
             the_rest: ArrayMemory::default(),
         }
     }
 }
 
-impl<PRG: Memory, PPU: PPURegisters> Memory for NESCPUMemory<PRG, PPU> {
+pub struct RunningNESCPUMemory<M, PRG, PPU> {
+    memory: M,
+    ppu_registers: PPU,
+    phantom: PhantomData<PRG>,
+}
+
+impl<M, PRG, PPU> RunningNESCPUMemory<M, PRG, PPU> {
+    pub fn new(memory: M, ppu_registers: PPU) -> Self {
+        RunningNESCPUMemory {
+            memory,
+            ppu_registers,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters> Memory
+for RunningNESCPUMemory<M, PRG, PPU>
+{
     fn read(&mut self, address: Address) -> u8 {
         if address >= PRG_SPACE {
-            self.prg.read(address)
+            self.memory.borrow_mut().prg.read(address)
         } else if address >= APU_SPACE {
-            self.the_rest.read(address) // TODO
+            self.memory.borrow_mut().the_rest.read(address) // TODO
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
+            let ppu_registers = self.ppu_registers.borrow_mut();
             match mirrored {
-                PPU_STATUS => self.ppu_registers.read_status(),
-                OAM_DATA => self.ppu_registers.read_oam_data(),
-                PPU_DATA => self.ppu_registers.read_data(),
+                PPU_STATUS => ppu_registers.read_status(),
+                OAM_DATA => ppu_registers.read_oam_data(),
+                PPU_DATA => ppu_registers.read_data(),
                 _ => unimplemented!(),
             }
         } else {
-            self.internal_ram[address.index() % 0x0800]
+            self.memory.borrow_mut().internal_ram[address.index() % 0x0800]
         }
     }
 
     fn write(&mut self, address: Address, byte: u8) {
         if address >= PRG_SPACE {
-            self.prg.write(address, byte);
+            self.memory.borrow_mut().prg.write(address, byte);
         } else if address >= APU_SPACE {
-            self.the_rest.write(address, byte) // TODO
+            self.memory.borrow_mut().the_rest.write(address, byte) // TODO
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
+            let ppu_registers = self.ppu_registers.borrow_mut();
             match mirrored {
                 PPU_CONTROL => {
-                    self.ppu_registers.write_control(byte);
+                    ppu_registers.write_control(byte);
                 }
                 PPU_MASK => {
-                    self.ppu_registers.write_mask(byte);
+                    ppu_registers.write_mask(byte);
                 }
                 OAM_ADDRESS => {
-                    self.ppu_registers.write_oam_address(byte);
+                    ppu_registers.write_oam_address(byte);
                 }
                 OAM_DATA => {
-                    self.ppu_registers.write_oam_data(byte);
+                    ppu_registers.write_oam_data(byte);
                 }
                 PPU_SCROLL => {
-                    self.ppu_registers.write_scroll(byte);
+                    ppu_registers.write_scroll(byte);
                 }
                 PPU_ADDRESS => {
-                    self.ppu_registers.write_address(byte);
+                    ppu_registers.write_address(byte);
                 }
                 PPU_DATA => {
-                    self.ppu_registers.write_data(byte);
+                    ppu_registers.write_data(byte);
                 }
                 _ => {
                     unimplemented!();
                 }
             }
         } else {
-            self.internal_ram[address.index() % 0x0800] = byte;
+            self.memory.borrow_mut().internal_ram[address.index() % 0x0800] = byte;
         }
     }
 }
@@ -223,14 +244,17 @@ mod tests {
 
             memory.write(address, value as u8);
             assert_eq!(memory.read(address), value as u8);
-            assert_eq!(memory.prg.read(address), value as u8);
+            assert_eq!(memory.memory.prg.read(address), value as u8);
         }
     }
 
-    fn nes_cpu_memory() -> NESCPUMemory<ArrayMemory, MockPPURegisters> {
+    type TestNESCPUMemory = super::NESCPUMemory<ArrayMemory>;
+
+    fn nes_cpu_memory() -> RunningNESCPUMemory<TestNESCPUMemory, ArrayMemory, MockPPURegisters> {
         let ppu = MockPPURegisters::default();
         let prg = ArrayMemory::default();
-        NESCPUMemory::new(prg, ppu)
+        let memory = NESCPUMemory::new(prg);
+        RunningNESCPUMemory::new(memory, ppu)
     }
 
     #[derive(Default)]

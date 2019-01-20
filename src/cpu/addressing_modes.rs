@@ -1,7 +1,10 @@
+use std::borrow::BorrowMut;
+
 use crate::address::Address;
+use crate::cpu::CPU;
+use crate::cpu::RunningCPU;
 use crate::Memory;
 
-use super::CPU;
 use super::Reference;
 use super::ReferenceAddressingMode;
 
@@ -16,7 +19,7 @@ macro_rules! def_addressing_modes {
         }
 
         impl ReferenceAddressingMode for $name {
-            fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
+            fn fetch_ref<C: BorrowMut<CPU>, M: Memory>(self, cpu: &mut RunningCPU<C, M>) -> Reference {
                 match self {
                     $(
                     $name::$mode => cpu.exec_addressing_mode(AddressingMode::$mode),
@@ -127,7 +130,10 @@ def_addressing_modes! {
 }
 
 impl JumpAddressingMode {
-    pub fn fetch_address<M: Memory>(self, cpu: &mut CPU<M>) -> Address {
+    pub fn fetch_address<C: BorrowMut<CPU>, M: Memory>(
+        self,
+        cpu: &mut RunningCPU<C, M>,
+    ) -> Address {
         match self {
             JumpAddressingMode::Absolute => cpu.absolute_address(),
             JumpAddressingMode::Indirect => cpu.indirect_address(),
@@ -150,7 +156,7 @@ enum AddressingMode {
     IndirectIndexed,
 }
 
-impl<M: Memory> CPU<M> {
+impl<C: BorrowMut<CPU>, M: Memory> RunningCPU<C, M> {
     fn exec_addressing_mode(&mut self, addressing_mode: AddressingMode) -> Reference {
         match addressing_mode {
             AddressingMode::Accumulator => Reference::Accumulator,
@@ -220,6 +226,8 @@ impl<M: Memory> CPU<M> {
 
 #[cfg(test)]
 mod tests {
+    use crate::ArrayMemory;
+    use crate::cpu::CPU;
     use crate::instructions::*;
     use crate::mem;
 
@@ -228,7 +236,7 @@ mod tests {
 
     #[test]
     fn immediate_addressing_mode_fetches_given_value() {
-        let mut cpu = CPU::with_memory(mem! {56u8});
+        let mut cpu = cpu(mem! {56u8});
 
         let reference = cpu.exec_addressing_mode(Immediate);
         assert_eq!(cpu.read_reference(reference), 56);
@@ -236,14 +244,14 @@ mod tests {
 
     #[test]
     fn accumulator_addressing_mode_fetches_accumulator_value() {
-        let mut cpu = CPU::with_memory(mem! {LDA_IMMEDIATE, 76u8});
+        let mut cpu = cpu(mem! {LDA_IMMEDIATE, 76u8});
         cpu.run_instruction();
         assert_eq!(cpu.read_reference(Reference::Accumulator), 76);
     }
 
     #[test]
     fn zero_page_addressing_mode_fetches_value_at_given_zero_page_address() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 15u8 }
             15 => { 35u8 }
         ));
@@ -254,7 +262,7 @@ mod tests {
 
     #[test]
     fn zero_page_x_addressing_mode_fetches_value_at_given_zero_page_address_offset_by_x() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 15u8 }
             18 => { 35u8 }
         ));
@@ -266,7 +274,7 @@ mod tests {
 
     #[test]
     fn zero_page_x_addressing_mode_wraps() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0xFFu8 }
         ));
         cpu.set_x(1);
@@ -277,7 +285,7 @@ mod tests {
 
     #[test]
     fn zero_page_y_addressing_mode_fetches_value_at_given_zero_page_address_offset_by_y() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 15u8 }
             18 => { 35u8 }
         ));
@@ -289,7 +297,7 @@ mod tests {
 
     #[test]
     fn zero_page_y_addressing_mode_wraps() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0xFFu8 }
         ));
         cpu.set_y(1);
@@ -300,7 +308,7 @@ mod tests {
 
     #[test]
     fn absolute_addressing_mode_fetches_values_at_given_address() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0x32, 0x04 }
             0x432 => { 35u8 }
         ));
@@ -311,7 +319,7 @@ mod tests {
 
     #[test]
     fn absolute_x_addressing_mode_fetches_values_at_given_address_offset_by_x() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0x32, 0x04 }
             0x435 => { 35u8 }
         ));
@@ -323,7 +331,7 @@ mod tests {
 
     #[test]
     fn absolute_y_addressing_mode_fetches_values_at_given_address_offset_by_y() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0x32, 0x04 }
             0x435 => { 35u8 }
         ));
@@ -335,7 +343,7 @@ mod tests {
 
     #[test]
     fn indirect_addressing_mode_fetches_address_at_given_address() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0x32, 0x04 }
             0x432 => { 0x35, 0 }
         ));
@@ -346,7 +354,7 @@ mod tests {
 
     #[test]
     fn indirect_addressing_mode_wraps_at_end_of_page() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0xff, 0x04 }
             0x4ff => { 0x34 }
             0x400 => { 0x12 }
@@ -358,7 +366,7 @@ mod tests {
 
     #[test]
     fn indexed_indirect_addressing_mode_fetches_address_at_given_zero_page_address_offset_by_x() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0x32 }
             0x35 => { 0x34, 0x12 }
             0x1234 => { 57 }
@@ -371,7 +379,7 @@ mod tests {
 
     #[test]
     fn indexed_indirect_addressing_mode_wraps_on_zero_page_overflow() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0x32 }
             0x31 => { 0x34, 0x12 }
             0x1234 => { 57 }
@@ -384,7 +392,7 @@ mod tests {
 
     #[test]
     fn indexed_indirect_addressing_mode_wraps_address_read_from_zero_page() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0x00 => { 0xff }
             0xff => { 0x12 }
             0xff12 => { 57 }
@@ -397,7 +405,7 @@ mod tests {
 
     #[test]
     fn indirect_indexed_addressing_mode_fetches_address_offset_by_y_at_given_zero_page_address() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0 => { 0x32 }
             0x32 => { 0x34, 0x12 }
             0x1237 => { 57 }
@@ -410,7 +418,7 @@ mod tests {
 
     #[test]
     fn indirect_indexed_addressing_mode_wraps_address_read_from_zero_page() {
-        let mut cpu = CPU::with_memory(mem!(
+        let mut cpu = cpu(mem!(
             0x00 => { 0xff }
             0xff => { 0x12 }
             0xff12 => { 57 }
@@ -419,5 +427,10 @@ mod tests {
 
         let reference = cpu.exec_addressing_mode(IndirectIndexed);
         assert_eq!(cpu.read_reference(reference), 57);
+    }
+
+    fn cpu(mut memory: ArrayMemory) -> RunningCPU<CPU, ArrayMemory> {
+        let cpu = CPU::from_memory(&mut memory);
+        RunningCPU::new(cpu, memory)
     }
 }
