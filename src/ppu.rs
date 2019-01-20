@@ -4,8 +4,6 @@ use crate::Address;
 use crate::cpu::Interruptible;
 use crate::Memory;
 
-const NAMETABLES: Address = Address::new(0x2000);
-const ATTRIBUTE_TABLE: Address = Address::new(0x23c0);
 const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
 
 pub struct PPU<M> {
@@ -50,6 +48,15 @@ impl<M: Memory> PPU<M> {
             1
         }
     }
+
+    fn nametable_address(&self) -> Address {
+        let nametable_num = (self.control & Control::NAMETABLE_SELECT).bits();
+        Address::new(0x2000) + u16::from(nametable_num) * 0x0400
+    }
+
+    fn attribute_table_address(&self) -> Address {
+        self.nametable_address() + 0x3c0
+    }
 }
 
 pub struct RunningPPU<'a, M, I> {
@@ -70,11 +77,13 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
             let tile_index = coarse_x as u16 + coarse_y as u16 * 32;
             let attribute_index = ((coarse_y / 4) & 0b111) << 3 | (coarse_x / 4) & 0b111;
 
-            let pattern_index = self.ppu.memory.read(NAMETABLES + u16::from(tile_index));
+            let nametable_address = self.ppu.nametable_address();
+            let attribute_table_address = self.ppu.attribute_table_address();
+            let pattern_index = self.ppu.memory.read(nametable_address + u16::from(tile_index));
             let attribute_byte = self
                 .ppu
                 .memory
-                .read(ATTRIBUTE_TABLE + u16::from(attribute_index));
+                .read(attribute_table_address + u16::from(attribute_index));
             let attribute_bit_index0 =
                 (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) * 2) as u8;
             let attribute_bit_index1 = attribute_bit_index0 + 1;
@@ -438,6 +447,34 @@ mod tests {
 
         ppu.write_control(0b1010_1010);
         assert_eq!(ppu.control.bits(), 0b1010_1010);
+    }
+
+    #[test]
+    fn writing_ppu_control_sets_nametable_address() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_control(0b0000_0000);
+        assert_eq!(ppu.nametable_address(), Address::new(0x2000));
+        ppu.write_control(0b0000_0001);
+        assert_eq!(ppu.nametable_address(), Address::new(0x2400));
+        ppu.write_control(0b0000_0010);
+        assert_eq!(ppu.nametable_address(), Address::new(0x2800));
+        ppu.write_control(0b0000_0011);
+        assert_eq!(ppu.nametable_address(), Address::new(0x2c00));
+    }
+
+    #[test]
+    fn writing_ppu_control_sets_attribute_table_address() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_control(0b0000_0000);
+        assert_eq!(ppu.attribute_table_address(), Address::new(0x23c0));
+        ppu.write_control(0b0000_0001);
+        assert_eq!(ppu.attribute_table_address(), Address::new(0x27c0));
+        ppu.write_control(0b0000_0010);
+        assert_eq!(ppu.attribute_table_address(), Address::new(0x2bc0));
+        ppu.write_control(0b0000_0011);
+        assert_eq!(ppu.attribute_table_address(), Address::new(0x2fc0));
     }
 
     #[test]
