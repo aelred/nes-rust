@@ -57,6 +57,14 @@ impl<M: Memory> PPU<M> {
     fn attribute_table_address(&self) -> Address {
         self.nametable_address() + 0x3c0
     }
+
+    fn background_pattern_table_address(&self) -> Address {
+        if self.control.contains(Control::BACKGROUND_PATTERN_TABLE) {
+            Address::new(0x1000)
+        } else {
+            Address::new(0x0000)
+        }
+    }
 }
 
 pub struct RunningPPU<'a, M, I> {
@@ -72,7 +80,8 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
     pub fn tick(&mut self) -> Color {
         if self.ppu.cycle_count % 8 == 0 {
             let coarse_x = self.ppu.horizontal_scroll;
-            let coarse_y = (self.ppu.vertical_scroll / 8) as u8;
+            let coarse_y = (self.ppu.vertical_scroll & 0b1111_1000) >> 3;
+            let fine_y = self.ppu.vertical_scroll & 0b0111;
 
             let tile_index = coarse_x as u16 + coarse_y as u16 * 32;
             let attribute_index = ((coarse_y / 4) & 0b111) << 3 | (coarse_x / 4) & 0b111;
@@ -88,9 +97,9 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
                 (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) * 2) as u8;
             let attribute_bit_index1 = attribute_bit_index0 + 1;
 
-            let pattern_address0 = Address::new(
-                0x1000 | u16::from(pattern_index) << 4 | u16::from(self.ppu.vertical_scroll & 0b0111),
-            );
+            let pattern_table_address = self.ppu.background_pattern_table_address();
+            let index = u16::from(pattern_index) << 4 | u16::from(fine_y);
+            let pattern_address0 = pattern_table_address + index;
             let pattern_address1 = pattern_address0 + 0b1000;
 
             self.ppu.tile_pattern0 |= u16::from(self.ppu.memory.read(pattern_address0));
@@ -475,6 +484,16 @@ mod tests {
         assert_eq!(ppu.attribute_table_address(), Address::new(0x2bc0));
         ppu.write_control(0b0000_0011);
         assert_eq!(ppu.attribute_table_address(), Address::new(0x2fc0));
+    }
+
+    #[test]
+    fn writing_ppu_control_sets_background_pattern_table_address() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_control(0b0000_0000);
+        assert_eq!(ppu.background_pattern_table_address(), Address::new(0x0000));
+        ppu.write_control(0b0001_0000);
+        assert_eq!(ppu.background_pattern_table_address(), Address::new(0x1000));
     }
 
     #[test]
