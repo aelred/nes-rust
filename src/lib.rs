@@ -88,8 +88,10 @@ macro_rules! mem {
     };
     ($( $offset: expr => { $( $data: expr ),* } )*) => {
         {
+            #[allow(unused_variables, unused_mut)]
             let mut memory = $crate::ArrayMemory::default();
             $(
+                #[allow(unused_variables, unused_mut)]
                 let mut addr: Address = Address::from($offset);
                 $(
                     let byte = $crate::SerializeByte::to_byte($data);
