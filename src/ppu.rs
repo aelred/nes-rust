@@ -1,6 +1,4 @@
 use std::cell::RefCell;
-use std::ops::Deref;
-use std::ops::DerefMut;
 use std::rc::Rc;
 
 use bitflags::bitflags;
@@ -68,86 +66,74 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
     }
 
     pub fn tick(&mut self) -> Color {
-        if self.cycle_count % 8 == 0 {
-            let coarse_x = self.horizontal_scroll;
-            let coarse_y = (self.vertical_scroll / 8) as u8;
+        if self.ppu.cycle_count % 8 == 0 {
+            let coarse_x = self.ppu.horizontal_scroll;
+            let coarse_y = (self.ppu.vertical_scroll / 8) as u8;
 
             let tile_index = coarse_x as u16 + coarse_y as u16 * 32;
             let attribute_index = ((coarse_y / 4) & 0b111) << 3 | (coarse_x / 4) & 0b111;
 
-            let pattern_index = self.memory.read(NAMETABLES + u16::from(tile_index));
+            let pattern_index = self.ppu.memory.read(NAMETABLES + u16::from(tile_index));
             let attribute_byte = self
+                .ppu
                 .memory
                 .read(ATTRIBUTE_TABLE + u16::from(attribute_index));
             let attribute_bit_index0 =
                 (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) * 2) as u8;
             let attribute_bit_index1 = attribute_bit_index0 + 1;
 
-            let pattern_address0 =
-                Address::new(0x1000 | u16::from(pattern_index) << 4 | (self.vertical_scroll & 0b0111));
+            let pattern_address0 = Address::new(
+                0x1000 | u16::from(pattern_index) << 4 | (self.ppu.vertical_scroll & 0b0111),
+            );
             let pattern_address1 = pattern_address0 + 0b1000;
 
-            self.tile_pattern0 |= u16::from(self.memory.read(pattern_address0));
-            self.tile_pattern1 |= u16::from(self.memory.read(pattern_address1));
+            self.ppu.tile_pattern0 |= u16::from(self.ppu.memory.read(pattern_address0));
+            self.ppu.tile_pattern1 |= u16::from(self.ppu.memory.read(pattern_address1));
 
             let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
             let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
 
-            self.palette_select0 |= u16::from(palette0);
-            self.palette_select1 |= u16::from(palette1);
+            self.ppu.palette_select0 |= u16::from(palette0);
+            self.ppu.palette_select1 |= u16::from(palette1);
 
-            self.horizontal_scroll += 1;
+            self.ppu.horizontal_scroll += 1;
 
-            if self.horizontal_scroll == 32 {
-                self.horizontal_scroll = 0;
-                self.vertical_scroll += 1;
+            if self.ppu.horizontal_scroll == 32 {
+                self.ppu.horizontal_scroll = 0;
+                self.ppu.vertical_scroll += 1;
 
-                if self.vertical_scroll == 220 {
-                    self.status.insert(Status::VBLANK);
+                if self.ppu.vertical_scroll == 220 {
+                    self.ppu.status.insert(Status::VBLANK);
 
-                    if self.control.contains(Control::NMI_ON_VBLANK) {
+                    if self.ppu.control.contains(Control::NMI_ON_VBLANK) {
                         self.interruptible.non_maskable_interrupt();
                     }
                 }
 
-                if self.vertical_scroll == 240 {
-                    self.vertical_scroll = 0;
-                    self.status.remove(Status::VBLANK);
+                if self.ppu.vertical_scroll == 240 {
+                    self.ppu.vertical_scroll = 0;
+                    self.ppu.status.remove(Status::VBLANK);
                 }
             }
         }
 
-        self.cycle_count = self.cycle_count.wrapping_add(1);
+        self.ppu.cycle_count = self.ppu.cycle_count.wrapping_add(1);
 
         let mask = 0b1000_0000_0000_0000;
-        let bit0 = (self.tile_pattern0 & mask) >> 15;
-        let bit1 = (self.tile_pattern1 & mask) >> 14;
-        let bit2 = (self.palette_select0 & mask) >> 13;
-        let bit3 = (self.palette_select1 & mask) >> 12;
+        let bit0 = (self.ppu.tile_pattern0 & mask) >> 15;
+        let bit1 = (self.ppu.tile_pattern1 & mask) >> 14;
+        let bit2 = (self.ppu.palette_select0 & mask) >> 13;
+        let bit3 = (self.ppu.palette_select1 & mask) >> 12;
         let color_index = bit0 | bit1 | bit2 | bit3;
 
-        self.tile_pattern0 <<= 1;
-        self.tile_pattern1 <<= 1;
-        self.palette_select0 <<= 1;
-        self.palette_select1 <<= 1;
+        self.ppu.tile_pattern0 <<= 1;
+        self.ppu.tile_pattern1 <<= 1;
+        self.ppu.palette_select0 <<= 1;
+        self.ppu.palette_select1 <<= 1;
 
         let address = BACKGROUND_PALETTES + color_index;
 
-        Color(self.memory.read(address))
-    }
-}
-
-impl<'a, M, I> Deref for RunningPPU<'a, M, I> {
-    type Target = PPU<M>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.ppu
-    }
-}
-
-impl<'a, M, I> DerefMut for RunningPPU<'a, M, I> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.ppu
+        Color(self.ppu.memory.read(address))
     }
 }
 
