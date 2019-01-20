@@ -41,7 +41,11 @@ fn main() -> Result<(), Box<Error>> {
     canvas.present();
 
     // We start at the LAST tile, because the PPU is always loading data one tile ahead
-    let display = SDLDisplay { canvas, x: 248, y: 240 };
+    let display = SDLDisplay {
+        canvas,
+        x: 248,
+        y: 240,
+    };
 
     let stdin = std::io::stdin();
     let handle = stdin.lock();

@@ -66,7 +66,7 @@ impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
             PALETTE_OFFSET...0x3fff => {
                 let index = (address.index() - PALETTE_OFFSET) % 0x0020;
                 self.palette_ram[index]
-            },
+            }
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
