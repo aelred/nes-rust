@@ -19,6 +19,8 @@ pub struct PPU<M> {
     status: Status,
     mask: Mask,
     address: Address,
+    // This is a raw u16 and not an Address because it is also used to store scrolling information.
+    temporary_address: u16,
     write_lower: bool,
 }
 
@@ -37,6 +39,7 @@ impl<M: Memory> PPU<M> {
             mask: Mask::empty(),
             status: Status::empty(),
             address: Address::new(0),
+            temporary_address: 0,
             write_lower: false,
         }
     }
@@ -241,6 +244,11 @@ impl<'a, T: PPURegisters> PPURegisters for &'a mut T {
 impl<M: Memory> PPURegisters for PPU<M> {
     fn write_control(&mut self, byte: u8) {
         self.control = Control::from_bits_truncate(byte);
+
+        // Set bits of temporary address to nametable
+        let nametable = self.control & Control::NAMETABLE_SELECT;
+        self.temporary_address &= 0b1111_0011_1111_1111;
+        self.temporary_address |= u16::from(nametable.bits()) << 10;
     }
 
     fn write_mask(&mut self, byte: u8) {
@@ -271,11 +279,14 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn write_address(&mut self, byte: u8) {
-        self.address = if self.write_lower {
-            Address::from_bytes(self.address.higher(), byte)
+        if self.write_lower {
+            self.temporary_address &= 0b1111_1111_0000_0000;
+            self.temporary_address |= u16::from(byte);
+            self.address = Address::new(self.temporary_address);
         } else {
-            Address::from_bytes(byte, self.address.lower())
-        };
+            self.temporary_address &= 0b0000_0000_1111_1111;
+            self.temporary_address |= u16::from(byte & 0b0011_1111) << 8;
+        }
 
         self.write_lower = !self.write_lower;
     }
@@ -461,6 +472,20 @@ mod tests {
     }
 
     #[test]
+    fn writing_ppu_control_sets_temporary_address_to_nametable() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_control(0b0000_0000);
+        assert_eq!(ppu.temporary_address, 0b0000_0000_0000_0000);
+        ppu.write_control(0b0000_0001);
+        assert_eq!(ppu.temporary_address, 0b0000_0100_0000_0000);
+        ppu.write_control(0b0000_0010);
+        assert_eq!(ppu.temporary_address, 0b0000_1000_0000_0000);
+        ppu.write_control(0b0000_0011);
+        assert_eq!(ppu.temporary_address, 0b0000_1100_0000_0000);
+    }
+
+    #[test]
     fn writing_ppu_control_sets_nametable_address() {
         let mut ppu = PPU::with_memory(mem!());
 
@@ -529,9 +554,9 @@ mod tests {
 
         ppu.write_address(0x12);
         ppu.write_address(0x34);
-        ppu.write_address(0x56);
+        ppu.write_address(0x06);
 
-        assert_eq!(ppu.address, Address::new(0x5634));
+        assert_eq!(ppu.temporary_address, 0x0634);
 
         ppu.write_address(0x00);
         ppu.write_address(0x12);
@@ -539,7 +564,36 @@ mod tests {
         ppu.write_address(0x34);
         ppu.write_address(0x56);
 
-        assert_eq!(ppu.address, Address::new(0x3456));
+        assert_eq!(ppu.temporary_address, 0x3456);
+    }
+
+    #[test]
+    fn writing_ppu_address_once_sets_masked_upper_bits_of_temporary_address() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.temporary_address = 0;
+        ppu.address = Address::new(0);
+        ppu.write_lower = false;
+
+        ppu.write_address(0b1110_1010);
+
+        assert_eq!(ppu.temporary_address, 0b0010_1010_0000_0000);
+        assert_eq!(ppu.address, Address::new(0));
+    }
+
+    #[test]
+    fn writing_ppu_address_twice_sets_lower_bits_of_temporary_address_and_transfers_to_address() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.temporary_address = 0;
+        ppu.address = Address::new(0);
+        ppu.write_lower = false;
+
+        ppu.write_address(0b1110_1010);
+        ppu.write_address(0b0101_0101);
+
+        assert_eq!(ppu.temporary_address, 0b0010_1010_0101_0101);
+        assert_eq!(ppu.address, Address::new(0b0010_1010_0101_0101));
     }
 
     #[test]
