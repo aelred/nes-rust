@@ -12,7 +12,7 @@ impl Address {
     }
 
     pub fn from_bytes(higher: u8, lower: u8) -> Self {
-        Address((u16::from(higher) << 8) + u16::from(lower))
+        Address(u16::from_le_bytes([lower, higher]))
     }
 
     pub fn index(self) -> usize {
@@ -20,11 +20,11 @@ impl Address {
     }
 
     pub fn higher(self) -> u8 {
-        (self.0 >> 8) as u8
+        self.0.to_le_bytes()[1]
     }
 
     pub fn lower(self) -> u8 {
-        self.0 as u8
+        self.0.to_le_bytes()[0]
     }
 
     pub fn incr_lower(self) -> Self {

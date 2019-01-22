@@ -1863,8 +1863,8 @@ mod tests {
                     let carry_bit = *carry_in as u16;
                     let expected = u16::from(*x) + u16::from(*y) + carry_bit;
 
-                    let carry_out = (cpu.status().contains(Status::CARRY) as u16) << 8;
-                    let actual = u16::from(cpu.accumulator()) + carry_out;
+                    let carry_out = cpu.status().contains(Status::CARRY) as u8;
+                    let actual = u16::from_be_bytes([carry_out, cpu.accumulator()]);
 
                     assert_eq!(actual, expected, "{} + {} + {}", x, y, carry_bit);
                 }
@@ -1891,9 +1891,9 @@ mod tests {
                         .wrapping_sub(1 - carry_bit);
                     let expected = expected & 0b1_1111_1111;
 
-                    let carry_out = cpu.status().contains(Status::CARRY) as u16;
+                    let carry_out = cpu.status().contains(Status::CARRY) as u8;
                     let accumulator = cpu.accumulator();
-                    let actual = u16::from(accumulator) + ((1 - carry_out) << 8);
+                    let actual = u16::from_be_bytes([1 - carry_out, accumulator]);
 
                     assert_eq!(
                         actual, expected,
