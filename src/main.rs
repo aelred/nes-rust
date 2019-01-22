@@ -1,9 +1,12 @@
 use std::error::Error;
+use std::fs::File;
 use std::time::Duration;
+use std::time::Instant;
 
 use sdl2::event::Event;
 use sdl2::rect::Point;
 use sdl2::render::Canvas;
+use sdl2::render::WindowCanvas;
 use sdl2::video::Window;
 
 use nes_rust::INes;
@@ -40,12 +43,7 @@ fn main() -> Result<(), Box<Error>> {
     canvas.clear();
     canvas.present();
 
-    // We start at the LAST tile, because the PPU is always loading data one tile ahead
-    let display = SDLDisplay {
-        canvas,
-        x: 248,
-        y: 240,
-    };
+    let display = SDLDisplay::new(canvas);
 
     let stdin = std::io::stdin();
     let handle = stdin.lock();
@@ -56,8 +54,10 @@ fn main() -> Result<(), Box<Error>> {
     let mut nes = NES::new(&mut cartridge, display);
 
     loop {
-        nes.tick();
-        std::thread::sleep(Duration::from_micros(1));
+        // Arbitrary number of ticks so we don't poll events too much
+        for _ in 1..1000 {
+            nes.tick();
+        }
 
         for event in event_pump.poll_iter() {
             match event {
@@ -70,10 +70,26 @@ fn main() -> Result<(), Box<Error>> {
     }
 }
 
+const FPS: u64 = 30;
+const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS);
+
 struct SDLDisplay {
     canvas: Canvas<Window>,
     x: i32,
     y: i32,
+    start_of_frame: Instant,
+}
+
+impl SDLDisplay {
+    fn new(canvas: WindowCanvas) -> Self {
+        // We start at the LAST tile, because the PPU is always loading data one tile ahead
+        SDLDisplay {
+            canvas,
+            x: 248,
+            y: 240,
+            start_of_frame: Instant::now(),
+        }
+    }
 }
 
 impl NESDisplay for SDLDisplay {
@@ -89,6 +105,12 @@ impl NESDisplay for SDLDisplay {
         if self.y == 240 {
             self.y = 0;
             self.canvas.present();
+
+            let elapsed = Instant::now().duration_since(self.start_of_frame);
+            let time_to_sleep = FRAME_DURATION.checked_sub(elapsed).unwrap_or_default();
+            std::thread::sleep(time_to_sleep);
+
+            self.start_of_frame = Instant::now();
         }
     }
 }
