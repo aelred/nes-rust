@@ -8,6 +8,7 @@ const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
 
 pub struct PPU<M> {
     memory: M,
+    object_attribute_memory: [u8; 256],
     horizontal_scroll: u8,
     vertical_scroll: u8,
     cycle_count: u8,
@@ -22,12 +23,14 @@ pub struct PPU<M> {
     // This is a raw u16 and not an Address because it is also used to store scrolling information.
     temporary_address: u16,
     write_lower: bool,
+    oam_address: u8,
 }
 
 impl<M: Memory> PPU<M> {
     pub fn with_memory(memory: M) -> Self {
         PPU {
             memory,
+            object_attribute_memory: [0; 256],
             horizontal_scroll: 0,
             vertical_scroll: 0,
             cycle_count: 0,
@@ -41,6 +44,7 @@ impl<M: Memory> PPU<M> {
             address: Address::new(0),
             temporary_address: 0,
             write_lower: false,
+            oam_address: 0,
         }
     }
 
@@ -197,6 +201,8 @@ pub trait PPURegisters {
     fn read_data(&mut self) -> u8;
 
     fn write_data(&mut self, byte: u8);
+
+    fn write_oam_dma(&mut self, bytes: [u8; 256]);
 }
 
 impl<'a, T: PPURegisters> PPURegisters for &'a mut T {
@@ -239,6 +245,10 @@ impl<'a, T: PPURegisters> PPURegisters for &'a mut T {
     fn write_data(&mut self, byte: u8) {
         (*self).write_data(byte)
     }
+
+    fn write_oam_dma(&mut self, bytes: [u8; 256]) {
+        (*self).write_oam_dma(bytes)
+    }
 }
 
 impl<M: Memory> PPURegisters for PPU<M> {
@@ -263,7 +273,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn write_oam_address(&mut self, byte: u8) {
-        // TODO
+        self.oam_address = byte;
     }
 
     fn read_oam_data(&mut self) -> u8 {
@@ -300,6 +310,10 @@ impl<M: Memory> PPURegisters for PPU<M> {
     fn write_data(&mut self, byte: u8) {
         self.memory.write(self.address, byte);
         self.address += self.address_increment();
+    }
+
+    fn write_oam_dma(&mut self, bytes: [u8; 256]) {
+        self.object_attribute_memory = bytes;
     }
 }
 
@@ -539,6 +553,30 @@ mod tests {
         assert_eq!(ppu.read_data(), 0x84);
         ppu.write_data(0x94);
         assert_eq!(ppu.memory.read(Address::new(0x1274)), 0x94);
+    }
+
+    #[test]
+    fn writing_oam_address_sets_oam_address() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_oam_address(0x42);
+
+        assert_eq!(ppu.oam_address, 0x42);
+    }
+
+    #[test]
+    fn writing_oam_dma_writes_from_cpu_page_to_oam() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        let mut data = [0; 256];
+
+        for (i, elem) in data.iter_mut().enumerate() {
+            *elem = i as u8;
+        }
+
+        ppu.write_oam_dma(data);
+
+        assert_eq!(ppu.object_attribute_memory.to_vec(), data.to_vec());
     }
 
     struct StubInterruptible;

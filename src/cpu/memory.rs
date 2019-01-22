@@ -16,6 +16,7 @@ const PPU_SCROLL: Address = Address::new(0x2005);
 const PPU_ADDRESS: Address = Address::new(0x2006);
 const PPU_DATA: Address = Address::new(0x2007);
 const APU_SPACE: Address = Address::new(0x4000);
+const OAM_DMA: Address = Address::new(0x4014);
 const PRG_SPACE: Address = Address::new(0x4020);
 
 pub struct NESCPUMemory<PRG> {
@@ -50,6 +51,21 @@ impl<M, PRG, PPU> RunningNESCPUMemory<M, PRG, PPU> {
     }
 }
 
+impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters>
+RunningNESCPUMemory<M, PRG, PPU> {
+    fn write_oam_data(&mut self, page: u8) {
+        let address = Address::from_bytes(page, 0);
+
+        let mut data = [0; 256];
+
+        for (offset, byte) in data.iter_mut().enumerate() {
+            *byte = self.read(address + offset as u16);
+        }
+
+        self.ppu_registers.write_oam_dma(data);
+    }
+}
+
 impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters> Memory
 for RunningNESCPUMemory<M, PRG, PPU>
 {
@@ -75,6 +91,8 @@ for RunningNESCPUMemory<M, PRG, PPU>
     fn write(&mut self, address: Address, byte: u8) {
         if address >= PRG_SPACE {
             self.memory.borrow_mut().prg.write(address, byte);
+        } else if address == OAM_DMA {
+            self.write_oam_data(byte);
         } else if address >= APU_SPACE {
             self.memory.borrow_mut().the_rest.write(address, byte) // TODO
         } else if address >= PPU_SPACE {
@@ -201,6 +219,24 @@ mod tests {
     }
 
     #[test]
+    fn can_write_oamdma_in_nes_cpu_memory() {
+        let mut expected = Vec::new();
+        for i in 0..=255 {
+            expected.push(i);
+        }
+
+        let mut memory = nes_cpu_memory();
+
+        for i in 0x0200..=0x02ff {
+            memory.write(Address::new(i), expected[i as usize % 256]);
+        }
+
+        memory.write(Address::new(0x4014), 0x02);
+
+        assert_eq!(memory.ppu_registers.oam_dma, Some(expected.into_boxed_slice()));
+    }
+
+    #[test]
     fn can_write_ppuscroll_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
 
@@ -267,6 +303,7 @@ mod tests {
         scroll: Option<u8>,
         address: Option<u8>,
         data: Option<u8>,
+        oam_dma: Option<Box<[u8]>>,
     }
 
     impl PPURegisters for MockPPURegisters {
@@ -308,6 +345,10 @@ mod tests {
 
         fn write_data(&mut self, byte: u8) {
             self.data = Some(byte);
+        }
+
+        fn write_oam_dma(&mut self, bytes: [u8; 256]) {
+            self.oam_dma = Some(Box::new(bytes));
         }
     }
 }
