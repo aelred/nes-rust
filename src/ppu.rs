@@ -78,13 +78,14 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
     }
 
     pub fn tick(&mut self) -> Color {
-        if self.ppu.cycle_count % 8 == 0 {
-            let coarse_x = (self.ppu.horizontal_scroll & 0b1111_1000) >> 3;
-            let coarse_y = (self.ppu.vertical_scroll & 0b1111_1000) >> 3;
-            let fine_y = self.ppu.vertical_scroll & 0b0111;
+        let coarse_x = (self.ppu.horizontal_scroll & 0b1111_1000) >> 3;
+        let fine_x = self.ppu.horizontal_scroll & 0b0000_0111;
+        let coarse_y = (self.ppu.vertical_scroll & 0b1111_1000) >> 3;
+        let fine_y = self.ppu.vertical_scroll & 0b0111;
 
-            let tile_index = coarse_x as u16 + coarse_y as u16 * 32;
-            let attribute_index = ((coarse_y / 4) & 0b111) << 3 | (coarse_x / 4) & 0b111;
+        if self.ppu.cycle_count % 8 == 0 {
+            let tile_index = ((coarse_y as u16) << 5) | coarse_x as u16;
+            let attribute_index = ((coarse_y << 1) & 0b11_1000) | (coarse_x >> 2);
 
             let nametable_address = self.ppu.nametable_address();
             let attribute_table_address = self.ppu.attribute_table_address();
@@ -94,7 +95,7 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
                 .memory
                 .read(attribute_table_address + u16::from(attribute_index));
             let attribute_bit_index0 =
-                (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) * 2) as u8;
+                (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) << 1) as u8;
             let attribute_bit_index1 = attribute_bit_index0 + 1;
 
             let pattern_table_address = self.ppu.background_pattern_table_address();
@@ -130,8 +131,6 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
                 }
             }
         }
-
-        let fine_x = self.ppu.horizontal_scroll & 0b0000_0111;
 
         self.ppu.cycle_count = self.ppu.cycle_count.wrapping_add(1);
 
