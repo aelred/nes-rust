@@ -11,10 +11,10 @@ pub struct PPU<M> {
     horizontal_scroll: u8,
     vertical_scroll: u8,
     cycle_count: u8,
-    tile_pattern0: u16,
-    tile_pattern1: u16,
-    palette_select0: u16,
-    palette_select1: u16,
+    tile_pattern0: ShiftRegister,
+    tile_pattern1: ShiftRegister,
+    palette_select0: ShiftRegister,
+    palette_select1: ShiftRegister,
     control: Control,
     status: Status,
     mask: Mask,
@@ -29,10 +29,10 @@ impl<M: Memory> PPU<M> {
             horizontal_scroll: 0,
             vertical_scroll: 0,
             cycle_count: 0,
-            tile_pattern0: 0,
-            tile_pattern1: 0,
-            palette_select0: 0,
-            palette_select1: 0,
+            tile_pattern0: ShiftRegister::default(),
+            tile_pattern1: ShiftRegister::default(),
+            palette_select0: ShiftRegister::default(),
+            palette_select1: ShiftRegister::default(),
             control: Control::empty(),
             mask: Mask::empty(),
             status: Status::empty(),
@@ -102,14 +102,14 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
             let pattern_address0 = pattern_table_address + index;
             let pattern_address1 = pattern_address0 + 0b1000;
 
-            self.ppu.tile_pattern0 |= u16::from(self.ppu.memory.read(pattern_address0));
-            self.ppu.tile_pattern1 |= u16::from(self.ppu.memory.read(pattern_address1));
+            self.ppu.tile_pattern0.set_next_byte(self.ppu.memory.read(pattern_address0));
+            self.ppu.tile_pattern1.set_next_byte(self.ppu.memory.read(pattern_address1));
 
             let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
             let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
 
-            self.ppu.palette_select0 |= u16::from(palette0);
-            self.ppu.palette_select1 |= u16::from(palette1);
+            self.ppu.palette_select0.set_next_byte(palette0);
+            self.ppu.palette_select1.set_next_byte(palette1);
 
             self.ppu.horizontal_scroll = self.ppu.horizontal_scroll.wrapping_add(8);
 
@@ -135,21 +135,39 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
         self.ppu.cycle_count = self.ppu.cycle_count.wrapping_add(1);
 
-        let mask = 0b1000_0000_0000_0000 >> fine_x;
-        let bit0 = (self.ppu.tile_pattern0 & mask) >> 15;
-        let bit1 = (self.ppu.tile_pattern1 & mask) >> 14;
-        let bit2 = (self.ppu.palette_select0 & mask) >> 13;
-        let bit3 = (self.ppu.palette_select1 & mask) >> 12;
+        let bit0 = u16::from(self.ppu.tile_pattern0.get_bit(fine_x));
+        let bit1 = u16::from(self.ppu.tile_pattern1.get_bit(fine_x)) << 1;
+        let bit2 = u16::from(self.ppu.palette_select0.get_bit(fine_x)) << 2;
+        let bit3 = u16::from(self.ppu.palette_select1.get_bit(fine_x)) << 3;
         let color_index = bit0 | bit1 | bit2 | bit3;
 
-        self.ppu.tile_pattern0 <<= 1;
-        self.ppu.tile_pattern1 <<= 1;
-        self.ppu.palette_select0 <<= 1;
-        self.ppu.palette_select1 <<= 1;
+        self.ppu.tile_pattern0.shift();
+        self.ppu.tile_pattern1.shift();
+        self.ppu.palette_select0.shift();
+        self.ppu.palette_select1.shift();
 
         let address = BACKGROUND_PALETTES + color_index;
 
         Color(self.ppu.memory.read(address))
+    }
+}
+
+#[derive(Default, Debug, Eq, PartialEq)]
+struct ShiftRegister(u16);
+
+impl ShiftRegister {
+    fn set_next_byte(&mut self, byte: u8) {
+        self.0 |= u16::from(byte);
+    }
+
+    fn shift(&mut self) {
+        self.0 <<= 1;
+    }
+
+    fn get_bit(&self, bit: u8) -> bool {
+        assert!(bit < 8);
+        let mask = 0b1000_0000_0000_0000 >> bit;
+        (self.0 & mask) != 0
     }
 }
 
@@ -350,22 +368,22 @@ mod tests {
         let mut stub = StubInterruptible;
         let mut rppu = RunningPPU::new(&mut ppu, &mut stub);
 
-        rppu.ppu.tile_pattern0 = 0xf1;
-        rppu.ppu.tile_pattern1 = 0xf0;
-        rppu.ppu.palette_select0 = 0xf0;
-        rppu.ppu.palette_select1 = 0xf1;
+        rppu.ppu.tile_pattern0 = ShiftRegister(0xf1);
+        rppu.ppu.tile_pattern1 = ShiftRegister(0xf0);
+        rppu.ppu.palette_select0 = ShiftRegister(0xf0);
+        rppu.ppu.palette_select1 = ShiftRegister(0xf1);
         assert_eq!(rppu.tick(), Color(0xaa));
 
-        rppu.ppu.tile_pattern0 = 0xf0;
-        rppu.ppu.tile_pattern1 = 0xf1;
-        rppu.ppu.palette_select0 = 0xf1;
-        rppu.ppu.palette_select1 = 0xf0;
+        rppu.ppu.tile_pattern0 = ShiftRegister(0xf0);
+        rppu.ppu.tile_pattern1 = ShiftRegister(0xf1);
+        rppu.ppu.palette_select0 = ShiftRegister(0xf1);
+        rppu.ppu.palette_select1 = ShiftRegister(0xf0);
         assert_eq!(rppu.tick(), Color(0xa7));
 
-        rppu.ppu.tile_pattern0 = 0xf1;
-        rppu.ppu.tile_pattern1 = 0xf0;
-        rppu.ppu.palette_select0 = 0xf1;
-        rppu.ppu.palette_select1 = 0xf0;
+        rppu.ppu.tile_pattern0 = ShiftRegister(0xf1);
+        rppu.ppu.tile_pattern1 = ShiftRegister(0xf0);
+        rppu.ppu.palette_select0 = ShiftRegister(0xf1);
+        rppu.ppu.palette_select1 = ShiftRegister(0xf0);
         assert_eq!(rppu.tick(), Color(0xa6));
     }
 
@@ -377,17 +395,17 @@ mod tests {
         let mut stub = StubInterruptible;
         let mut rppu = RunningPPU::new(&mut ppu, &mut stub);
 
-        rppu.ppu.tile_pattern0 = 0b1000_0000_0000_0001;
-        rppu.ppu.tile_pattern1 = 0b0101_0101_0101_0101;
-        rppu.ppu.palette_select0 = 0b1111_1111_1111_1111;
-        rppu.ppu.palette_select1 = 0b0000_0000_1111_1111;
+        rppu.ppu.tile_pattern0 = ShiftRegister(0b1000_0000_0000_0001);
+        rppu.ppu.tile_pattern1 = ShiftRegister(0b0101_0101_0101_0101);
+        rppu.ppu.palette_select0 = ShiftRegister(0b1111_1111_1111_1111);
+        rppu.ppu.palette_select1 = ShiftRegister(0b0000_0000_1111_1111);
 
         rppu.tick();
 
-        assert_eq!(rppu.ppu.tile_pattern0, 0b0100_0000_0000_0000);
-        assert_eq!(rppu.ppu.tile_pattern1, 0b0010_1010_1010_1010);
-        assert_eq!(rppu.ppu.palette_select0, 0b0111_1111_1111_1111);
-        assert_eq!(rppu.ppu.palette_select1, 0b0000_0000_0111_1111);
+        assert_eq!(rppu.ppu.tile_pattern0, ShiftRegister(0b0100_0000_0000_0000));
+        assert_eq!(rppu.ppu.tile_pattern1, ShiftRegister(0b0010_1010_1010_1010));
+        assert_eq!(rppu.ppu.palette_select0, ShiftRegister(0b0111_1111_1111_1111));
+        assert_eq!(rppu.ppu.palette_select1, ShiftRegister(0b0000_0000_0111_1111));
     }
 
     #[ignore]
@@ -420,35 +438,19 @@ mod tests {
         rppu.ppu.horizontal_scroll = 5;
         rppu.ppu.vertical_scroll = 10;
 
-        rppu.ppu.tile_pattern0 = 0b1000_0000_0000_0001;
-        rppu.ppu.tile_pattern1 = 0b0101_0101_0010_0010;
-        rppu.ppu.palette_select0 = 0b1111_1111_0000_0000;
-        rppu.ppu.palette_select1 = 0b0000_0000_1111_1111;
+        rppu.ppu.tile_pattern0 = ShiftRegister(0b1000_0000_0000_0001);
+        rppu.ppu.tile_pattern1 = ShiftRegister(0b0101_0101_0010_0010);
+        rppu.ppu.palette_select0 = ShiftRegister(0b1111_1111_0000_0000);
+        rppu.ppu.palette_select1 = ShiftRegister(0b0000_0000_1111_1111);
 
         for _ in 0..8 {
             rppu.tick();
         }
 
-        assert_eq!(
-            rppu.ppu.tile_pattern0, 0b1001_1001_1000_0000,
-            "{:#b}",
-            rppu.ppu.tile_pattern0
-        );
-        assert_eq!(
-            rppu.ppu.tile_pattern1, 0b0110_0110_0101_0101,
-            "{:#b}",
-            rppu.ppu.tile_pattern1
-        );
-        assert_eq!(
-            rppu.ppu.palette_select0, 0b0000_0000_1111_1111,
-            "{:#b}",
-            rppu.ppu.palette_select0
-        );
-        assert_eq!(
-            rppu.ppu.palette_select1, 0b1111_1111_0000_0000,
-            "{:#b}",
-            rppu.ppu.palette_select1
-        );
+        assert_eq!(rppu.ppu.tile_pattern0, ShiftRegister(0b1001_1001_1000_0000));
+        assert_eq!(rppu.ppu.tile_pattern1, ShiftRegister(0b0110_0110_0101_0101));
+        assert_eq!(rppu.ppu.palette_select0, ShiftRegister(0b0000_0000_1111_1111));
+        assert_eq!(rppu.ppu.palette_select1, ShiftRegister(0b1111_1111_0000_0000));
     }
 
     #[test]
