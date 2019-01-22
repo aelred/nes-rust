@@ -94,10 +94,10 @@ impl NESDisplay for SDLDisplay {
 }
 
 fn ppu_to_sdl(color: PPUColor) -> SDLColor {
-    COLOR_LOOKUP[(color.to_byte() % 56) as usize]
+    COLOR_LOOKUP[color.to_byte() as usize]
 }
 
-const COLOR_LOOKUP: [SDLColor; 56] = [
+const COLOR_LOOKUP: [SDLColor; 64] = [
     SDLColor {
         r: 84,
         g: 84,
@@ -174,6 +174,18 @@ const COLOR_LOOKUP: [SDLColor; 56] = [
         r: 0,
         g: 50,
         b: 60,
+        a: 255,
+    },
+    SDLColor {
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 255,
+    },
+    SDLColor {
+        r: 0,
+        g: 0,
+        b: 0,
         a: 255,
     },
     SDLColor {
@@ -267,6 +279,18 @@ const COLOR_LOOKUP: [SDLColor; 56] = [
         a: 255,
     },
     SDLColor {
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 255,
+    },
+    SDLColor {
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 255,
+    },
+    SDLColor {
         r: 236,
         g: 238,
         b: 236,
@@ -351,6 +375,18 @@ const COLOR_LOOKUP: [SDLColor; 56] = [
         a: 255,
     },
     SDLColor {
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 255,
+    },
+    SDLColor {
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 255,
+    },
+    SDLColor {
         r: 236,
         g: 238,
         b: 236,
@@ -432,6 +468,18 @@ const COLOR_LOOKUP: [SDLColor; 56] = [
         r: 160,
         g: 162,
         b: 160,
+        a: 255,
+    },
+    SDLColor {
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 255,
+    },
+    SDLColor {
+        r: 0,
+        g: 0,
+        b: 0,
         a: 255,
     },
 ];
