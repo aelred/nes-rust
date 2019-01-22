@@ -79,7 +79,7 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
     pub fn tick(&mut self) -> Color {
         if self.ppu.cycle_count % 8 == 0 {
-            let coarse_x = self.ppu.horizontal_scroll;
+            let coarse_x = (self.ppu.horizontal_scroll & 0b1111_1000) >> 3;
             let coarse_y = (self.ppu.vertical_scroll & 0b1111_1000) >> 3;
             let fine_y = self.ppu.vertical_scroll & 0b0111;
 
@@ -111,10 +111,9 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
             self.ppu.palette_select0 |= u16::from(palette0);
             self.ppu.palette_select1 |= u16::from(palette1);
 
-            self.ppu.horizontal_scroll += 1;
+            self.ppu.horizontal_scroll = self.ppu.horizontal_scroll.wrapping_add(8);
 
-            if self.ppu.horizontal_scroll == 32 {
-                self.ppu.horizontal_scroll = 0;
+            if self.ppu.horizontal_scroll == 0 {
                 self.ppu.vertical_scroll += 1;
 
                 if self.ppu.vertical_scroll == 220 {
@@ -132,9 +131,11 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
             }
         }
 
+        let fine_x = self.ppu.horizontal_scroll & 0b0000_0111;
+
         self.ppu.cycle_count = self.ppu.cycle_count.wrapping_add(1);
 
-        let mask = 0b1000_0000_0000_0000;
+        let mask = 0b1000_0000_0000_0000 >> fine_x;
         let bit0 = (self.ppu.tile_pattern0 & mask) >> 15;
         let bit1 = (self.ppu.tile_pattern1 & mask) >> 14;
         let bit2 = (self.ppu.palette_select0 & mask) >> 13;
