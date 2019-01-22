@@ -45,10 +45,17 @@ fn main() -> Result<(), Box<Error>> {
 
     let display = SDLDisplay::new(canvas);
 
-    let stdin = std::io::stdin();
-    let handle = stdin.lock();
+    let args: Vec<String> = std::env::args().collect();
 
-    let ines = INes::read(handle)?;
+    let ines = if let Some(filename) = args.get(1) {
+        let file = File::open(filename)?;
+        INes::read(file)?
+    } else {
+        let stdin = std::io::stdin();
+        let handle = stdin.lock();
+        INes::read(handle)?
+    };
+
     let mut cartridge = ines.into_cartridge();
 
     let mut nes = NES::new(&mut cartridge, display);
