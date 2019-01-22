@@ -67,11 +67,8 @@ fn main() -> Result<(), Box<Error>> {
         }
 
         for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. } => {
-                    return Ok(());
-                }
-                _ => {}
+            if let Event::Quit { .. } = event {
+                return Ok(());
             }
         }
     }

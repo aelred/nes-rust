@@ -1,5 +1,4 @@
 use nes_rust::Address;
-use nes_rust::ArrayMemory;
 use nes_rust::CPU;
 use nes_rust::instructions::*;
 use nes_rust::mem;

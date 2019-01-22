@@ -91,12 +91,12 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
         let fine_y = self.ppu.vertical_scroll & 0b0111;
 
         if self.ppu.cycle_count % 8 == 0 {
-            let tile_index = ((coarse_y as u16) << 5) | coarse_x as u16;
+            let tile_index = (u16::from(coarse_y) << 5) | u16::from(coarse_x);
             let attribute_index = ((coarse_y << 1) & 0b11_1000) | (coarse_x >> 2);
 
             let nametable_address = self.ppu.nametable_address();
             let attribute_table_address = self.ppu.attribute_table_address();
-            let pattern_index = self.ppu.memory.read(nametable_address + u16::from(tile_index));
+            let pattern_index = self.ppu.memory.read(nametable_address + tile_index);
             let attribute_byte = self
                 .ppu
                 .memory
@@ -110,8 +110,12 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
             let pattern_address0 = pattern_table_address + index;
             let pattern_address1 = pattern_address0 + 0b1000;
 
-            self.ppu.tile_pattern0.set_next_byte(self.ppu.memory.read(pattern_address0));
-            self.ppu.tile_pattern1.set_next_byte(self.ppu.memory.read(pattern_address1));
+            self.ppu
+                .tile_pattern0
+                .set_next_byte(self.ppu.memory.read(pattern_address0));
+            self.ppu
+                .tile_pattern1
+                .set_next_byte(self.ppu.memory.read(pattern_address1));
 
             let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
             let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
@@ -266,7 +270,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn read_status(&mut self) -> u8 {
-        let status = self.status.clone();
+        let status = self.status;
         self.status.remove(Status::VBLANK);
         self.write_lower = false;
         status.bits()
@@ -280,11 +284,11 @@ impl<M: Memory> PPURegisters for PPU<M> {
         unimplemented!()
     }
 
-    fn write_oam_data(&mut self, byte: u8) {
+    fn write_oam_data(&mut self, _byte: u8) {
         unimplemented!()
     }
 
-    fn write_scroll(&mut self, byte: u8) {
+    fn write_scroll(&mut self, _byte: u8) {
         // TODO
     }
 

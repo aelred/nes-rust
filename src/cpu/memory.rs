@@ -52,7 +52,8 @@ impl<M, PRG, PPU> RunningNESCPUMemory<M, PRG, PPU> {
 }
 
 impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters>
-RunningNESCPUMemory<M, PRG, PPU> {
+RunningNESCPUMemory<M, PRG, PPU>
+{
     fn write_oam_data(&mut self, page: u8) {
         let address = Address::from_bytes(page, 0);
 
@@ -233,7 +234,10 @@ mod tests {
 
         memory.write(Address::new(0x4014), 0x02);
 
-        assert_eq!(memory.ppu_registers.oam_dma, Some(expected.into_boxed_slice()));
+        assert_eq!(
+            memory.ppu_registers.oam_dma,
+            Some(expected.into_boxed_slice())
+        );
     }
 
     #[test]
