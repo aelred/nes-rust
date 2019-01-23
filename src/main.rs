@@ -16,6 +16,9 @@ use nes_rust::NESDisplay;
 type SDLColor = sdl2::pixels::Color;
 type PPUColor = nes_rust::Color;
 
+const WIDTH: u16 = 256;
+const HEIGHT: u16 = 240;
+
 fn main() -> Result<(), Box<Error>> {
     env_logger::init();
 
@@ -24,7 +27,7 @@ fn main() -> Result<(), Box<Error>> {
     let mut event_pump = sdl_context.event_pump()?;
 
     let window = video_subsystem
-        .window("nes-rust", 256, 240)
+        .window("nes-rust", WIDTH as u32, HEIGHT as u32)
         .position_centered()
         .build()?;
 
@@ -89,8 +92,8 @@ impl SDLDisplay {
         // We start at the LAST tile, because the PPU is always loading data one tile ahead
         SDLDisplay {
             canvas,
-            x: 248,
-            y: 240,
+            x: WIDTH as i32 - 8,
+            y: HEIGHT as i32,
             start_of_frame: Instant::now(),
         }
     }
@@ -102,11 +105,11 @@ impl NESDisplay for SDLDisplay {
         self.canvas.draw_point(Point::new(self.x, self.y)).unwrap();
         self.x += 1;
 
-        if self.x == 256 {
+        if self.x == WIDTH as i32 {
             self.x = 0;
             self.y += 1;
         }
-        if self.y == 240 {
+        if self.y == HEIGHT as i32 {
             self.y = 0;
             self.canvas.present();
 
