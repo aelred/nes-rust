@@ -18,6 +18,7 @@ type PPUColor = nes_rust::Color;
 
 const WIDTH: u16 = 256;
 const HEIGHT: u16 = 240;
+const SCALE: u16 = 3;
 
 fn main() -> Result<(), Box<Error>> {
     env_logger::init();
@@ -27,7 +28,7 @@ fn main() -> Result<(), Box<Error>> {
     let mut event_pump = sdl_context.event_pump()?;
 
     let window = video_subsystem
-        .window("nes-rust", WIDTH as u32, HEIGHT as u32)
+        .window("nes-rust", (WIDTH * SCALE) as u32, (HEIGHT * SCALE) as u32)
         .position_centered()
         .build()?;
 
@@ -43,6 +44,7 @@ fn main() -> Result<(), Box<Error>> {
         b: 0,
         a: 255,
     });
+    canvas.set_scale(SCALE as f32, SCALE as f32);
     canvas.clear();
     canvas.present();
 
