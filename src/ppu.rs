@@ -158,12 +158,9 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
         if self.ppu.scanline < 240 && self.ppu.cycle_count < 256 {
             if self.ppu.cycle_count % 8 == 0 {
-                let tile_index = (u16::from(coarse_y) << 5) | u16::from(coarse_x);
-
                 let pattern_index = self.ppu.memory.read(self.ppu.tile_address());
                 let attribute_byte = self.ppu.memory.read(self.ppu.attribute_address());
-                let attribute_bit_index0 =
-                    (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) << 1) as u8;
+                let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
                 let attribute_bit_index1 = attribute_bit_index0 + 1;
 
                 let pattern_table_address = self.ppu.background_pattern_table_address();
