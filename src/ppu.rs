@@ -9,9 +9,8 @@ const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
 pub struct PPU<M> {
     memory: M,
     object_attribute_memory: [u8; 256],
-    horizontal_scroll: u8,
-    vertical_scroll: u8,
-    cycle_count: u8,
+    scanline: u16,
+    cycle_count: u16,
     tile_pattern0: ShiftRegister,
     tile_pattern1: ShiftRegister,
     palette_select0: ShiftRegister,
@@ -19,10 +18,11 @@ pub struct PPU<M> {
     control: Control,
     status: Status,
     mask: Mask,
-    address: Address,
-    // This is a raw u16 and not an Address because it is also used to store scrolling information.
+    // These are raw u16s and not Addresses because they're also used for scrolling information.
+    address: u16,
     temporary_address: u16,
     write_lower: bool,
+    fine_x: u8,
     oam_address: u8,
 }
 
@@ -31,8 +31,7 @@ impl<M: Memory> PPU<M> {
         PPU {
             memory,
             object_attribute_memory: [0; 256],
-            horizontal_scroll: 0,
-            vertical_scroll: 0,
+            scanline: 0,
             cycle_count: 0,
             tile_pattern0: ShiftRegister::default(),
             tile_pattern1: ShiftRegister::default(),
@@ -41,11 +40,36 @@ impl<M: Memory> PPU<M> {
             control: Control::empty(),
             mask: Mask::empty(),
             status: Status::empty(),
-            address: Address::new(0),
+            address: 0,
             temporary_address: 0,
             write_lower: false,
+            fine_x: 0,
             oam_address: 0,
         }
+    }
+
+    fn address(&self) -> Address {
+        Address::new(self.address)
+    }
+
+    fn set_address(&mut self, address: Address) {
+        self.address = address.bytes();
+    }
+
+    fn scroll(&self) -> Scroll {
+        Scroll::from_bits_truncate(self.address)
+    }
+
+    fn set_scroll(&mut self, scroll: Scroll) {
+        self.address = scroll.bits();
+    }
+
+    fn temporary_scroll(&self) -> Scroll {
+        Scroll::from_bits_truncate(self.temporary_address)
+    }
+
+    fn set_temporary_scroll(&mut self, scroll: Scroll) {
+        self.temporary_address = scroll.bits();
     }
 
     fn address_increment(&self) -> u16 {
@@ -71,6 +95,35 @@ impl<M: Memory> PPU<M> {
             Address::new(0x0000)
         }
     }
+
+    fn increment_coarse_x(&mut self) {
+        let mut scroll = self.scroll();
+        if scroll & Scroll::COARSE_X != Scroll::COARSE_X {
+            self.address += 1;
+        } else {
+            scroll.remove(Scroll::COARSE_X);
+            scroll.toggle(Scroll::HORIZONTAL_NAMETABLE);
+            self.set_scroll(scroll);
+        }
+    }
+
+    fn increment_fine_y(&mut self) {
+        let mut scroll = self.scroll();
+        if scroll & Scroll::FINE_Y != Scroll::FINE_Y {
+            self.address += 0b0001_0000_0000_0000;
+        } else {
+            scroll.remove(Scroll::FINE_Y);
+
+            if (scroll & Scroll::COARSE_Y).bits() != 29 << 5 {
+                self.set_scroll(scroll);
+                self.address += 0b0000_0000_0010_0000;
+            } else {
+                scroll.remove(Scroll::COARSE_Y);
+                scroll.toggle(Scroll::VERTICAL_NAMETABLE);
+                self.set_scroll(scroll);
+            }
+        }
+    }
 }
 
 pub struct RunningPPU<'a, M, I> {
@@ -83,81 +136,98 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
         RunningPPU { ppu, interruptible }
     }
 
-    pub fn tick(&mut self) -> Color {
-        let coarse_x = (self.ppu.horizontal_scroll & 0b1111_1000) >> 3;
-        let fine_x = self.ppu.horizontal_scroll & 0b0000_0111;
-        let coarse_y = (self.ppu.vertical_scroll & 0b1111_1000) >> 3;
-        let fine_y = self.ppu.vertical_scroll & 0b0111;
+    pub fn tick(&mut self) -> Option<Color> {
+        let scroll = self.ppu.scroll();
+        let coarse_x = ((scroll & Scroll::COARSE_X).bits()) as u8;
+        let fine_x = self.ppu.fine_x;
+        let coarse_y = ((scroll & Scroll::COARSE_Y).bits() >> 5) as u8;
+        let fine_y = ((scroll & Scroll::FINE_Y).bits() >> 12) as u8;
 
-        if self.ppu.cycle_count % 8 == 0 {
-            let tile_index = (u16::from(coarse_y) << 5) | u16::from(coarse_x);
-            let attribute_index = ((coarse_y << 1) & 0b11_1000) | (coarse_x >> 2);
+        let color;
 
-            let nametable_address = self.ppu.nametable_address();
-            let attribute_table_address = self.ppu.attribute_table_address();
-            let pattern_index = self.ppu.memory.read(nametable_address + tile_index);
-            let attribute_byte = self
-                .ppu
-                .memory
-                .read(attribute_table_address + u16::from(attribute_index));
-            let attribute_bit_index0 =
-                (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) << 1) as u8;
-            let attribute_bit_index1 = attribute_bit_index0 + 1;
+        if self.ppu.scanline < 240 && self.ppu.cycle_count < 256 {
+            if self.ppu.cycle_count % 8 == 0 {
+                let tile_index = (u16::from(coarse_y) << 5) | u16::from(coarse_x);
+                let attribute_index = ((coarse_y << 1) & 0b11_1000) | (coarse_x >> 2);
 
-            let pattern_table_address = self.ppu.background_pattern_table_address();
-            let index = u16::from(pattern_index) << 4 | u16::from(fine_y);
-            let pattern_address0 = pattern_table_address + index;
-            let pattern_address1 = pattern_address0 + 0b1000;
+                let nametable_address = self.ppu.nametable_address();
+                let attribute_table_address = self.ppu.attribute_table_address();
+                let pattern_index = self.ppu.memory.read(nametable_address + tile_index);
+                let attribute_byte = self
+                    .ppu
+                    .memory
+                    .read(attribute_table_address + u16::from(attribute_index));
+                let attribute_bit_index0 =
+                    (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) << 1) as u8;
+                let attribute_bit_index1 = attribute_bit_index0 + 1;
 
-            self.ppu
-                .tile_pattern0
-                .set_next_byte(self.ppu.memory.read(pattern_address0));
-            self.ppu
-                .tile_pattern1
-                .set_next_byte(self.ppu.memory.read(pattern_address1));
+                let pattern_table_address = self.ppu.background_pattern_table_address();
+                let index = u16::from(pattern_index) << 4 | u16::from(fine_y);
+                let pattern_address0 = pattern_table_address + index;
+                let pattern_address1 = pattern_address0 + 0b1000;
 
-            let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
-            let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
+                self.ppu
+                    .tile_pattern0
+                    .set_next_byte(self.ppu.memory.read(pattern_address0));
+                self.ppu
+                    .tile_pattern1
+                    .set_next_byte(self.ppu.memory.read(pattern_address1));
 
-            self.ppu.palette_select0.set_next_byte(palette0);
-            self.ppu.palette_select1.set_next_byte(palette1);
+                let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
+                let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
 
-            self.ppu.horizontal_scroll = self.ppu.horizontal_scroll.wrapping_add(8);
+                self.ppu.palette_select0.set_next_byte(palette0);
+                self.ppu.palette_select1.set_next_byte(palette1);
 
-            if self.ppu.horizontal_scroll == 0 {
-                self.ppu.vertical_scroll += 1;
+                self.ppu.increment_coarse_x();
+            }
 
-                if self.ppu.vertical_scroll == 220 {
-                    self.ppu.status.insert(Status::VBLANK);
+            let bit0 = u16::from(self.ppu.tile_pattern0.get_bit(fine_x));
+            let bit1 = u16::from(self.ppu.tile_pattern1.get_bit(fine_x)) << 1;
+            let bit2 = u16::from(self.ppu.palette_select0.get_bit(fine_x)) << 2;
+            let bit3 = u16::from(self.ppu.palette_select1.get_bit(fine_x)) << 3;
+            let color_index = bit0 | bit1 | bit2 | bit3;
 
-                    if self.ppu.control.contains(Control::NMI_ON_VBLANK) {
-                        self.interruptible.non_maskable_interrupt();
-                    }
+            self.ppu.tile_pattern0.shift();
+            self.ppu.tile_pattern1.shift();
+            self.ppu.palette_select0.shift();
+            self.ppu.palette_select1.shift();
+
+            let address = BACKGROUND_PALETTES + color_index;
+
+            color = Some(Color(self.ppu.memory.read(address)));
+        } else {
+            color = None;
+        }
+
+        self.ppu.cycle_count += 1;
+
+        if self.ppu.cycle_count == 340 {
+            self.ppu.cycle_count = 0;
+
+            if self.ppu.scanline < 240 {
+                self.ppu.increment_fine_y();
+            }
+
+            self.ppu.scanline += 1;
+
+            if self.ppu.scanline == 241 {
+                self.ppu.status.insert(Status::VBLANK);
+
+                if self.ppu.control.contains(Control::NMI_ON_VBLANK) {
+                    self.interruptible.non_maskable_interrupt();
                 }
+            }
 
-                if self.ppu.vertical_scroll == 240 {
-                    self.ppu.vertical_scroll = 0;
-                    self.ppu.status.remove(Status::VBLANK);
-                }
+            // TODO: The VBLANK is much too long
+            if self.ppu.scanline == 600 {
+                self.ppu.scanline = 0;
+                self.ppu.status.remove(Status::VBLANK);
+                self.ppu.address = self.ppu.temporary_address;
             }
         }
 
-        self.ppu.cycle_count = self.ppu.cycle_count.wrapping_add(1);
-
-        let bit0 = u16::from(self.ppu.tile_pattern0.get_bit(fine_x));
-        let bit1 = u16::from(self.ppu.tile_pattern1.get_bit(fine_x)) << 1;
-        let bit2 = u16::from(self.ppu.palette_select0.get_bit(fine_x)) << 2;
-        let bit3 = u16::from(self.ppu.palette_select1.get_bit(fine_x)) << 3;
-        let color_index = bit0 | bit1 | bit2 | bit3;
-
-        self.ppu.tile_pattern0.shift();
-        self.ppu.tile_pattern1.shift();
-        self.ppu.palette_select0.shift();
-        self.ppu.palette_select1.shift();
-
-        let address = BACKGROUND_PALETTES + color_index;
-
-        Color(self.ppu.memory.read(address))
+        color
     }
 }
 
@@ -286,15 +356,33 @@ impl<M: Memory> PPURegisters for PPU<M> {
         unimplemented!()
     }
 
-    fn write_scroll(&mut self, _byte: u8) {
-        // TODO
+    fn write_scroll(&mut self, byte: u8) {
+        let fine = byte & 0b111;
+        let coarse = (byte & 0b1111_1000) >> 3;
+
+        if self.write_lower {
+            let mut scroll = self.temporary_scroll();
+            scroll.remove(Scroll::COARSE_Y);
+            scroll.remove(Scroll::FINE_Y);
+            self.set_temporary_scroll(scroll);
+            self.temporary_address |= u16::from(coarse) << 5;
+            self.temporary_address |= u16::from(fine) << 12;
+        } else {
+            let mut scroll = self.temporary_scroll();
+            scroll.remove(Scroll::COARSE_X);
+            self.set_temporary_scroll(scroll);
+            self.temporary_address |= u16::from(coarse);
+            self.fine_x = fine;
+        }
+
+        self.write_lower = !self.write_lower;
     }
 
     fn write_address(&mut self, byte: u8) {
         if self.write_lower {
             self.temporary_address &= 0b1111_1111_0000_0000;
             self.temporary_address |= u16::from(byte);
-            self.address = Address::new(self.temporary_address);
+            self.address = self.temporary_address;
         } else {
             self.temporary_address &= 0b0000_0000_1111_1111;
             self.temporary_address |= u16::from(byte & 0b0011_1111) << 8;
@@ -304,13 +392,13 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn read_data(&mut self) -> u8 {
-        let byte = self.memory.read(self.address);
+        let byte = self.memory.read(self.address());
         self.address += self.address_increment();
         byte
     }
 
     fn write_data(&mut self, byte: u8) {
-        self.memory.write(self.address, byte);
+        self.memory.write(self.address(), byte);
         self.address += self.address_increment();
     }
 
@@ -367,6 +455,16 @@ bitflags! {
     }
 }
 
+bitflags! {
+    struct Scroll: u16 {
+        const COARSE_X             = 0b0000_0000_0001_1111;
+        const COARSE_Y             = 0b0000_0011_1110_0000;
+        const HORIZONTAL_NAMETABLE = 0b0000_0100_0000_0000;
+        const VERTICAL_NAMETABLE   = 0b0000_1000_0000_0000;
+        const FINE_Y               = 0b0111_0000_0000_0000;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::Address;
@@ -381,7 +479,7 @@ mod tests {
         let mut ppu = PPU::with_memory(memory);
         let mut stub = StubInterruptible;
         let mut rppu = RunningPPU::new(&mut ppu, &mut stub);
-        let _color: Color = rppu.tick();
+        let _color: Option<Color> = rppu.tick();
     }
 
     #[test]
@@ -493,13 +591,13 @@ mod tests {
         let mut ppu = PPU::with_memory(mem!());
 
         ppu.temporary_address = 0;
-        ppu.address = Address::new(0);
+        ppu.address = 0;
         ppu.write_lower = false;
 
         ppu.write_address(0b1110_1010);
 
         assert_eq!(ppu.temporary_address, 0b0010_1010_0000_0000);
-        assert_eq!(ppu.address, Address::new(0));
+        assert_eq!(ppu.address, 0);
     }
 
     #[test]
@@ -507,14 +605,14 @@ mod tests {
         let mut ppu = PPU::with_memory(mem!());
 
         ppu.temporary_address = 0;
-        ppu.address = Address::new(0);
+        ppu.address = 0;
         ppu.write_lower = false;
 
         ppu.write_address(0b1110_1010);
         ppu.write_address(0b0101_0101);
 
         assert_eq!(ppu.temporary_address, 0b0010_1010_0101_0101);
-        assert_eq!(ppu.address, Address::new(0b0010_1010_0101_0101));
+        assert_eq!(ppu.address, 0b0010_1010_0101_0101);
     }
 
     #[test]
@@ -585,6 +683,72 @@ mod tests {
         ppu.write_oam_dma(data);
 
         assert_eq!(ppu.object_attribute_memory.to_vec(), data.to_vec());
+    }
+
+    #[test]
+    fn writing_ppu_scroll_writes_to_temporary_register() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_scroll(0b1111_1101);
+        assert_eq!(ppu.temporary_address, 0b1_1111);
+        assert_eq!(ppu.fine_x, 0b101);
+
+        ppu.write_scroll(0b1010_1111);
+        assert_eq!(ppu.temporary_address, 0b0111_0010_1011_1111);
+        assert_eq!(ppu.fine_x, 0b101);
+    }
+
+    #[test]
+    fn incrementing_coarse_x_increments_to_next_tile() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.address = 0x41;
+        ppu.increment_coarse_x();
+        assert_eq!(ppu.address, 0x42);
+    }
+
+    #[test]
+    fn incrementing_coarse_x_switches_to_next_horizontal_nametable_when_coarse_x_is_31() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.address = 0b1000_0001_1111;
+        ppu.increment_coarse_x();
+        assert_eq!(ppu.address, 0b1100_0000_0000);
+
+        ppu.address = 0b1100_0001_1111;
+        ppu.increment_coarse_x();
+        assert_eq!(ppu.address, 0b1000_0000_0000);
+    }
+
+    #[test]
+    fn incrementing_fine_y_increments_fine_y_by_1() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.address = 0b0011_0000_0000_0000;
+        ppu.increment_fine_y();
+        assert_eq!(ppu.address, 0b0100_0000_0000_0000);
+    }
+
+    #[test]
+    fn incrementing_fine_y_increments_coarse_y_when_fine_y_is_7() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.address = 0b0111_0000_0010_0000;
+        ppu.increment_fine_y();
+        assert_eq!(ppu.address, 0b0000_0000_0100_0000);
+    }
+
+    #[test]
+    fn incrementing_fine_y_switches_to_next_vertical_nametable_when_coarse_y_is_29() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.address = 0b0111_0011_1010_0000;
+        ppu.increment_fine_y();
+        assert_eq!(ppu.address, 0b0000_1000_0000_0000);
+
+        ppu.address = 0b0111_1011_1010_0000;
+        ppu.increment_fine_y();
+        assert_eq!(ppu.address, 0b0000_0000_0000_0000);
     }
 
     struct StubInterruptible;

@@ -88,8 +88,9 @@ impl<'a, D: NESDisplay> NES<'a, D> {
     fn tick_ppu(&mut self) {
         let mut ppu = RunningPPU::new(&mut self.ppu, &mut self.cpu);
         for _ in 0..10 {
-            let color = ppu.tick();
-            self.display.draw_pixel(color);
+            if let Some(color) = ppu.tick() {
+                self.display.draw_pixel(color);
+            }
         }
     }
 }

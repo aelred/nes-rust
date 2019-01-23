@@ -15,6 +15,10 @@ impl Address {
         Address(u16::from_le_bytes([lower, higher]))
     }
 
+    pub fn bytes(self) -> u16 {
+        self.0
+    }
+
     pub fn index(self) -> usize {
         self.0 as usize
     }
