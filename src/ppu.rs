@@ -80,12 +80,17 @@ impl<M: Memory> PPU<M> {
         }
     }
 
-    fn nametable_address(&self) -> Address {
-        Address::new(0x2000) + u16::from(self.control.nametable_select()) * 0x0400
+    fn tile_address(&self) -> Address {
+        let index = (self.scroll() & Scroll::TILE_INDEX).bits();
+        Address::new(0x2000 | index)
     }
 
-    fn attribute_table_address(&self) -> Address {
-        self.nametable_address() + 0x3c0
+    fn attribute_address(&self) -> Address {
+        let scroll = self.scroll();
+        let nametable = scroll & Scroll::NAMETABLE_SELECT;
+        let upper_coarse_x = (scroll.bits() >> 2) & 0b0000_0111;
+        let upper_coarse_y = (scroll.bits() >> 4) & 0b0011_1000;
+        Address::new(0x23C0 | nametable.bits() | upper_coarse_x | upper_coarse_y)
     }
 
     fn background_pattern_table_address(&self) -> Address {
@@ -148,15 +153,9 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
         if self.ppu.scanline < 240 && self.ppu.cycle_count < 256 {
             if self.ppu.cycle_count % 8 == 0 {
                 let tile_index = (u16::from(coarse_y) << 5) | u16::from(coarse_x);
-                let attribute_index = ((coarse_y << 1) & 0b11_1000) | (coarse_x >> 2);
 
-                let nametable_address = self.ppu.nametable_address();
-                let attribute_table_address = self.ppu.attribute_table_address();
-                let pattern_index = self.ppu.memory.read(nametable_address + tile_index);
-                let attribute_byte = self
-                    .ppu
-                    .memory
-                    .read(attribute_table_address + u16::from(attribute_index));
+                let pattern_index = self.ppu.memory.read(self.ppu.tile_address());
+                let attribute_byte = self.ppu.memory.read(self.ppu.attribute_address());
                 let attribute_bit_index0 =
                     (((tile_index >> 1) & (0b1 + (tile_index >> 5)) & 0b10) << 1) as u8;
                 let attribute_bit_index1 = attribute_bit_index0 + 1;
@@ -207,6 +206,13 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
             if self.ppu.scanline < 240 {
                 self.ppu.increment_fine_y();
+
+                let mut scroll = self.ppu.scroll();
+                let temp = self.ppu.temporary_scroll();
+                let horizontal = Scroll::COARSE_X | Scroll::HORIZONTAL_NAMETABLE;
+                scroll.remove(horizontal);
+                scroll.insert(temp & horizontal);
+                self.ppu.set_scroll(scroll);
             }
 
             self.ppu.scanline += 1;
@@ -462,6 +468,9 @@ bitflags! {
         const HORIZONTAL_NAMETABLE = 0b0000_0100_0000_0000;
         const VERTICAL_NAMETABLE   = 0b0000_1000_0000_0000;
         const FINE_Y               = 0b0111_0000_0000_0000;
+        const COARSE               = Self::COARSE_X.bits | Self::COARSE_Y.bits;
+        const NAMETABLE_SELECT     = Self::HORIZONTAL_NAMETABLE.bits | Self::VERTICAL_NAMETABLE.bits;
+        const TILE_INDEX           = Self::COARSE.bits | Self::NAMETABLE_SELECT.bits;
     }
 }
 
@@ -505,31 +514,39 @@ mod tests {
     }
 
     #[test]
-    fn writing_ppu_control_sets_nametable_address() {
+    fn writing_ppu_control_sets_tile_address() {
         let mut ppu = PPU::with_memory(mem!());
 
         ppu.write_control(0b0000_0000);
-        assert_eq!(ppu.nametable_address(), Address::new(0x2000));
+        ppu.address = ppu.temporary_address;
+        assert_eq!(ppu.tile_address(), Address::new(0x2000));
         ppu.write_control(0b0000_0001);
-        assert_eq!(ppu.nametable_address(), Address::new(0x2400));
+        ppu.address = ppu.temporary_address;
+        assert_eq!(ppu.tile_address(), Address::new(0x2400));
         ppu.write_control(0b0000_0010);
-        assert_eq!(ppu.nametable_address(), Address::new(0x2800));
+        ppu.address = ppu.temporary_address;
+        assert_eq!(ppu.tile_address(), Address::new(0x2800));
         ppu.write_control(0b0000_0011);
-        assert_eq!(ppu.nametable_address(), Address::new(0x2c00));
+        ppu.address = ppu.temporary_address;
+        assert_eq!(ppu.tile_address(), Address::new(0x2c00));
     }
 
     #[test]
-    fn writing_ppu_control_sets_attribute_table_address() {
+    fn writing_ppu_control_sets_attribute_address() {
         let mut ppu = PPU::with_memory(mem!());
 
         ppu.write_control(0b0000_0000);
-        assert_eq!(ppu.attribute_table_address(), Address::new(0x23c0));
+        ppu.address = ppu.temporary_address;
+        assert_eq!(ppu.attribute_address(), Address::new(0x23c0));
         ppu.write_control(0b0000_0001);
-        assert_eq!(ppu.attribute_table_address(), Address::new(0x27c0));
+        ppu.address = ppu.temporary_address;
+        assert_eq!(ppu.attribute_address(), Address::new(0x27c0));
         ppu.write_control(0b0000_0010);
-        assert_eq!(ppu.attribute_table_address(), Address::new(0x2bc0));
+        ppu.address = ppu.temporary_address;
+        assert_eq!(ppu.attribute_address(), Address::new(0x2bc0));
         ppu.write_control(0b0000_0011);
-        assert_eq!(ppu.attribute_table_address(), Address::new(0x2fc0));
+        ppu.address = ppu.temporary_address;
+        assert_eq!(ppu.attribute_address(), Address::new(0x2fc0));
     }
 
     #[test]
@@ -749,6 +766,32 @@ mod tests {
         ppu.address = 0b0111_1011_1010_0000;
         ppu.increment_fine_y();
         assert_eq!(ppu.address, 0b0000_0000_0000_0000);
+    }
+
+    #[test]
+    fn can_get_tile_address_from_scroll() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.address = 0x0ABC;
+
+        assert_eq!(ppu.tile_address(), Address::new(0x2ABC));
+    }
+
+    #[test]
+    fn can_get_attribute_address_from_scroll() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.address = 0b0000_0000_0000_0000;
+        assert_eq!(ppu.attribute_address(), Address::new(0b0010_0011_1100_0000));
+
+        ppu.address = 0b0000_0000_0001_1100;
+        assert_eq!(ppu.attribute_address(), Address::new(0b0010_0011_1100_0111));
+
+        ppu.address = 0b0000_0011_1000_0000;
+        assert_eq!(ppu.attribute_address(), Address::new(0b0010_0011_1111_1000));
+
+        ppu.address = 0b0000_1100_0000_0000;
+        assert_eq!(ppu.attribute_address(), Address::new(0b0010_1111_1100_0000));
     }
 
     struct StubInterruptible;
