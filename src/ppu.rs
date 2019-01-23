@@ -57,8 +57,7 @@ impl<M: Memory> PPU<M> {
     }
 
     fn nametable_address(&self) -> Address {
-        let nametable_num = (self.control & Control::NAMETABLE_SELECT).bits();
-        Address::new(0x2000) + u16::from(nametable_num) * 0x0400
+        Address::new(0x2000) + u16::from(self.control.nametable_select()) * 0x0400
     }
 
     fn attribute_table_address(&self) -> Address {
@@ -260,9 +259,8 @@ impl<M: Memory> PPURegisters for PPU<M> {
         self.control = Control::from_bits_truncate(byte);
 
         // Set bits of temporary address to nametable
-        let nametable = self.control & Control::NAMETABLE_SELECT;
         self.temporary_address &= 0b1111_0011_1111_1111;
-        self.temporary_address |= u16::from(nametable.bits()) << 10;
+        self.temporary_address |= u16::from(self.control.nametable_select()) << 10;
     }
 
     fn write_mask(&mut self, byte: u8) {
@@ -339,6 +337,12 @@ bitflags! {
         const SPRITE_PATTERN_TABLE     = 0b0000_1000;
         const ADDRESS_INCREMENT        = 0b0000_0100;
         const NAMETABLE_SELECT         = 0b0000_0011;
+    }
+}
+
+impl Control {
+    fn nametable_select(self) -> u8 {
+        (self & Control::NAMETABLE_SELECT).bits()
     }
 }
 
