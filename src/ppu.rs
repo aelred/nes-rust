@@ -8,8 +8,8 @@ pub use self::memory::NESPPUMemory;
 pub use self::registers::PPURegisters;
 use self::scroll::Scroll;
 
-mod registers;
 mod memory;
+mod registers;
 mod scroll;
 
 const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
@@ -58,10 +58,6 @@ impl<M: Memory> PPU<M> {
 
     fn address(&self) -> Address {
         Address::new(self.address)
-    }
-
-    fn set_address(&mut self, address: Address) {
-        self.address = address.bytes();
     }
 
     fn address_increment(&self) -> u16 {
@@ -125,9 +121,7 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
         let coarse_y = scroll.coarse_y();
         let fine_y = scroll.fine_y();
 
-        let color;
-
-        if self.ppu.scanline < 240 && self.ppu.cycle_count < 256 {
+        let color = if self.ppu.scanline < 240 && self.ppu.cycle_count < 256 {
             if self.ppu.cycle_count % 8 == 0 {
                 let pattern_index = self.ppu.memory.read(self.ppu.tile_address());
                 let attribute_byte = self.ppu.memory.read(self.ppu.attribute_address());
@@ -168,10 +162,10 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
             let address = BACKGROUND_PALETTES + color_index;
 
-            color = Some(Color(self.ppu.memory.read(address)));
+            Some(Color(self.ppu.memory.read(address)))
         } else {
-            color = None;
-        }
+            None
+        };
 
         self.ppu.cycle_count += 1;
 

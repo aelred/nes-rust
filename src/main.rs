@@ -28,7 +28,11 @@ fn main() -> Result<(), Box<Error>> {
     let mut event_pump = sdl_context.event_pump()?;
 
     let window = video_subsystem
-        .window("nes-rust", (WIDTH * SCALE) as u32, (HEIGHT * SCALE) as u32)
+        .window(
+            "nes-rust",
+            u32::from(WIDTH * SCALE),
+            u32::from(HEIGHT * SCALE),
+        )
         .position_centered()
         .build()?;
 
@@ -44,7 +48,7 @@ fn main() -> Result<(), Box<Error>> {
         b: 0,
         a: 255,
     });
-    canvas.set_scale(SCALE as f32, SCALE as f32);
+    canvas.set_scale(f32::from(SCALE), f32::from(SCALE))?;
     canvas.clear();
     canvas.present();
 
@@ -94,8 +98,8 @@ impl SDLDisplay {
         // We start at the LAST tile, because the PPU is always loading data one tile ahead
         SDLDisplay {
             canvas,
-            x: WIDTH as i32 - 8,
-            y: HEIGHT as i32,
+            x: i32::from(WIDTH) - 8,
+            y: i32::from(HEIGHT),
             start_of_frame: Instant::now(),
         }
     }
@@ -107,11 +111,11 @@ impl NESDisplay for SDLDisplay {
         self.canvas.draw_point(Point::new(self.x, self.y)).unwrap();
         self.x += 1;
 
-        if self.x == WIDTH as i32 {
+        if self.x == i32::from(WIDTH) {
             self.x = 0;
             self.y += 1;
         }
-        if self.y == HEIGHT as i32 {
+        if self.y == i32::from(HEIGHT) {
             self.y = 0;
             self.canvas.present();
 

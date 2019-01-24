@@ -28,7 +28,7 @@ impl Scroll {
 
     pub fn set_coarse_x(&mut self, coarse_x: u8) {
         self.remove(Scroll::COARSE_X);
-        self.bits |= 0b1_1111 & coarse_x as u16;
+        self.bits |= 0b1_1111 & u16::from(coarse_x);
     }
 
     pub fn coarse_y(self) -> u8 {
@@ -37,7 +37,7 @@ impl Scroll {
 
     pub fn set_coarse_y(&mut self, coarse_y: u8) {
         self.remove(Scroll::COARSE_Y);
-        self.bits |= (0b1_1111 & coarse_y as u16) << 5;
+        self.bits |= (0b1_1111 & u16::from(coarse_y)) << 5;
     }
 
     pub fn fine_y(self) -> u8 {
@@ -46,7 +46,7 @@ impl Scroll {
 
     pub fn set_fine_y(&mut self, fine_y: u8) {
         self.remove(Scroll::FINE_Y);
-        self.bits |= (0b111 & fine_y as u16) << 12;
+        self.bits |= (0b111 & u16::from(fine_y)) << 12;
     }
 
     pub fn tile_address(self) -> Address {

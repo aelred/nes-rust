@@ -67,4 +67,3 @@ impl<'a, T: PPURegisters> PPURegisters for &'a mut T {
         (*self).write_oam_dma(bytes)
     }
 }
-
