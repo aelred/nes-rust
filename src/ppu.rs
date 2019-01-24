@@ -6,9 +6,11 @@ use crate::Memory;
 
 pub use self::memory::NESPPUMemory;
 pub use self::registers::PPURegisters;
+use self::scroll::Scroll;
 
 mod registers;
 mod memory;
+mod scroll;
 
 const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
 
@@ -62,22 +64,6 @@ impl<M: Memory> PPU<M> {
         self.address = address.bytes();
     }
 
-    fn scroll(&self) -> Scroll {
-        Scroll::from_bits_truncate(self.address)
-    }
-
-    fn set_scroll(&mut self, scroll: Scroll) {
-        self.address = scroll.bits();
-    }
-
-    fn temporary_scroll(&self) -> Scroll {
-        Scroll::from_bits_truncate(self.temporary_address)
-    }
-
-    fn set_temporary_scroll(&mut self, scroll: Scroll) {
-        self.temporary_address = scroll.bits();
-    }
-
     fn address_increment(&self) -> u16 {
         if self.control.contains(Control::ADDRESS_INCREMENT) {
             32
@@ -87,16 +73,11 @@ impl<M: Memory> PPU<M> {
     }
 
     fn tile_address(&self) -> Address {
-        let index = (self.scroll() & Scroll::TILE_INDEX).bits();
-        Address::new(0x2000 | index)
+        Scroll::new(self.address).tile_address()
     }
 
     fn attribute_address(&self) -> Address {
-        let scroll = self.scroll();
-        let nametable = scroll & Scroll::NAMETABLE_SELECT;
-        let upper_coarse_x = (scroll.bits() >> 2) & 0b0000_0111;
-        let upper_coarse_y = (scroll.bits() >> 4) & 0b0011_1000;
-        Address::new(0x23C0 | nametable.bits() | upper_coarse_x | upper_coarse_y)
+        Scroll::new(self.address).attribute_address()
     }
 
     fn background_pattern_table_address(&self) -> Address {
@@ -108,32 +89,22 @@ impl<M: Memory> PPU<M> {
     }
 
     fn increment_coarse_x(&mut self) {
-        let mut scroll = self.scroll();
-        if scroll.coarse_x() != 31 {
-            self.address += 1;
-        } else {
-            scroll.remove(Scroll::COARSE_X);
-            scroll.toggle(Scroll::HORIZONTAL_NAMETABLE);
-            self.set_scroll(scroll);
-        }
+        let mut scroll = Scroll::new(self.address);
+        scroll.increment_coarse_x();
+        self.address = scroll.bits();
     }
 
     fn increment_fine_y(&mut self) {
-        let mut scroll = self.scroll();
-        if scroll.fine_y() != 7 {
-            self.address += 0b0001_0000_0000_0000;
-        } else {
-            scroll.remove(Scroll::FINE_Y);
+        let mut scroll = Scroll::new(self.address);
+        scroll.increment_fine_y();
+        self.address = scroll.bits();
+    }
 
-            if scroll.coarse_y() != 29 {
-                self.set_scroll(scroll);
-                self.address += 0b0000_0000_0010_0000;
-            } else {
-                scroll.remove(Scroll::COARSE_Y);
-                scroll.toggle(Scroll::VERTICAL_NAMETABLE);
-                self.set_scroll(scroll);
-            }
-        }
+    fn transfer_horizontal_scroll(&mut self) {
+        let mut scroll = Scroll::new(self.address);
+        let temporary_scroll = Scroll::new(self.temporary_address);
+        scroll.set_horizontal(temporary_scroll);
+        self.address = scroll.bits();
     }
 }
 
@@ -148,7 +119,7 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
     }
 
     pub fn tick(&mut self) -> Option<Color> {
-        let scroll = self.ppu.scroll();
+        let scroll = Scroll::new(self.ppu.address);
         let coarse_x = scroll.coarse_x();
         let fine_x = self.ppu.fine_x;
         let coarse_y = scroll.coarse_y();
@@ -209,12 +180,7 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
             if self.ppu.scanline < 240 {
                 self.ppu.increment_fine_y();
-
-                let mut scroll = self.ppu.scroll();
-                let temp = self.ppu.temporary_scroll();
-                scroll.remove(Scroll::HORIZONTAL);
-                scroll.insert(temp & Scroll::HORIZONTAL);
-                self.ppu.set_scroll(scroll);
+                self.ppu.transfer_horizontal_scroll();
             }
 
             self.ppu.scanline += 1;
@@ -297,22 +263,17 @@ impl<M: Memory> PPURegisters for PPU<M> {
     fn write_scroll(&mut self, byte: u8) {
         let fine = byte & 0b111;
         let coarse = (byte & 0b1111_1000) >> 3;
+        let mut scroll = Scroll::from_bits_truncate(self.temporary_address);
 
         if self.write_lower {
-            let mut scroll = self.temporary_scroll();
-            scroll.remove(Scroll::COARSE_Y);
-            scroll.remove(Scroll::FINE_Y);
-            self.set_temporary_scroll(scroll);
-            self.temporary_address |= u16::from(coarse) << 5;
-            self.temporary_address |= u16::from(fine) << 12;
+            scroll.set_coarse_y(coarse);
+            scroll.set_fine_y(fine);
         } else {
-            let mut scroll = self.temporary_scroll();
-            scroll.remove(Scroll::COARSE_X);
-            self.set_temporary_scroll(scroll);
-            self.temporary_address |= u16::from(coarse);
+            scroll.set_coarse_x(coarse);
             self.fine_x = fine;
         }
 
+        self.temporary_address = scroll.bits();
         self.write_lower = !self.write_lower;
     }
 
@@ -390,35 +351,6 @@ bitflags! {
         const VBLANK          = 0b1000_0000;
         const SPRITE_ZERO_HIT = 0b0100_0000;
         const SPRITE_OVERFLOW = 0b0010_0000;
-    }
-}
-
-bitflags! {
-    struct Scroll: u16 {
-        const COARSE_X             = 0b0000_0000_0001_1111;
-        const COARSE_Y             = 0b0000_0011_1110_0000;
-        const HORIZONTAL_NAMETABLE = 0b0000_0100_0000_0000;
-        const VERTICAL_NAMETABLE   = 0b0000_1000_0000_0000;
-        const FINE_Y               = 0b0111_0000_0000_0000;
-        const HORIZONTAL           = Self::COARSE_X.bits | Self::HORIZONTAL_NAMETABLE.bits;
-        const VERTICAL             = Self::COARSE_Y.bits | Self::VERTICAL_NAMETABLE.bits;
-        const COARSE               = Self::COARSE_X.bits | Self::COARSE_Y.bits;
-        const NAMETABLE_SELECT     = Self::HORIZONTAL_NAMETABLE.bits | Self::VERTICAL_NAMETABLE.bits;
-        const TILE_INDEX           = Self::HORIZONTAL.bits | Self::VERTICAL.bits;
-    }
-}
-
-impl Scroll {
-    fn coarse_x(self) -> u8 {
-        (self & Self::COARSE_X).bits() as u8
-    }
-
-    fn coarse_y(self) -> u8 {
-        ((self & Self::COARSE_Y).bits() >> 5) as u8
-    }
-
-    fn fine_y(self) -> u8 {
-        ((self & Self::FINE_Y).bits() >> 12) as u8
     }
 }
 
@@ -714,6 +646,17 @@ mod tests {
         ppu.address = 0b0111_1011_1010_0000;
         ppu.increment_fine_y();
         assert_eq!(ppu.address, 0b0000_0000_0000_0000);
+    }
+
+    #[test]
+    fn transfer_horizontal_scroll_transfers_horizontal_scroll_from_temporary_to_address() {
+        let mut ppu = PPU::with_memory(mem!());
+        ppu.address = 0b0010_1010_1010_1010;
+        ppu.temporary_address = 0b0100_0100_0101_0101;
+
+        ppu.transfer_horizontal_scroll();
+
+        assert_eq!(ppu.address, 0b0010_1110_1011_0101);
     }
 
     #[test]
