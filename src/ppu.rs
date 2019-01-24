@@ -23,6 +23,7 @@ pub struct PPU<M> {
     tile_pattern1: ShiftRegister,
     palette_select0: ShiftRegister,
     palette_select1: ShiftRegister,
+    active_sprites: [Sprite; 8],
     control: Control,
     status: Status,
     mask: Mask,
@@ -45,6 +46,7 @@ impl<M: Memory> PPU<M> {
             tile_pattern1: ShiftRegister::default(),
             palette_select0: ShiftRegister::default(),
             palette_select1: ShiftRegister::default(),
+            active_sprites: [Sprite::default(); 8],
             control: Control::empty(),
             mask: Mask::empty(),
             status: Status::empty(),
@@ -101,6 +103,26 @@ impl<M: Memory> PPU<M> {
         let temporary_scroll = Scroll::new(self.temporary_address);
         scroll.set_horizontal(temporary_scroll);
         self.address = scroll.bits();
+    }
+
+    fn load_sprites(&mut self) {
+        let all_sprites = self.object_attribute_memory.chunks_exact(4).map(|chunk| {
+            let attributes = SpriteAttributes::from_bits_truncate(chunk[2]);
+            Sprite::new(chunk[3], chunk[0], chunk[1], attributes)
+        });
+
+        let scanline = self.scanline;
+
+        let sprites_on_scanline = all_sprites.filter(|sprite| {
+            let y = u16::from(sprite.y);
+            scanline >= y && scanline < y + 8
+        });
+
+        self.active_sprites = [Sprite::default(); 8];
+
+        for (dest, src) in self.active_sprites.iter_mut().zip(sprites_on_scanline) {
+            *dest = src;
+        }
     }
 }
 
@@ -162,7 +184,18 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
             let address = BACKGROUND_PALETTES + color_index;
 
-            Some(Color(self.ppu.memory.read(address)))
+            let mut color = Some(Color(self.ppu.memory.read(address)));
+
+            // TODO: this is just a hacky way to show sprite bounding boxes
+            let cycle_count = self.ppu.cycle_count;
+            for sprite in self.ppu.active_sprites.iter() {
+                let x = u16::from(sprite.x);
+                if cycle_count >= x + 8 && cycle_count < x + 16 {
+                    color = Some(Color(0));
+                }
+            }
+
+            color
         } else {
             None
         };
@@ -178,6 +211,8 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
             }
 
             self.ppu.scanline += 1;
+
+            self.ppu.load_sprites();
 
             if self.ppu.scanline == 241 {
                 self.ppu.status.insert(Status::VBLANK);
@@ -215,6 +250,41 @@ impl ShiftRegister {
         assert!(bit < 8);
         let mask = 0b1000_0000_0000_0000 >> bit;
         (self.0 & mask) != 0
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+struct Sprite {
+    x: u8,
+    y: u8,
+    tile_index: u8,
+    attributes: SpriteAttributes,
+}
+
+impl Sprite {
+    fn new(x: u8, y: u8, tile_index: u8, attributes: SpriteAttributes) -> Self {
+        Sprite {
+            x,
+            y,
+            tile_index,
+            attributes,
+        }
+    }
+}
+
+impl Default for Sprite {
+    fn default() -> Self {
+        Sprite::new(0xff, 0xff, 0xff, SpriteAttributes::all())
+    }
+}
+
+bitflags! {
+    #[derive(Default)]
+    struct SpriteAttributes: u8 {
+        const VERTICAL_FLIP   = 0b1000_0000;
+        const HORIZONTAL_FLIP = 0b0100_0000;
+        const PRIORITY        = 0b0010_0000;
+        const PALETTE         = 0b0000_0011;
     }
 }
 
@@ -353,6 +423,7 @@ mod tests {
     use crate::Address;
     use crate::ArrayMemory;
     use crate::mem;
+    use crate::ppu::Sprite;
 
     use super::*;
 
@@ -677,6 +748,85 @@ mod tests {
 
         ppu.address = 0b0000_1100_0000_0000;
         assert_eq!(ppu.attribute_address(), Address::new(0b0010_1111_1100_0000));
+    }
+
+    #[test]
+    fn loading_sprites_loads_all_sprites_for_a_given_scanline() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        let oam = [
+            // y, index, attributes, x
+            0, 0, 0, 0, 22, 1, 1, 1, 23, 2, 2, 2, 30, 3, 3, 3, 31, 4, 4, 4, 255, 5, 5, 5,
+        ];
+
+        ppu.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
+
+        ppu.scanline = 30;
+
+        ppu.load_sprites();
+
+        let expected = [
+            Sprite::new(2, 23, 2, SpriteAttributes::from_bits_truncate(2)),
+            Sprite::new(3, 30, 3, SpriteAttributes::from_bits_truncate(3)),
+            Sprite::default(),
+            Sprite::default(),
+            Sprite::default(),
+            Sprite::default(),
+            Sprite::default(),
+            Sprite::default(),
+        ];
+
+        assert_eq!(ppu.active_sprites, expected);
+    }
+
+    #[test]
+    fn when_more_than_eight_sprites_on_scanline_only_first_eight_are_loaded() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        let oam = [
+            // y, index, attributes, x
+            23, 0, 0, 0, 23, 1, 1, 1, 24, 2, 2, 2, 24, 3, 3, 3, 25, 4, 4, 4, 25, 5, 5, 5, 26, 6, 6,
+            6, 26, 7, 7, 7, 27, 8, 8, 8,
+        ];
+
+        ppu.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
+
+        ppu.scanline = 30;
+
+        ppu.load_sprites();
+
+        let expected = [
+            Sprite::new(0, 23, 0, SpriteAttributes::from_bits_truncate(0)),
+            Sprite::new(1, 23, 1, SpriteAttributes::from_bits_truncate(1)),
+            Sprite::new(2, 24, 2, SpriteAttributes::from_bits_truncate(2)),
+            Sprite::new(3, 24, 3, SpriteAttributes::from_bits_truncate(3)),
+            Sprite::new(4, 25, 4, SpriteAttributes::from_bits_truncate(4)),
+            Sprite::new(5, 25, 5, SpriteAttributes::from_bits_truncate(5)),
+            Sprite::new(6, 26, 6, SpriteAttributes::from_bits_truncate(6)),
+            Sprite::new(7, 26, 7, SpriteAttributes::from_bits_truncate(7)),
+        ];
+
+        assert_eq!(ppu.active_sprites, expected);
+    }
+
+    #[test]
+    fn loading_sprites_clears_active_sprites() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        let oam = [30, 3, 3, 3];
+        ppu.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
+
+        ppu.scanline = 30;
+        ppu.load_sprites();
+
+        let cleared = [Sprite::default(); 8];
+
+        assert_ne!(ppu.active_sprites, cleared);
+
+        ppu.scanline = 40;
+        ppu.load_sprites();
+
+        assert_eq!(ppu.active_sprites, cleared);
     }
 
     struct StubInterruptible;
