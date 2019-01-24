@@ -109,7 +109,7 @@ impl<M: Memory> PPU<M> {
 
     fn increment_coarse_x(&mut self) {
         let mut scroll = self.scroll();
-        if scroll & Scroll::COARSE_X != Scroll::COARSE_X {
+        if scroll.coarse_x() != 31 {
             self.address += 1;
         } else {
             scroll.remove(Scroll::COARSE_X);
@@ -120,12 +120,12 @@ impl<M: Memory> PPU<M> {
 
     fn increment_fine_y(&mut self) {
         let mut scroll = self.scroll();
-        if scroll & Scroll::FINE_Y != Scroll::FINE_Y {
+        if scroll.fine_y() != 7 {
             self.address += 0b0001_0000_0000_0000;
         } else {
             scroll.remove(Scroll::FINE_Y);
 
-            if (scroll & Scroll::COARSE_Y).bits() != 29 << 5 {
+            if scroll.coarse_y() != 29 {
                 self.set_scroll(scroll);
                 self.address += 0b0000_0000_0010_0000;
             } else {
@@ -149,10 +149,10 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
     pub fn tick(&mut self) -> Option<Color> {
         let scroll = self.ppu.scroll();
-        let coarse_x = ((scroll & Scroll::COARSE_X).bits()) as u8;
+        let coarse_x = scroll.coarse_x();
         let fine_x = self.ppu.fine_x;
-        let coarse_y = ((scroll & Scroll::COARSE_Y).bits() >> 5) as u8;
-        let fine_y = ((scroll & Scroll::FINE_Y).bits() >> 12) as u8;
+        let coarse_y = scroll.coarse_y();
+        let fine_y = scroll.fine_y();
 
         let color;
 
@@ -212,9 +212,8 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 
                 let mut scroll = self.ppu.scroll();
                 let temp = self.ppu.temporary_scroll();
-                let horizontal = Scroll::COARSE_X | Scroll::HORIZONTAL_NAMETABLE;
-                scroll.remove(horizontal);
-                scroll.insert(temp & horizontal);
+                scroll.remove(Scroll::HORIZONTAL);
+                scroll.insert(temp & Scroll::HORIZONTAL);
                 self.ppu.set_scroll(scroll);
             }
 
@@ -401,9 +400,25 @@ bitflags! {
         const HORIZONTAL_NAMETABLE = 0b0000_0100_0000_0000;
         const VERTICAL_NAMETABLE   = 0b0000_1000_0000_0000;
         const FINE_Y               = 0b0111_0000_0000_0000;
+        const HORIZONTAL           = Self::COARSE_X.bits | Self::HORIZONTAL_NAMETABLE.bits;
+        const VERTICAL             = Self::COARSE_Y.bits | Self::VERTICAL_NAMETABLE.bits;
         const COARSE               = Self::COARSE_X.bits | Self::COARSE_Y.bits;
         const NAMETABLE_SELECT     = Self::HORIZONTAL_NAMETABLE.bits | Self::VERTICAL_NAMETABLE.bits;
-        const TILE_INDEX           = Self::COARSE.bits | Self::NAMETABLE_SELECT.bits;
+        const TILE_INDEX           = Self::HORIZONTAL.bits | Self::VERTICAL.bits;
+    }
+}
+
+impl Scroll {
+    fn coarse_x(self) -> u8 {
+        (self & Self::COARSE_X).bits() as u8
+    }
+
+    fn coarse_y(self) -> u8 {
+        ((self & Self::COARSE_Y).bits() >> 5) as u8
+    }
+
+    fn fine_y(self) -> u8 {
+        ((self & Self::FINE_Y).bits() >> 12) as u8
     }
 }
 
