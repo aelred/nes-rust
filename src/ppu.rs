@@ -19,10 +19,8 @@ pub struct PPU<M> {
     object_attribute_memory: [u8; 256],
     scanline: u16,
     cycle_count: u16,
-    tile_pattern0: ShiftRegister,
-    tile_pattern1: ShiftRegister,
-    palette_select0: ShiftRegister,
-    palette_select1: ShiftRegister,
+    tile_pattern: ShiftRegister,
+    palette_select: ShiftRegister,
     active_sprites: [Sprite; 8],
     control: Control,
     status: Status,
@@ -42,10 +40,8 @@ impl<M: Memory> PPU<M> {
             object_attribute_memory: [0; 256],
             scanline: 0,
             cycle_count: 0,
-            tile_pattern0: ShiftRegister::default(),
-            tile_pattern1: ShiftRegister::default(),
-            palette_select0: ShiftRegister::default(),
-            palette_select1: ShiftRegister::default(),
+            tile_pattern: ShiftRegister::default(),
+            palette_select: ShiftRegister::default(),
             active_sprites: [Sprite::default(); 8],
             control: Control::empty(),
             mask: Mask::empty(),
@@ -124,6 +120,20 @@ impl<M: Memory> PPU<M> {
             *dest = src;
         }
     }
+
+    fn background_color(&mut self) -> Color {
+        let lower_bits = self.tile_pattern.get_bits(self.fine_x);
+        let higher_bits = self.palette_select.get_bits(self.fine_x);
+
+        let color_index = lower_bits | (higher_bits << 2);
+
+        self.tile_pattern.shift();
+        self.palette_select.shift();
+
+        let address = BACKGROUND_PALETTES + color_index.into();
+
+        Color(self.memory.read(address))
+    }
 }
 
 pub struct RunningPPU<'a, M, I> {
@@ -137,14 +147,13 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
     }
 
     pub fn tick(&mut self) -> Option<Color> {
-        let scroll = Scroll::new(self.ppu.address);
-        let coarse_x = scroll.coarse_x();
-        let fine_x = self.ppu.fine_x;
-        let coarse_y = scroll.coarse_y();
-        let fine_y = scroll.fine_y();
-
         let color = if self.ppu.scanline < 240 && self.ppu.cycle_count < 256 {
             if self.ppu.cycle_count % 8 == 0 {
+                let scroll = Scroll::new(self.ppu.address);
+                let coarse_x = scroll.coarse_x();
+                let coarse_y = scroll.coarse_y();
+                let fine_y = scroll.fine_y();
+
                 let pattern_index = self.ppu.memory.read(self.ppu.tile_address());
                 let attribute_byte = self.ppu.memory.read(self.ppu.attribute_address());
                 let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
@@ -155,36 +164,19 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
                 let pattern_address0 = pattern_table_address + index;
                 let pattern_address1 = pattern_address0 + 0b1000;
 
-                self.ppu
-                    .tile_pattern0
-                    .set_next_byte(self.ppu.memory.read(pattern_address0));
-                self.ppu
-                    .tile_pattern1
-                    .set_next_byte(self.ppu.memory.read(pattern_address1));
+                let pattern0 = self.ppu.memory.read(pattern_address0);
+                let pattern1 = self.ppu.memory.read(pattern_address1);
+                self.ppu.tile_pattern.set_next_bytes(pattern0, pattern1);
 
                 let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
                 let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
 
-                self.ppu.palette_select0.set_next_byte(palette0);
-                self.ppu.palette_select1.set_next_byte(palette1);
+                self.ppu.palette_select.set_next_bytes(palette0, palette1);
 
                 self.ppu.increment_coarse_x();
             }
 
-            let bit0 = u16::from(self.ppu.tile_pattern0.get_bit(fine_x));
-            let bit1 = u16::from(self.ppu.tile_pattern1.get_bit(fine_x)) << 1;
-            let bit2 = u16::from(self.ppu.palette_select0.get_bit(fine_x)) << 2;
-            let bit3 = u16::from(self.ppu.palette_select1.get_bit(fine_x)) << 3;
-            let color_index = bit0 | bit1 | bit2 | bit3;
-
-            self.ppu.tile_pattern0.shift();
-            self.ppu.tile_pattern1.shift();
-            self.ppu.palette_select0.shift();
-            self.ppu.palette_select1.shift();
-
-            let address = BACKGROUND_PALETTES + color_index;
-
-            let mut color = Some(Color(self.ppu.memory.read(address)));
+            let mut color = Some(self.ppu.background_color());
 
             // TODO: this is just a hacky way to show sprite bounding boxes
             let cycle_count = self.ppu.cycle_count;
@@ -235,21 +227,24 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]
-struct ShiftRegister(u16);
+struct ShiftRegister(u16, u16);
 
 impl ShiftRegister {
-    fn set_next_byte(&mut self, byte: u8) {
-        self.0 |= u16::from(byte);
+    fn set_next_bytes(&mut self, byte0: u8, byte1: u8) {
+        self.0 |= u16::from(byte0);
+        self.1 |= u16::from(byte1);
     }
 
     fn shift(&mut self) {
         self.0 <<= 1;
+        self.1 <<= 1;
     }
 
-    fn get_bit(&self, bit: u8) -> bool {
+    fn get_bits(&self, bit: u8) -> u8 {
         assert!(bit < 8);
-        let mask = 0b1000_0000_0000_0000 >> bit;
-        (self.0 & mask) != 0
+        let bit0 = (self.0 >> (15 - bit)) & 0b1;
+        let bit1 = (self.1 >> (15 - bit)) & 0b1;
+        (bit0 | (bit1 << 1)) as u8
     }
 }
 
