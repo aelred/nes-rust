@@ -157,35 +157,38 @@ impl<M: Memory> PPU<M> {
 
         for sprite in sprites.iter() {
             let x = u16::from(sprite.x);
-            if cycle_count >= x + 8 && cycle_count < x + 16 {
-                let x_in_sprite = (cycle_count - x - 8) as u8;
-                let y_in_sprite = (scanline - u16::from(sprite.y)) as u8;
+            let attr = sprite.attributes;
 
-                let table = self.sprite_pattern_table_address();
-                let index = sprite.tile_index;
-                let (pattern0, pattern1) = self.read_pattern_row(table, index, y_in_sprite);
-
-                let shift = if sprite
-                    .attributes
-                    .contains(SpriteAttributes::HORIZONTAL_FLIP)
-                {
-                    x_in_sprite
-                } else {
-                    7 - x_in_sprite
-                };
-
-                let bit0 = (pattern0 >> shift) & 0b1;
-                let bit1 = (pattern1 >> shift) & 0b1;
-
-                let lower_index = (bit1 << 1) | bit0;
-
-                if lower_index != 0 {
-                    let palette = (sprite.attributes & SpriteAttributes::PALETTE).bits();
-                    let color_index = (palette << 2) | lower_index;
-                    let address = SPRITE_PALETTES + color_index.into();
-                    return Some(Color(self.memory.read(address)));
-                }
+            if cycle_count < x + 8 || cycle_count >= x + 16 {
+                continue;
             }
+
+            let x_in_sprite = (cycle_count - x - 8) as u8;
+            let y_in_sprite = (scanline - u16::from(sprite.y)) as u8;
+
+            let table = self.sprite_pattern_table_address();
+            let index = sprite.tile_index;
+            let (pattern0, pattern1) = self.read_pattern_row(table, index, y_in_sprite);
+
+            let shift = if attr.contains(SpriteAttributes::HORIZONTAL_FLIP) {
+                x_in_sprite
+            } else {
+                7 - x_in_sprite
+            };
+
+            let bit0 = (pattern0 >> shift) & 0b1;
+            let bit1 = (pattern1 >> shift) & 0b1;
+
+            let lower_index = (bit1 << 1) | bit0;
+
+            if lower_index == 0 {
+                continue;
+            }
+
+            let palette = (attr & SpriteAttributes::PALETTE).bits();
+            let color_index = (palette << 2) | lower_index;
+            let address = SPRITE_PALETTES + color_index.into();
+            return Some(Color(self.memory.read(address)));
         }
 
         None
