@@ -13,6 +13,7 @@ mod registers;
 mod scroll;
 
 const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
+const SPRITE_PALETTES: Address = Address::new(0x3f10);
 
 pub struct PPU<M> {
     memory: M,
@@ -82,6 +83,14 @@ impl<M: Memory> PPU<M> {
         }
     }
 
+    fn sprite_pattern_table_address(&self) -> Address {
+        if self.control.contains(Control::SPRITE_PATTERN_TABLE) {
+            Address::new(0x1000)
+        } else {
+            Address::new(0x0000)
+        }
+    }
+
     fn increment_coarse_x(&mut self) {
         let mut scroll = Scroll::new(self.address);
         scroll.increment_coarse_x();
@@ -121,6 +130,11 @@ impl<M: Memory> PPU<M> {
         }
     }
 
+    fn next_color(&mut self) -> Color {
+        let background = self.background_color();
+        self.sprite_color().unwrap_or(background)
+    }
+
     fn background_color(&mut self) -> Color {
         let lower_bits = self.tile_pattern.get_bits(self.fine_x);
         let higher_bits = self.palette_select.get_bits(self.fine_x);
@@ -133,6 +147,59 @@ impl<M: Memory> PPU<M> {
         let address = BACKGROUND_PALETTES + color_index.into();
 
         Color(self.memory.read(address))
+    }
+
+    fn sprite_color(&mut self) -> Option<Color> {
+        let cycle_count = self.cycle_count;
+        let scanline = self.scanline;
+
+        for sprite in self.active_sprites.clone().iter() {
+            let x = u16::from(sprite.x);
+            if cycle_count >= x + 8 && cycle_count < x + 16 {
+                let x_in_sprite = (cycle_count - x - 8) as u8;
+                let y_in_sprite = (scanline - u16::from(sprite.y)) as u8;
+
+                let table = self.sprite_pattern_table_address();
+                let index = sprite.tile_index;
+                let (pattern0, pattern1) = self.read_pattern_row(table, index, y_in_sprite);
+
+                let shift = if sprite
+                    .attributes
+                    .contains(SpriteAttributes::HORIZONTAL_FLIP)
+                {
+                    x_in_sprite
+                } else {
+                    7 - x_in_sprite
+                };
+
+                let bit0 = (pattern0 >> shift) & 0b1;
+                let bit1 = (pattern1 >> shift) & 0b1;
+
+                let lower_index = (bit1 << 1) | bit0;
+
+                if lower_index != 0 {
+                    let palette = (sprite.attributes & SpriteAttributes::PALETTE).bits();
+                    let color_index = (palette << 2) | lower_index;
+                    let address = SPRITE_PALETTES + color_index.into();
+                    return Some(Color(self.memory.read(address)));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn read_pattern_row(&mut self, nametable: Address, pattern_index: u8, row: u8) -> (u8, u8) {
+        assert!(row < 8);
+
+        let index = u16::from(pattern_index) << 4 | u16::from(row);
+        let pattern_address0 = nametable + index;
+        let pattern_address1 = pattern_address0 + 0b1000;
+
+        let pattern0 = self.memory.read(pattern_address0);
+        let pattern1 = self.memory.read(pattern_address1);
+
+        (pattern0, pattern1)
     }
 }
 
@@ -159,13 +226,9 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
                 let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
                 let attribute_bit_index1 = attribute_bit_index0 + 1;
 
-                let pattern_table_address = self.ppu.background_pattern_table_address();
-                let index = u16::from(pattern_index) << 4 | u16::from(fine_y);
-                let pattern_address0 = pattern_table_address + index;
-                let pattern_address1 = pattern_address0 + 0b1000;
+                let table = self.ppu.background_pattern_table_address();
+                let (pattern0, pattern1) = self.ppu.read_pattern_row(table, pattern_index, fine_y);
 
-                let pattern0 = self.ppu.memory.read(pattern_address0);
-                let pattern1 = self.ppu.memory.read(pattern_address1);
                 self.ppu.tile_pattern.set_next_bytes(pattern0, pattern1);
 
                 let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
@@ -176,18 +239,7 @@ impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
                 self.ppu.increment_coarse_x();
             }
 
-            let mut color = Some(self.ppu.background_color());
-
-            // TODO: this is just a hacky way to show sprite bounding boxes
-            let cycle_count = self.ppu.cycle_count;
-            for sprite in self.ppu.active_sprites.iter() {
-                let x = u16::from(sprite.x);
-                if cycle_count >= x + 8 && cycle_count < x + 16 {
-                    color = Some(Color(0));
-                }
-            }
-
-            color
+            Some(self.ppu.next_color())
         } else {
             None
         };
@@ -497,6 +549,16 @@ mod tests {
         assert_eq!(ppu.background_pattern_table_address(), Address::new(0x0000));
         ppu.write_control(0b0001_0000);
         assert_eq!(ppu.background_pattern_table_address(), Address::new(0x1000));
+    }
+
+    #[test]
+    fn writing_ppu_control_sets_sprite_pattern_table_address() {
+        let mut ppu = PPU::with_memory(mem!());
+
+        ppu.write_control(0b0000_0000);
+        assert_eq!(ppu.sprite_pattern_table_address(), Address::new(0x0000));
+        ppu.write_control(0b0000_1000);
+        assert_eq!(ppu.sprite_pattern_table_address(), Address::new(0x1000));
     }
 
     #[test]
@@ -822,6 +884,40 @@ mod tests {
         ppu.load_sprites();
 
         assert_eq!(ppu.active_sprites, cleared);
+    }
+
+    #[test]
+    fn can_read_rows_from_nametable() {
+        let mut ppu = PPU::with_memory(mem! {
+            0x1050 => {
+                // Bit 0
+                0b0000_0001,
+                0b0000_0010,
+                0b0000_0100,
+                0b0000_1000,
+                0b0001_0000,
+                0b0010_0000,
+                0b0100_0000,
+                0b1000_0000,
+                // Bit 1
+                0b1000_0000,
+                0b0100_0000,
+                0b0010_0000,
+                0b0001_0000,
+                0b0000_1000,
+                0b0000_0100,
+                0b0000_0010,
+                0b0000_0001
+            }
+        });
+
+        let table = Address::new(0x1000);
+        let index = 5;
+        let row = 4;
+        let (bit0, bit1) = ppu.read_pattern_row(table, index, row);
+
+        assert_eq!(bit0, 0b0001_0000);
+        assert_eq!(bit1, 0b0000_1000);
     }
 
     struct StubInterruptible;
