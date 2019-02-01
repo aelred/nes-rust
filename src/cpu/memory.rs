@@ -1,10 +1,10 @@
 use std::borrow::BorrowMut;
 use std::marker::PhantomData;
 
+use crate::ppu::PPURegisters;
 use crate::Address;
 use crate::ArrayMemory;
 use crate::Memory;
-use crate::ppu::PPURegisters;
 
 const PPU_SPACE: Address = Address::new(0x2000);
 const PPU_CONTROL: Address = Address::new(0x2000);
@@ -52,7 +52,7 @@ impl<M, PRG, PPU> RunningNESCPUMemory<M, PRG, PPU> {
 }
 
 impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters>
-RunningNESCPUMemory<M, PRG, PPU>
+    RunningNESCPUMemory<M, PRG, PPU>
 {
     fn write_oam_data(&mut self, page: u8) {
         let address = Address::from_bytes(page, 0);
@@ -68,7 +68,7 @@ RunningNESCPUMemory<M, PRG, PPU>
 }
 
 impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters> Memory
-for RunningNESCPUMemory<M, PRG, PPU>
+    for RunningNESCPUMemory<M, PRG, PPU>
 {
     fn read(&mut self, address: Address) -> u8 {
         if address >= PRG_SPACE {

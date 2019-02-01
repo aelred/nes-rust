@@ -5,7 +5,6 @@ use crate::Memory;
 pub struct Cartridge {
     pub prg: PRG,
     pub chr: CHR,
-    mapper: Mapper,
 }
 
 impl Cartridge {
@@ -24,7 +23,7 @@ impl Cartridge {
             ppu_ram: [0; 0x800],
         };
 
-        Cartridge { prg, chr, mapper }
+        Cartridge { prg, chr }
     }
 }
 

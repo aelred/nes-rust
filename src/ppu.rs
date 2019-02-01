@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 
-use crate::Address;
 use crate::cpu::Interruptible;
+use crate::Address;
 use crate::Memory;
 
 pub use self::memory::NESPPUMemory;
@@ -153,7 +153,9 @@ impl<M: Memory> PPU<M> {
         let cycle_count = self.cycle_count;
         let scanline = self.scanline;
 
-        for sprite in self.active_sprites.clone().iter() {
+        let sprites = self.active_sprites;
+
+        for sprite in sprites.iter() {
             let x = u16::from(sprite.x);
             if cycle_count >= x + 8 && cycle_count < x + 16 {
                 let x_in_sprite = (cycle_count - x - 8) as u8;
@@ -467,10 +469,10 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
-    use crate::Address;
-    use crate::ArrayMemory;
     use crate::mem;
     use crate::ppu::Sprite;
+    use crate::Address;
+    use crate::ArrayMemory;
 
     use super::*;
 

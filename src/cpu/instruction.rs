@@ -7,10 +7,10 @@ use super::addressing_modes::LAXAddressingMode;
 use super::addressing_modes::LDXAddressingMode;
 use super::addressing_modes::LDYAddressingMode;
 use super::addressing_modes::SAXAddressingMode;
-use super::addressing_modes::ShiftAddressingMode;
-use super::addressing_modes::StoreAddressingMode;
 use super::addressing_modes::STXAddressingMode;
 use super::addressing_modes::STYAddressingMode;
+use super::addressing_modes::ShiftAddressingMode;
+use super::addressing_modes::StoreAddressingMode;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Instruction {

@@ -1,9 +1,9 @@
-use nes_rust::Address;
-use nes_rust::CPU;
 use nes_rust::instructions::*;
 use nes_rust::mem;
+use nes_rust::Address;
 use nes_rust::Memory;
 use nes_rust::RunningCPU;
+use nes_rust::CPU;
 
 const PARAM_ADDRESS: u8 = 0x80;
 const RETURN_ADDRESS: u8 = 0xB0;

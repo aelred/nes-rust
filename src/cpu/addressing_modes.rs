@@ -1,8 +1,8 @@
 use std::borrow::BorrowMut;
 
 use crate::address::Address;
-use crate::cpu::CPU;
 use crate::cpu::RunningCPU;
+use crate::cpu::CPU;
 use crate::Memory;
 
 use super::Reference;
@@ -226,13 +226,13 @@ impl<C: BorrowMut<CPU>, M: Memory> RunningCPU<C, M> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ArrayMemory;
     use crate::cpu::CPU;
     use crate::instructions::*;
     use crate::mem;
+    use crate::ArrayMemory;
 
-    use super::*;
     use super::AddressingMode::*;
+    use super::*;
 
     #[test]
     fn immediate_addressing_mode_fetches_given_value() {

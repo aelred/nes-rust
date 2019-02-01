@@ -10,8 +10,8 @@ use sdl2::render::WindowCanvas;
 use sdl2::video::Window;
 
 use nes_rust::INes;
-use nes_rust::NES;
 use nes_rust::NESDisplay;
+use nes_rust::NES;
 
 type SDLColor = sdl2::pixels::Color;
 type PPUColor = nes_rust::Color;

@@ -2,8 +2,8 @@ use std::io::Cursor;
 
 use nes_rust::Address;
 use nes_rust::INes;
-use nes_rust::NES;
 use nes_rust::NoDisplay;
+use nes_rust::NES;
 
 const NESTEST: &[u8] = include_bytes!("nestest.nes");
 

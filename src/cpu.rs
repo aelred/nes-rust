@@ -7,8 +7,8 @@ use log::trace;
 use crate::address::Address;
 use crate::memory::Memory;
 
-pub use self::instruction::Instruction;
 pub use self::instruction::instructions;
+pub use self::instruction::Instruction;
 pub use self::memory::NESCPUMemory;
 pub use self::memory::RunningNESCPUMemory;
 
@@ -606,11 +606,11 @@ impl Interruptible for CPU {
 
 #[cfg(test)]
 mod tests {
-    use crate::ArrayMemory;
     use crate::mem;
+    use crate::ArrayMemory;
 
-    use super::*;
     use super::instructions::*;
+    use super::*;
 
     #[test]
     fn cpu_initialises_in_default_state() {
