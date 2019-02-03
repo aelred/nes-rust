@@ -67,7 +67,7 @@ impl Memory for CHR {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x0000...0x1fff => self.chr_rom[address.index()],
-            0x2000...0x2fff => self.ppu_ram[(address.index() - 0x2000) % 0x800],
+            0x2000...0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -79,7 +79,7 @@ impl Memory for CHR {
             0x0000...0x1fff => {
                 panic!("Attempted to write to ROM: {:?}", address);
             }
-            0x2000...0x2fff => self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte,
+            0x2000...0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte,
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -182,6 +182,27 @@ mod tests {
             chr.write(Address::new(value), value as u8);
             assert_eq!(chr.read(Address::new(value)), value as u8);
             assert_eq!(chr.ppu_ram[value as usize - 0x2800], value as u8);
+        }
+    }
+
+    #[test]
+    fn nrom_cartridge_mirrors_0x3000_through_0x3eff_to_ppu_ram() {
+        let mut chr = nrom_cartridge().chr;
+
+        for (i, item) in chr.ppu_ram.iter_mut().enumerate() {
+            *item = i as u8;
+        }
+
+        for value in 0x3000..=0x37ff {
+            chr.write(Address::new(value), value as u8);
+            assert_eq!(chr.read(Address::new(value)), value as u8);
+            assert_eq!(chr.ppu_ram[value as usize - 0x3000], value as u8);
+        }
+
+        for value in 0x3800..=0x3eff {
+            chr.write(Address::new(value), value as u8);
+            assert_eq!(chr.read(Address::new(value)), value as u8);
+            assert_eq!(chr.ppu_ram[value as usize - 0x3800], value as u8);
         }
     }
 
