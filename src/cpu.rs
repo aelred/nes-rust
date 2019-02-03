@@ -61,6 +61,10 @@ impl CPU {
     pub fn set_program_counter(&mut self, address: Address) {
         self.program_counter = address;
     }
+
+    pub fn non_maskable_interrupt(&mut self) {
+        self.non_maskable_interrupt = true;
+    }
 }
 
 pub struct RunningCPU<C, M> {
@@ -591,16 +595,6 @@ impl Status {
     fn set_flags(&mut self, value: u8) {
         self.set(Status::ZERO, value == 0);
         self.set(Status::NEGATIVE, (value as i8).is_negative());
-    }
-}
-
-pub trait Interruptible {
-    fn non_maskable_interrupt(&mut self);
-}
-
-impl Interruptible for CPU {
-    fn non_maskable_interrupt(&mut self) {
-        self.non_maskable_interrupt = true;
     }
 }
 

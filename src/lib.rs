@@ -4,7 +4,6 @@ use crate::cartridge::CHR;
 use crate::cartridge::PRG;
 pub use crate::cpu::instructions;
 pub use crate::cpu::Instruction;
-use crate::cpu::Interruptible;
 use crate::cpu::NESCPUMemory;
 pub use crate::cpu::RunningCPU;
 use crate::cpu::RunningNESCPUMemory;
