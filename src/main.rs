@@ -120,7 +120,7 @@ fn keycode_binding(keycode: Keycode) -> Option<Button> {
     Some(button)
 }
 
-const FPS: u64 = 30;
+const FPS: u64 = 60;
 const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS);
 
 struct SDLDisplay {
