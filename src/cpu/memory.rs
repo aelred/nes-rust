@@ -1,5 +1,4 @@
 use std::borrow::BorrowMut;
-use std::marker::PhantomData;
 
 use crate::ppu::PPURegisters;
 use crate::Address;
@@ -19,41 +18,29 @@ const APU_SPACE: Address = Address::new(0x4000);
 const OAM_DMA: Address = Address::new(0x4014);
 const PRG_SPACE: Address = Address::new(0x4020);
 
-pub struct NESCPUMemory<PRG> {
+pub struct NESCPUMemory<PRG, PPU> {
     internal_ram: [u8; 0x800],
     prg: PRG,
+    ppu_registers: PPU,
     the_rest: ArrayMemory, // TODO
 }
 
-impl<PRG> NESCPUMemory<PRG> {
-    pub fn new(prg: PRG) -> Self {
+impl<PRG: Memory, PPU: PPURegisters> NESCPUMemory<PRG, PPU> {
+    pub fn new(prg: PRG, ppu_registers: PPU) -> Self {
         NESCPUMemory {
             internal_ram: [0; 0x800],
             prg,
+            ppu_registers,
             the_rest: ArrayMemory::default(),
         }
     }
 }
 
-pub struct RunningNESCPUMemory<M, PRG, PPU> {
-    memory: M,
-    ppu_registers: PPU,
-    phantom: PhantomData<PRG>,
-}
-
-impl<M, PRG, PPU> RunningNESCPUMemory<M, PRG, PPU> {
-    pub fn new(memory: M, ppu_registers: PPU) -> Self {
-        RunningNESCPUMemory {
-            memory,
-            ppu_registers,
-            phantom: PhantomData,
-        }
+impl<PRG: Memory, PPU: PPURegisters> NESCPUMemory<PRG, PPU> {
+    pub fn ppu_registers(&mut self) -> &mut PPU {
+        &mut self.ppu_registers
     }
-}
 
-impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters>
-    RunningNESCPUMemory<M, PRG, PPU>
-{
     fn write_oam_data(&mut self, page: u8) {
         let address = Address::from_bytes(page, 0);
 
@@ -67,14 +54,12 @@ impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters>
     }
 }
 
-impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters> Memory
-    for RunningNESCPUMemory<M, PRG, PPU>
-{
+impl<PRG: Memory, PPU: PPURegisters> Memory for NESCPUMemory<PRG, PPU> {
     fn read(&mut self, address: Address) -> u8 {
         if address >= PRG_SPACE {
-            self.memory.borrow_mut().prg.read(address)
+            self.prg.read(address)
         } else if address >= APU_SPACE {
-            self.memory.borrow_mut().the_rest.read(address) // TODO
+            self.the_rest.read(address) // TODO
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
             let ppu_registers = self.ppu_registers.borrow_mut();
@@ -85,17 +70,17 @@ impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters> Memory
                 _ => unimplemented!(),
             }
         } else {
-            self.memory.borrow_mut().internal_ram[address.index() % 0x0800]
+            self.internal_ram[address.index() % 0x0800]
         }
     }
 
     fn write(&mut self, address: Address, byte: u8) {
         if address >= PRG_SPACE {
-            self.memory.borrow_mut().prg.write(address, byte);
+            self.prg.write(address, byte);
         } else if address == OAM_DMA {
             self.write_oam_data(byte);
         } else if address >= APU_SPACE {
-            self.memory.borrow_mut().the_rest.write(address, byte) // TODO
+            self.the_rest.write(address, byte) // TODO
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
             let ppu_registers = self.ppu_registers.borrow_mut();
@@ -126,7 +111,7 @@ impl<M: BorrowMut<NESCPUMemory<PRG>>, PRG: Memory, PPU: PPURegisters> Memory
                 }
             }
         } else {
-            self.memory.borrow_mut().internal_ram[address.index() % 0x0800] = byte;
+            self.internal_ram[address.index() % 0x0800] = byte;
         }
     }
 }
@@ -284,17 +269,14 @@ mod tests {
 
             memory.write(address, value as u8);
             assert_eq!(memory.read(address), value as u8);
-            assert_eq!(memory.memory.prg.read(address), value as u8);
+            assert_eq!(memory.prg.read(address), value as u8);
         }
     }
 
-    type TestNESCPUMemory = super::NESCPUMemory<ArrayMemory>;
-
-    fn nes_cpu_memory() -> RunningNESCPUMemory<TestNESCPUMemory, ArrayMemory, MockPPURegisters> {
+    fn nes_cpu_memory() -> NESCPUMemory<ArrayMemory, MockPPURegisters> {
         let ppu = MockPPURegisters::default();
         let prg = ArrayMemory::default();
-        let memory = NESCPUMemory::new(prg);
-        RunningNESCPUMemory::new(memory, ppu)
+        NESCPUMemory::new(prg, ppu)
     }
 
     #[derive(Default)]

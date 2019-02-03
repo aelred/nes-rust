@@ -2,7 +2,6 @@ use nes_rust::instructions::*;
 use nes_rust::mem;
 use nes_rust::Address;
 use nes_rust::Memory;
-use nes_rust::RunningCPU;
 use nes_rust::CPU;
 
 const PARAM_ADDRESS: u8 = 0x80;
@@ -11,16 +10,15 @@ const HALT_ADDRESS: u8 = 0xFF;
 
 macro_rules! run {
     ($params:tt -> $expected:expr; $( $expr: tt )*) => {
-        let mut memory = mem!($($expr)*);
-        let cpu = CPU::from_memory(&mut memory);
-        let mut running_cpu = RunningCPU::new(cpu, memory);
+        let memory = mem!($($expr)*);
+        let mut cpu = CPU::from_memory(memory);
         let params: Vec<u8> = $params.into_iter().cloned().collect();
         let expected: Vec<u8> = $expected.into_iter().cloned().collect();
-        run(&mut running_cpu, &params, &expected);
+        run(&mut cpu, &params, &expected);
     };
 }
 
-fn run<M: Memory>(cpu: &mut RunningCPU<CPU, M>, params: &[u8], expected: &[u8]) {
+fn run<M: Memory>(cpu: &mut CPU<M>, params: &[u8], expected: &[u8]) {
     for (offset, param) in params.iter().enumerate() {
         cpu.write(
             Address::from_bytes(0, PARAM_ADDRESS) + offset as u16,

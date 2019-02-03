@@ -1,7 +1,4 @@
-use std::borrow::BorrowMut;
-
 use crate::address::Address;
-use crate::cpu::RunningCPU;
 use crate::cpu::CPU;
 use crate::Memory;
 
@@ -19,7 +16,7 @@ macro_rules! def_addressing_modes {
         }
 
         impl ReferenceAddressingMode for $name {
-            fn fetch_ref<C: BorrowMut<CPU>, M: Memory>(self, cpu: &mut RunningCPU<C, M>) -> Reference {
+            fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
                 match self {
                     $(
                     $name::$mode => cpu.exec_addressing_mode(AddressingMode::$mode),
@@ -130,10 +127,7 @@ def_addressing_modes! {
 }
 
 impl JumpAddressingMode {
-    pub fn fetch_address<C: BorrowMut<CPU>, M: Memory>(
-        self,
-        cpu: &mut RunningCPU<C, M>,
-    ) -> Address {
+    pub fn fetch_address<M: Memory>(self, cpu: &mut CPU<M>) -> Address {
         match self {
             JumpAddressingMode::Absolute => cpu.absolute_address(),
             JumpAddressingMode::Indirect => cpu.indirect_address(),
@@ -156,7 +150,7 @@ enum AddressingMode {
     IndirectIndexed,
 }
 
-impl<C: BorrowMut<CPU>, M: Memory> RunningCPU<C, M> {
+impl<M: Memory> CPU<M> {
     fn exec_addressing_mode(&mut self, addressing_mode: AddressingMode) -> Reference {
         match addressing_mode {
             AddressingMode::Accumulator => Reference::Accumulator,
@@ -429,8 +423,7 @@ mod tests {
         assert_eq!(cpu.read_reference(reference), 57);
     }
 
-    fn cpu(mut memory: ArrayMemory) -> RunningCPU<CPU, ArrayMemory> {
-        let cpu = CPU::from_memory(&mut memory);
-        RunningCPU::new(cpu, memory)
+    fn cpu(memory: ArrayMemory) -> CPU<ArrayMemory> {
+        CPU::from_memory(memory)
     }
 }

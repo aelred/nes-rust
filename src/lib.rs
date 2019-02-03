@@ -5,8 +5,6 @@ use crate::cartridge::PRG;
 pub use crate::cpu::instructions;
 pub use crate::cpu::Instruction;
 use crate::cpu::NESCPUMemory;
-pub use crate::cpu::RunningCPU;
-use crate::cpu::RunningNESCPUMemory;
 pub use crate::cpu::CPU;
 pub use crate::i_nes::INes;
 pub use crate::i_nes::INesReadError;
@@ -36,28 +34,22 @@ impl NESDisplay for NoDisplay {
     fn draw_pixel(&mut self, _: Color) {}
 }
 
+type StandardPPU<'a> = PPU<NESPPUMemory<&'a mut CHR>>;
+
 pub struct NES<'a, D> {
-    cpu: CPU,
-    cpu_memory: NESCPUMemory<&'a mut PRG>,
-    ppu: PPU<NESPPUMemory<&'a mut CHR>>,
+    cpu: CPU<NESCPUMemory<&'a mut PRG, StandardPPU<'a>>>,
     display: D,
 }
 
 impl<'a, D: NESDisplay> NES<'a, D> {
     pub fn new(cartridge: &'a mut Cartridge, display: D) -> Self {
         let ppu_memory = NESPPUMemory::new(&mut cartridge.chr);
-        let mut ppu = PPU::with_memory(ppu_memory);
+        let ppu = PPU::with_memory(ppu_memory);
 
-        let mut cpu_memory = NESCPUMemory::new(&mut cartridge.prg);
-        let mut running_cpu_memory = RunningNESCPUMemory::new(&mut cpu_memory, &mut ppu);
-        let cpu = CPU::from_memory(&mut running_cpu_memory);
+        let cpu_memory = NESCPUMemory::new(&mut cartridge.prg, ppu);
+        let cpu = CPU::from_memory(cpu_memory);
 
-        NES {
-            cpu,
-            cpu_memory,
-            ppu,
-            display,
-        }
+        NES { cpu, display }
     }
 
     pub fn program_counter(&mut self) -> Address {
@@ -69,8 +61,7 @@ impl<'a, D: NESDisplay> NES<'a, D> {
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
-        let mut memory = RunningNESCPUMemory::new(&mut self.cpu_memory, &mut self.ppu);
-        memory.read(address)
+        self.cpu.read(address)
     }
 
     pub fn tick(&mut self) {
@@ -79,14 +70,16 @@ impl<'a, D: NESDisplay> NES<'a, D> {
     }
 
     fn tick_cpu(&mut self) {
-        let memory = RunningNESCPUMemory::new(&mut self.cpu_memory, &mut self.ppu);
-        let mut cpu = RunningCPU::new(&mut self.cpu, memory);
-        cpu.run_instruction();
+        self.cpu.run_instruction();
+    }
+
+    fn ppu(&mut self) -> &mut StandardPPU<'a> {
+        self.cpu.memory().ppu_registers()
     }
 
     fn tick_ppu(&mut self) {
         for _ in 0..10 {
-            let output = self.ppu.tick();
+            let output = self.ppu().tick();
 
             if output.interrupt {
                 self.cpu.non_maskable_interrupt();

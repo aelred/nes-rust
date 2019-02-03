@@ -1,4 +1,3 @@
-use std::borrow::BorrowMut;
 use std::fmt;
 
 use bitflags::bitflags;
@@ -10,7 +9,6 @@ use crate::memory::Memory;
 pub use self::instruction::instructions;
 pub use self::instruction::Instruction;
 pub use self::memory::NESCPUMemory;
-pub use self::memory::RunningNESCPUMemory;
 
 mod addressing_modes;
 mod instruction;
@@ -21,7 +19,8 @@ const NMI_VECTOR: Address = Address::new(0xFFFA);
 const RESET_VECTOR: Address = Address::new(0xFFFC);
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
-pub struct CPU {
+pub struct CPU<M> {
+    memory: M,
     /// A
     accumulator: u8,
     /// PC
@@ -37,13 +36,14 @@ pub struct CPU {
     non_maskable_interrupt: bool,
 }
 
-impl CPU {
-    pub fn from_memory<M: Memory>(memory: &mut M) -> Self {
+impl<M: Memory> CPU<M> {
+    pub fn from_memory(mut memory: M) -> Self {
         let lower = memory.read(RESET_VECTOR);
         let higher = memory.read(RESET_VECTOR + 1);
         let program_counter = Address::from_bytes(higher, lower);
 
         CPU {
+            memory,
             accumulator: 0,
             program_counter,
             x: 0,
@@ -65,16 +65,9 @@ impl CPU {
     pub fn non_maskable_interrupt(&mut self) {
         self.non_maskable_interrupt = true;
     }
-}
 
-pub struct RunningCPU<C, M> {
-    cpu: C,
-    memory: M,
-}
-
-impl<C: BorrowMut<CPU>, M: Memory> RunningCPU<C, M> {
-    pub fn new(cpu: C, memory: M) -> Self {
-        RunningCPU { cpu, memory }
+    pub fn memory(&mut self) -> &mut M {
+        &mut self.memory
     }
 
     pub fn read(&mut self, address: Address) -> u8 {
@@ -92,14 +85,14 @@ impl<C: BorrowMut<CPU>, M: Memory> RunningCPU<C, M> {
     }
 
     fn accumulator(&self) -> u8 {
-        self.cpu.borrow().accumulator
+        self.accumulator
     }
 
     pub fn run_instruction(&mut self) {
         let instruction = self.instr();
 
-        if self.cpu.borrow().non_maskable_interrupt {
-            self.cpu.borrow_mut().non_maskable_interrupt = false;
+        if self.non_maskable_interrupt {
+            self.non_maskable_interrupt = false;
             self.interrupt(NMI_VECTOR, false);
         } else {
             self.handle_instruction(instruction);
@@ -445,36 +438,32 @@ impl<C: BorrowMut<CPU>, M: Memory> RunningCPU<C, M> {
         self.set_reference(reference, value);
     }
 
-    pub fn program_counter(&self) -> Address {
-        self.cpu.borrow().program_counter
-    }
-
     fn program_counter_mut(&mut self) -> &mut Address {
-        &mut self.cpu.borrow_mut().program_counter
+        &mut self.program_counter
     }
 
     fn x(&self) -> u8 {
-        self.cpu.borrow().x
+        self.x
     }
 
     fn y(&self) -> u8 {
-        self.cpu.borrow().y
+        self.y
     }
 
     fn stack_pointer(&self) -> u8 {
-        self.cpu.borrow().stack_pointer
+        self.stack_pointer
     }
 
     fn stack_pointer_mut(&mut self) -> &mut u8 {
-        &mut self.cpu.borrow_mut().stack_pointer
+        &mut self.stack_pointer
     }
 
     fn status(&self) -> Status {
-        self.cpu.borrow().status
+        self.status
     }
 
     fn status_mut(&mut self) -> &mut Status {
-        &mut self.cpu.borrow_mut().status
+        &mut self.status
     }
 
     fn compare(&mut self, register: u8, value: u8) {
@@ -529,9 +518,9 @@ impl<C: BorrowMut<CPU>, M: Memory> RunningCPU<C, M> {
         trace!("        {} := {:<#04x}", reference, byte);
         match reference {
             Reference::Address(address) => self.memory.write(address, byte),
-            Reference::Accumulator => self.cpu.borrow_mut().accumulator = byte,
-            Reference::X => self.cpu.borrow_mut().x = byte,
-            Reference::Y => self.cpu.borrow_mut().y = byte,
+            Reference::Accumulator => self.accumulator = byte,
+            Reference::X => self.x = byte,
+            Reference::Y => self.y = byte,
         };
     }
 
@@ -556,7 +545,7 @@ impl<C: BorrowMut<CPU>, M: Memory> RunningCPU<C, M> {
 }
 
 trait ReferenceAddressingMode {
-    fn fetch_ref<C: BorrowMut<CPU>, M: Memory>(self, cpu: &mut RunningCPU<C, M>) -> Reference;
+    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference;
 }
 
 #[derive(Copy, Clone)]
@@ -1391,7 +1380,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 4);
+        assert_eq!(cpu.stack_pointer, 4);
     }
 
     #[test]
@@ -1469,7 +1458,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 5);
+        assert_eq!(cpu.stack_pointer, 5);
     }
 
     #[test]
@@ -1488,7 +1477,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 5);
+        assert_eq!(cpu.stack_pointer, 5);
     }
 
     #[test]
@@ -1512,7 +1501,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 7);
+        assert_eq!(cpu.stack_pointer, 7);
     }
 
     #[test]
@@ -1534,7 +1523,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 7);
+        assert_eq!(cpu.stack_pointer, 7);
     }
 
     #[test]
@@ -1612,7 +1601,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 8);
+        assert_eq!(cpu.stack_pointer, 8);
     }
 
     #[test]
@@ -1746,7 +1735,7 @@ mod tests {
             cpu.x = 65;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 65);
+        assert_eq!(cpu.stack_pointer, 65);
     }
 
     #[test]
@@ -1802,7 +1791,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 3);
+        assert_eq!(cpu.stack_pointer, 3);
     }
 
     #[test]
@@ -1838,7 +1827,7 @@ mod tests {
             cpu.stack_pointer = 6;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 9);
+        assert_eq!(cpu.stack_pointer, 9);
     }
 
     #[test]
@@ -1972,13 +1961,13 @@ mod tests {
             cpu.stack_pointer = 255;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 0);
+        assert_eq!(cpu.stack_pointer, 0);
 
         let cpu = run_instr(mem!(PHA), |cpu| {
             cpu.stack_pointer = 0;
         });
 
-        assert_eq!(cpu.cpu.stack_pointer, 255);
+        assert_eq!(cpu.stack_pointer, 255);
     }
 
     #[test]
@@ -2030,7 +2019,7 @@ mod tests {
             cpu.non_maskable_interrupt = true;
         });
 
-        assert_eq!(cpu.cpu.non_maskable_interrupt, false);
+        assert_eq!(cpu.non_maskable_interrupt, false);
     }
 
     #[test]
@@ -2045,7 +2034,7 @@ mod tests {
         assert_eq!(cpu.read(STACK + 6), 0x12);
         assert_eq!(cpu.read(STACK + 5), 0x34);
         assert_eq!(cpu.read(STACK + 4), 0b1010_1000);
-        assert_eq!(cpu.cpu.stack_pointer, 3);
+        assert_eq!(cpu.stack_pointer, 3);
     }
 
     #[test]
@@ -2066,7 +2055,7 @@ mod tests {
 
     #[test]
     fn calling_non_maskable_interrupt_sets_interrupt_flag() {
-        let mut cpu = CPU::from_memory(&mut mem!());
+        let mut cpu = CPU::from_memory(mem!());
         cpu.non_maskable_interrupt = false;
 
         cpu.non_maskable_interrupt();
@@ -2074,20 +2063,18 @@ mod tests {
         assert_eq!(cpu.non_maskable_interrupt, true);
     }
 
-    fn run_instr<F: FnOnce(&mut CPU)>(
-        mut memory: ArrayMemory,
+    fn run_instr<F: FnOnce(&mut CPU<ArrayMemory>)>(
+        memory: ArrayMemory,
         cpu_setup: F,
-    ) -> RunningCPU<CPU, ArrayMemory> {
-        let mut cpu = CPU::from_memory(&mut memory);
+    ) -> CPU<ArrayMemory> {
+        let mut cpu = CPU::from_memory(memory);
 
         cpu_setup(&mut cpu);
 
-        let mut running_cpu = RunningCPU::new(cpu, memory);
+        cpu.run_instruction();
 
-        running_cpu.run_instruction();
+        hexdump::hexdump(&cpu.memory.slice()[..0x200]);
 
-        hexdump::hexdump(&running_cpu.memory.slice()[..0x200]);
-
-        running_cpu
+        cpu
     }
 }
