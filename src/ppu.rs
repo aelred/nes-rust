@@ -1,6 +1,5 @@
 use bitflags::bitflags;
 
-use crate::cpu::Interruptible;
 use crate::Address;
 use crate::Memory;
 
@@ -206,81 +205,77 @@ impl<M: Memory> PPU<M> {
 
         (pattern0, pattern1)
     }
-}
 
-pub struct RunningPPU<'a, M, I> {
-    ppu: &'a mut PPU<M>,
-    interruptible: &'a mut I,
-}
-
-impl<'a, M: Memory, I: Interruptible> RunningPPU<'a, M, I> {
-    pub fn new(ppu: &'a mut PPU<M>, interruptible: &'a mut I) -> Self {
-        RunningPPU { ppu, interruptible }
-    }
-
-    pub fn tick(&mut self) -> Option<Color> {
-        let color = if self.ppu.scanline < 240 && self.ppu.cycle_count < 256 {
-            if self.ppu.cycle_count % 8 == 0 {
-                let scroll = Scroll::new(self.ppu.address);
+    pub fn tick(&mut self) -> PPUOutput {
+        let color = if self.scanline < 240 && self.cycle_count < 256 {
+            if self.cycle_count % 8 == 0 {
+                let scroll = Scroll::new(self.address);
                 let coarse_x = scroll.coarse_x();
                 let coarse_y = scroll.coarse_y();
                 let fine_y = scroll.fine_y();
 
-                let pattern_index = self.ppu.memory.read(self.ppu.tile_address());
-                let attribute_byte = self.ppu.memory.read(self.ppu.attribute_address());
+                let pattern_index = self.memory.read(self.tile_address());
+                let attribute_byte = self.memory.read(self.attribute_address());
                 let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
                 let attribute_bit_index1 = attribute_bit_index0 + 1;
 
-                let table = self.ppu.background_pattern_table_address();
-                let (pattern0, pattern1) = self.ppu.read_pattern_row(table, pattern_index, fine_y);
+                let table = self.background_pattern_table_address();
+                let (pattern0, pattern1) = self.read_pattern_row(table, pattern_index, fine_y);
 
-                self.ppu.tile_pattern.set_next_bytes(pattern0, pattern1);
+                self.tile_pattern.set_next_bytes(pattern0, pattern1);
 
                 let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
                 let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
 
-                self.ppu.palette_select.set_next_bytes(palette0, palette1);
+                self.palette_select.set_next_bytes(palette0, palette1);
 
-                self.ppu.increment_coarse_x();
+                self.increment_coarse_x();
             }
 
-            Some(self.ppu.next_color())
+            Some(self.next_color())
         } else {
             None
         };
 
-        self.ppu.cycle_count += 1;
+        let mut interrupt = false;
 
-        if self.ppu.cycle_count == 340 {
-            self.ppu.cycle_count = 0;
+        self.cycle_count += 1;
 
-            if self.ppu.scanline < 240 {
-                self.ppu.increment_fine_y();
-                self.ppu.transfer_horizontal_scroll();
+        if self.cycle_count == 340 {
+            self.cycle_count = 0;
+
+            if self.scanline < 240 {
+                self.increment_fine_y();
+                self.transfer_horizontal_scroll();
             }
 
-            self.ppu.scanline += 1;
+            self.scanline += 1;
 
-            self.ppu.load_sprites();
+            self.load_sprites();
 
-            if self.ppu.scanline == 241 {
-                self.ppu.status.insert(Status::VBLANK);
+            if self.scanline == 241 {
+                self.status.insert(Status::VBLANK);
 
-                if self.ppu.control.contains(Control::NMI_ON_VBLANK) {
-                    self.interruptible.non_maskable_interrupt();
+                if self.control.contains(Control::NMI_ON_VBLANK) {
+                    interrupt = true;
                 }
             }
 
             // TODO: The VBLANK is much too long
-            if self.ppu.scanline == 600 {
-                self.ppu.scanline = 0;
-                self.ppu.status.remove(Status::VBLANK);
-                self.ppu.address = self.ppu.temporary_address;
+            if self.scanline == 600 {
+                self.scanline = 0;
+                self.status.remove(Status::VBLANK);
+                self.address = self.temporary_address;
             }
         }
 
-        color
+        PPUOutput { color, interrupt }
     }
+}
+
+pub struct PPUOutput {
+    pub color: Option<Color>,
+    pub interrupt: bool,
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]
@@ -483,9 +478,7 @@ mod tests {
     fn each_tick_produces_a_color() {
         let memory = ArrayMemory::default();
         let mut ppu = PPU::with_memory(memory);
-        let mut stub = StubInterruptible;
-        let mut rppu = RunningPPU::new(&mut ppu, &mut stub);
-        let _color: Option<Color> = rppu.tick();
+        let _color: Option<Color> = ppu.tick().color;
     }
 
     #[test]
@@ -923,11 +916,5 @@ mod tests {
 
         assert_eq!(bit0, 0b0001_0000);
         assert_eq!(bit1, 0b0000_1000);
-    }
-
-    struct StubInterruptible;
-
-    impl Interruptible for StubInterruptible {
-        fn non_maskable_interrupt(&mut self) {}
     }
 }

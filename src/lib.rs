@@ -4,6 +4,7 @@ use crate::cartridge::CHR;
 use crate::cartridge::PRG;
 pub use crate::cpu::instructions;
 pub use crate::cpu::Instruction;
+use crate::cpu::Interruptible;
 use crate::cpu::NESCPUMemory;
 pub use crate::cpu::RunningCPU;
 use crate::cpu::RunningNESCPUMemory;
@@ -14,7 +15,6 @@ pub use crate::memory::ArrayMemory;
 pub use crate::memory::Memory;
 pub use crate::ppu::Color;
 use crate::ppu::NESPPUMemory;
-use crate::ppu::RunningPPU;
 use crate::ppu::PPU;
 pub use crate::serialize::SerializeByte;
 
@@ -86,9 +86,14 @@ impl<'a, D: NESDisplay> NES<'a, D> {
     }
 
     fn tick_ppu(&mut self) {
-        let mut ppu = RunningPPU::new(&mut self.ppu, &mut self.cpu);
         for _ in 0..10 {
-            if let Some(color) = ppu.tick() {
+            let output = self.ppu.tick();
+
+            if output.interrupt {
+                self.cpu.non_maskable_interrupt();
+            }
+
+            if let Some(color) = output.color {
                 self.display.draw_pixel(color);
             }
         }
