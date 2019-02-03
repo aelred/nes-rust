@@ -8,6 +8,8 @@ use crate::cpu::NESCPUMemory;
 pub use crate::cpu::CPU;
 pub use crate::i_nes::INes;
 pub use crate::i_nes::INesReadError;
+pub use crate::input::Button;
+use crate::input::Controller;
 pub use crate::memory::ArrayMemory;
 pub use crate::memory::Memory;
 pub use crate::ppu::Color;
@@ -19,6 +21,7 @@ mod address;
 mod cartridge;
 mod cpu;
 mod i_nes;
+mod input;
 mod mapper;
 mod memory;
 mod ppu;
@@ -37,7 +40,7 @@ impl NESDisplay for NoDisplay {
 type StandardPPU<'a> = PPU<NESPPUMemory<&'a mut CHR>>;
 
 pub struct NES<'a, D> {
-    cpu: CPU<NESCPUMemory<&'a mut PRG, StandardPPU<'a>>>,
+    cpu: CPU<NESCPUMemory<&'a mut PRG, StandardPPU<'a>, Controller>>,
     display: D,
 }
 
@@ -45,8 +48,9 @@ impl<'a, D: NESDisplay> NES<'a, D> {
     pub fn new(cartridge: &'a mut Cartridge, display: D) -> Self {
         let ppu_memory = NESPPUMemory::new(&mut cartridge.chr);
         let ppu = PPU::with_memory(ppu_memory);
+        let controller = Controller::default();
 
-        let cpu_memory = NESCPUMemory::new(&mut cartridge.prg, ppu);
+        let cpu_memory = NESCPUMemory::new(&mut cartridge.prg, ppu, controller);
         let cpu = CPU::from_memory(cpu_memory);
 
         NES { cpu, display }
@@ -62,6 +66,10 @@ impl<'a, D: NESDisplay> NES<'a, D> {
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
         self.cpu.read(address)
+    }
+
+    pub fn controller(&mut self) -> &mut Controller {
+        self.cpu.memory().input()
     }
 
     pub fn tick(&mut self) {

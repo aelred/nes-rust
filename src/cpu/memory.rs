@@ -1,5 +1,6 @@
 use std::borrow::BorrowMut;
 
+use crate::input::Input;
 use crate::ppu::PPURegisters;
 use crate::Address;
 use crate::ArrayMemory;
@@ -16,29 +17,34 @@ const PPU_ADDRESS: Address = Address::new(0x2006);
 const PPU_DATA: Address = Address::new(0x2007);
 const APU_SPACE: Address = Address::new(0x4000);
 const OAM_DMA: Address = Address::new(0x4014);
+const JOY1_ADDRESS: Address = Address::new(0x4016);
 const PRG_SPACE: Address = Address::new(0x4020);
 
-pub struct NESCPUMemory<PRG, PPU> {
+pub struct NESCPUMemory<PRG, PPU, IN> {
     internal_ram: [u8; 0x800],
     prg: PRG,
     ppu_registers: PPU,
+    input: IN,
     the_rest: ArrayMemory, // TODO
 }
 
-impl<PRG: Memory, PPU: PPURegisters> NESCPUMemory<PRG, PPU> {
-    pub fn new(prg: PRG, ppu_registers: PPU) -> Self {
+impl<PRG: Memory, PPU: PPURegisters, IN: Input> NESCPUMemory<PRG, PPU, IN> {
+    pub fn new(prg: PRG, ppu_registers: PPU, input: IN) -> Self {
         NESCPUMemory {
             internal_ram: [0; 0x800],
             prg,
             ppu_registers,
+            input,
             the_rest: ArrayMemory::default(),
         }
     }
-}
 
-impl<PRG: Memory, PPU: PPURegisters> NESCPUMemory<PRG, PPU> {
     pub fn ppu_registers(&mut self) -> &mut PPU {
         &mut self.ppu_registers
+    }
+
+    pub fn input(&mut self) -> &mut IN {
+        &mut self.input
     }
 
     fn write_oam_data(&mut self, page: u8) {
@@ -54,10 +60,12 @@ impl<PRG: Memory, PPU: PPURegisters> NESCPUMemory<PRG, PPU> {
     }
 }
 
-impl<PRG: Memory, PPU: PPURegisters> Memory for NESCPUMemory<PRG, PPU> {
+impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU, IN> {
     fn read(&mut self, address: Address) -> u8 {
         if address >= PRG_SPACE {
             self.prg.read(address)
+        } else if address == JOY1_ADDRESS {
+            self.input.read()
         } else if address >= APU_SPACE {
             self.the_rest.read(address) // TODO
         } else if address >= PPU_SPACE {
@@ -79,6 +87,8 @@ impl<PRG: Memory, PPU: PPURegisters> Memory for NESCPUMemory<PRG, PPU> {
             self.prg.write(address, byte);
         } else if address == OAM_DMA {
             self.write_oam_data(byte);
+        } else if address == JOY1_ADDRESS {
+            self.input.write(byte);
         } else if address >= APU_SPACE {
             self.the_rest.write(address, byte) // TODO
         } else if address >= PPU_SPACE {
@@ -273,10 +283,27 @@ mod tests {
         }
     }
 
-    fn nes_cpu_memory() -> NESCPUMemory<ArrayMemory, MockPPURegisters> {
+    #[test]
+    fn reading_from_4016_reads_from_input_device() {
+        let mut memory = nes_cpu_memory();
+        memory.input.0 = Some(24);
+
+        assert_eq!(memory.read(Address::new(0x4016)), 24);
+    }
+
+    #[test]
+    fn writing_to_4016_writes_to_input_device() {
+        let mut memory = nes_cpu_memory();
+
+        memory.write(Address::new(0x4016), 52);
+        assert_eq!(memory.input.0, Some(52));
+    }
+
+    fn nes_cpu_memory() -> NESCPUMemory<ArrayMemory, MockPPURegisters, MockInput> {
         let ppu = MockPPURegisters::default();
         let prg = ArrayMemory::default();
-        NESCPUMemory::new(prg, ppu)
+        let input = MockInput::default();
+        NESCPUMemory::new(prg, ppu, input)
     }
 
     #[derive(Default)]
@@ -335,6 +362,19 @@ mod tests {
 
         fn write_oam_dma(&mut self, bytes: [u8; 256]) {
             self.oam_dma = Some(Box::new(bytes));
+        }
+    }
+
+    #[derive(Default)]
+    struct MockInput(Option<u8>);
+
+    impl Input for MockInput {
+        fn read(&mut self) -> u8 {
+            self.0.unwrap()
+        }
+
+        fn write(&mut self, value: u8) {
+            self.0 = Some(value);
         }
     }
 }

@@ -9,9 +9,11 @@ use sdl2::render::Canvas;
 use sdl2::render::WindowCanvas;
 use sdl2::video::Window;
 
+use nes_rust::Button;
 use nes_rust::INes;
 use nes_rust::NESDisplay;
 use nes_rust::NES;
+use sdl2::keyboard::Keycode;
 
 type SDLColor = sdl2::pixels::Color;
 type PPUColor = nes_rust::Color;
@@ -76,11 +78,46 @@ fn main() -> Result<(), Box<Error>> {
         }
 
         for event in event_pump.poll_iter() {
-            if let Event::Quit { .. } = event {
-                return Ok(());
+            match event {
+                Event::Quit { .. } => {
+                    return Ok(());
+                }
+                Event::KeyDown {
+                    keycode: Some(keycode),
+                    ..
+                } => {
+                    if let Some(button) = keycode_binding(keycode) {
+                        nes.controller().press(button);
+                    }
+                }
+                Event::KeyUp {
+                    keycode: Some(keycode),
+                    ..
+                } => {
+                    if let Some(button) = keycode_binding(keycode) {
+                        nes.controller().release(button);
+                    }
+                }
+                _ => {}
             }
         }
     }
+}
+
+fn keycode_binding(keycode: Keycode) -> Option<Button> {
+    let button = match keycode {
+        Keycode::Z => Button::A,
+        Keycode::X => Button::B,
+        Keycode::RShift => Button::Select,
+        Keycode::Return => Button::Start,
+        Keycode::Up => Button::Up,
+        Keycode::Down => Button::Down,
+        Keycode::Left => Button::Left,
+        Keycode::Right => Button::Right,
+        _ => return None,
+    };
+
+    Some(button)
 }
 
 const FPS: u64 = 30;
