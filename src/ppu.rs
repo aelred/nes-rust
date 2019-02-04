@@ -129,9 +129,14 @@ impl<M: Memory> PPU<M> {
         }
     }
 
-    fn next_color(&mut self) -> Color {
-        let background = self.background_color();
-        self.sprite_color().unwrap_or(background)
+    fn next_color(&mut self) -> Option<Color> {
+        if self.rendering() {
+            let background = self.background_color();
+            let color = self.sprite_color().unwrap_or(background);
+            Some(color)
+        } else {
+            None
+        }
     }
 
     fn background_color(&mut self) -> Color {
@@ -206,48 +211,45 @@ impl<M: Memory> PPU<M> {
         (pattern0, pattern1)
     }
 
+    fn read_next_tile(&mut self) {
+        let scroll = Scroll::new(self.address);
+        let coarse_x = scroll.coarse_x();
+        let coarse_y = scroll.coarse_y();
+        let fine_y = scroll.fine_y();
+
+        let pattern_index = self.memory.read(self.tile_address());
+        let attribute_byte = self.memory.read(self.attribute_address());
+        let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
+        let attribute_bit_index1 = attribute_bit_index0 + 1;
+
+        let table = self.background_pattern_table_address();
+        let (pattern0, pattern1) = self.read_pattern_row(table, pattern_index, fine_y);
+
+        self.tile_pattern.set_next_bytes(pattern0, pattern1);
+
+        let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
+        let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
+
+        self.palette_select.set_next_bytes(palette0, palette1);
+
+        self.increment_coarse_x();
+    }
+
+    fn rendering(&self) -> bool {
+        let in_bounds = self.scanline < 240 && self.cycle_count < 256;
+        let show_background = self.mask.contains(Mask::SHOW_BACKGROUND);
+        let show_sprites = self.mask.contains(Mask::SHOW_SPRITES);
+        let vblank = self.status.contains(Status::VBLANK);
+        (show_background || show_sprites) && !vblank && in_bounds
+    }
+
     pub fn tick(&mut self) -> PPUOutput {
-        let color = if self.scanline < 240 && self.cycle_count < 256 {
-            if self.cycle_count % 8 == 0 {
-                let scroll = Scroll::new(self.address);
-                let coarse_x = scroll.coarse_x();
-                let coarse_y = scroll.coarse_y();
-                let fine_y = scroll.fine_y();
-
-                let pattern_index = self.memory.read(self.tile_address());
-                let attribute_byte = self.memory.read(self.attribute_address());
-                let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
-                let attribute_bit_index1 = attribute_bit_index0 + 1;
-
-                let table = self.background_pattern_table_address();
-                let (pattern0, pattern1) = self.read_pattern_row(table, pattern_index, fine_y);
-
-                self.tile_pattern.set_next_bytes(pattern0, pattern1);
-
-                let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
-                let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
-
-                self.palette_select.set_next_bytes(palette0, palette1);
-
-                self.increment_coarse_x();
-            }
-
-            Some(self.next_color())
-        } else {
-            None
-        };
-
         let mut interrupt = false;
 
         self.cycle_count += 1;
 
         if self.cycle_count == 340 {
             self.cycle_count = 0;
-
-            if self.scanline < 240 {
-                self.increment_fine_y();
-                self.transfer_horizontal_scroll();
-            }
 
             self.scanline += 1;
 
@@ -265,10 +267,25 @@ impl<M: Memory> PPU<M> {
             if self.scanline == 600 {
                 self.scanline = 0;
                 self.status.remove(Status::VBLANK);
-                self.address = self.temporary_address;
             }
         }
 
+        if self.rendering() {
+            if self.cycle_count == 0 {
+                self.increment_fine_y();
+                self.transfer_horizontal_scroll();
+            }
+
+            if self.scanline == 0 {
+                self.address = self.temporary_address;
+            }
+
+            if self.cycle_count % 8 == 0 {
+                self.read_next_tile();
+            }
+        }
+
+        let color = self.next_color();
         PPUOutput { color, interrupt }
     }
 }
