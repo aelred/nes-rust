@@ -1,4 +1,5 @@
 use bitflags::bitflags;
+use log::{trace, warn};
 
 use crate::Address;
 use crate::Memory;
@@ -16,6 +17,7 @@ const SPRITE_PALETTES: Address = Address::new(0x3f10);
 
 pub struct PPU<M> {
     memory: M,
+    read_buffer: u8,
     object_attribute_memory: [u8; 256],
     scanline: u16,
     cycle_count: u16,
@@ -37,6 +39,7 @@ impl<M: Memory> PPU<M> {
     pub fn with_memory(memory: M) -> Self {
         PPU {
             memory,
+            read_buffer: 0,
             object_attribute_memory: [0; 256],
             scanline: 0,
             cycle_count: 0,
@@ -58,20 +61,34 @@ impl<M: Memory> PPU<M> {
         Address::new(self.address)
     }
 
-    fn address_increment(&self) -> u16 {
-        if self.control.contains(Control::ADDRESS_INCREMENT) {
+    fn set_address(&mut self, address: Address) {
+        self.address = address.bytes();
+    }
+
+    fn scroll(&self) -> Scroll {
+        Scroll::new(self.address)
+    }
+
+    fn set_scroll(&mut self, scroll: Scroll) {
+        self.address = scroll.bits();
+    }
+
+    fn increment_address(&mut self) {
+        let incr = if self.control.contains(Control::ADDRESS_INCREMENT) {
             32
         } else {
             1
-        }
+        };
+
+        self.address += incr;
     }
 
     fn tile_address(&self) -> Address {
-        Scroll::new(self.address).tile_address()
+        self.scroll().tile_address()
     }
 
     fn attribute_address(&self) -> Address {
-        Scroll::new(self.address).attribute_address()
+        self.scroll().attribute_address()
     }
 
     fn background_pattern_table_address(&self) -> Address {
@@ -91,22 +108,22 @@ impl<M: Memory> PPU<M> {
     }
 
     fn increment_coarse_x(&mut self) {
-        let mut scroll = Scroll::new(self.address);
+        let mut scroll = self.scroll();
         scroll.increment_coarse_x();
-        self.address = scroll.bits();
+        self.set_scroll(scroll);
     }
 
     fn increment_fine_y(&mut self) {
-        let mut scroll = Scroll::new(self.address);
+        let mut scroll = self.scroll();
         scroll.increment_fine_y();
-        self.address = scroll.bits();
+        self.set_scroll(scroll);
     }
 
     fn transfer_horizontal_scroll(&mut self) {
-        let mut scroll = Scroll::new(self.address);
+        let mut scroll = self.scroll();
         let temporary_scroll = Scroll::new(self.temporary_address);
         scroll.set_horizontal(temporary_scroll);
-        self.address = scroll.bits();
+        self.set_scroll(scroll);
     }
 
     fn load_sprites(&mut self) {
@@ -212,7 +229,7 @@ impl<M: Memory> PPU<M> {
     }
 
     fn read_next_tile(&mut self) {
-        let scroll = Scroll::new(self.address);
+        let scroll = self.scroll();
         let coarse_x = scroll.coarse_x();
         let coarse_y = scroll.coarse_y();
         let fine_y = scroll.fine_y();
@@ -256,6 +273,7 @@ impl<M: Memory> PPU<M> {
             self.load_sprites();
 
             if self.scanline == 241 {
+                trace!("Entering vblank");
                 self.status.insert(Status::VBLANK);
 
                 if self.control.contains(Control::NMI_ON_VBLANK) {
@@ -266,6 +284,7 @@ impl<M: Memory> PPU<M> {
             // TODO: The VBLANK is much too long
             if self.scanline == 600 {
                 self.scanline = 0;
+                trace!("Exiting vblank");
                 self.status.remove(Status::VBLANK);
             }
         }
@@ -277,7 +296,7 @@ impl<M: Memory> PPU<M> {
             }
 
             if self.scanline == 0 {
-                self.address = self.temporary_address;
+                self.set_address(Address::new(self.temporary_address));
             }
 
             if self.cycle_count % 8 == 0 {
@@ -406,10 +425,13 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn write_address(&mut self, byte: u8) {
+        if self.rendering() {
+            warn!("Attempt to write address to PPU during rendering");
+        }
         if self.write_lower {
             self.temporary_address &= 0b1111_1111_0000_0000;
             self.temporary_address |= u16::from(byte);
-            self.address = self.temporary_address;
+            self.set_address(Address::new(self.temporary_address));
         } else {
             self.temporary_address &= 0b0000_0000_1111_1111;
             self.temporary_address |= u16::from(byte & 0b0011_1111) << 8;
@@ -419,14 +441,28 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn read_data(&mut self) -> u8 {
-        let byte = self.memory.read(self.address());
-        self.address += self.address_increment();
-        byte
+        if self.rendering() {
+            warn!("Attempt to read from PPU during rendering");
+        }
+        let address = self.address();
+        let byte = self.memory.read(address);
+        self.increment_address();
+
+        if address < BACKGROUND_PALETTES {
+            let buffer = self.read_buffer;
+            self.read_buffer = byte;
+            buffer
+        } else {
+            byte
+        }
     }
 
     fn write_data(&mut self, byte: u8) {
+        if self.rendering() {
+            warn!("Attempt to write to PPU during rendering");
+        }
         self.memory.write(self.address(), byte);
-        self.address += self.address_increment();
+        self.increment_address();
     }
 
     fn write_oam_dma(&mut self, bytes: [u8; 256]) {
@@ -655,6 +691,7 @@ mod tests {
 
         ppu.write_address(0x12);
         ppu.write_address(0x34);
+        ppu.read_data(); // Dummy read due to internal buffer
         assert_eq!(ppu.read_data(), 0x54);
     }
 
@@ -669,11 +706,56 @@ mod tests {
     }
 
     #[test]
+    fn reading_ppu_data_reads_from_internal_buffer() {
+        let mut ppu = PPU::with_memory(mem! {
+            0x2000 => {
+                0xAA, 0xBB, 0xCC, 0xDD
+            }
+        });
+
+        ppu.write_address(0x20);
+        ppu.write_address(0x00);
+
+        ppu.read_data();
+        assert_eq!(ppu.read_data(), 0xAA);
+        assert_eq!(ppu.read_data(), 0xBB);
+
+        ppu.write_address(0x20);
+        ppu.write_address(0x00);
+
+        assert_eq!(ppu.read_data(), 0xCC);
+        assert_eq!(ppu.read_data(), 0xAA);
+    }
+
+    #[test]
+    fn reading_ppu_data_from_palette_does_not_use_internal_buffer() {
+        let mut ppu = PPU::with_memory(mem! {
+            0x3f00 => {
+                0xAA, 0xBB, 0xCC, 0xDD
+            }
+        });
+
+        ppu.write_address(0x3f);
+        ppu.write_address(0x00);
+
+        assert_eq!(ppu.read_data(), 0xAA);
+        assert_eq!(ppu.read_data(), 0xBB);
+        assert_eq!(ppu.read_data(), 0xCC);
+
+        ppu.write_address(0x3f);
+        ppu.write_address(0x00);
+
+        assert_eq!(ppu.read_data(), 0xAA);
+        assert_eq!(ppu.read_data(), 0xBB);
+    }
+
+    #[test]
     fn reading_or_writing_ppu_data_increments_address_by_increment_in_control_register() {
         let mut ppu = PPU::with_memory(mem! {
-            0x1234 => { 0x00, 0x64, 0x00 }
+            0x1234 => { 0x00, 0x64, 0x00, 0x74 }
             0x1254 => { 0x84 }
             0x1274 => { 0x00 }
+            0x1294 => { 0x00 }
         });
 
         ppu.write_address(0x12);
@@ -681,18 +763,20 @@ mod tests {
         ppu.write_control(0b0000_0000);
 
         ppu.write_data(0x54);
+        ppu.read_data(); // Dummy read due to internal buffer
         assert_eq!(ppu.read_data(), 0x64);
         ppu.write_data(0x74);
-        assert_eq!(ppu.memory.read(Address::new(0x1236)), 0x74);
+        assert_eq!(ppu.memory.read(Address::new(0x1237)), 0x74);
 
         ppu.write_address(0x12);
         ppu.write_address(0x34);
         ppu.write_control(0b0000_0100);
 
         ppu.write_data(0x74);
+        ppu.read_data(); // Dummy read due to internal buffer
         assert_eq!(ppu.read_data(), 0x84);
         ppu.write_data(0x94);
-        assert_eq!(ppu.memory.read(Address::new(0x1274)), 0x94);
+        assert_eq!(ppu.memory.read(Address::new(0x1294)), 0x94);
     }
 
     #[test]
