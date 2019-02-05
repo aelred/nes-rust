@@ -4,10 +4,12 @@ use log::{trace, warn};
 use crate::Address;
 use crate::Memory;
 
+use self::control::Control;
 pub use self::memory::NESPPUMemory;
 pub use self::registers::PPURegisters;
 use self::scroll::Scroll;
 
+mod control;
 mod memory;
 mod registers;
 mod scroll;
@@ -46,7 +48,7 @@ impl<M: Memory> PPU<M> {
             tile_pattern: ShiftRegister::default(),
             palette_select: ShiftRegister::default(),
             active_sprites: [Sprite::default(); 8],
-            control: Control::empty(),
+            control: Control::default(),
             mask: Mask::empty(),
             status: Status::empty(),
             address: 0,
@@ -74,13 +76,7 @@ impl<M: Memory> PPU<M> {
     }
 
     fn increment_address(&mut self) {
-        let incr = if self.control.contains(Control::ADDRESS_INCREMENT) {
-            32
-        } else {
-            1
-        };
-
-        self.address += incr;
+        self.address += self.control.address_increment();
     }
 
     fn tile_address(&self) -> Address {
@@ -89,22 +85,6 @@ impl<M: Memory> PPU<M> {
 
     fn attribute_address(&self) -> Address {
         self.scroll().attribute_address()
-    }
-
-    fn background_pattern_table_address(&self) -> Address {
-        if self.control.contains(Control::BACKGROUND_PATTERN_TABLE) {
-            Address::new(0x1000)
-        } else {
-            Address::new(0x0000)
-        }
-    }
-
-    fn sprite_pattern_table_address(&self) -> Address {
-        if self.control.contains(Control::SPRITE_PATTERN_TABLE) {
-            Address::new(0x1000)
-        } else {
-            Address::new(0x0000)
-        }
     }
 
     fn increment_coarse_x(&mut self) {
@@ -192,7 +172,7 @@ impl<M: Memory> PPU<M> {
             let x_in_sprite = (cycle_count - x - 8) as u8;
             let y_in_sprite = (scanline - u16::from(sprite.y)) as u8;
 
-            let table = self.sprite_pattern_table_address();
+            let table = self.control.sprite_pattern_table_address();
             let index = sprite.tile_index;
             let (pattern0, pattern1) = self.read_pattern_row(table, index, y_in_sprite);
 
@@ -244,7 +224,7 @@ impl<M: Memory> PPU<M> {
         let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
         let attribute_bit_index1 = attribute_bit_index0 + 1;
 
-        let table = self.background_pattern_table_address();
+        let table = self.control.background_pattern_table_address();
         let (pattern0, pattern1) = self.read_pattern_row(table, pattern_index, fine_y);
 
         self.tile_pattern.set_next_bytes(pattern0, pattern1);
@@ -281,7 +261,7 @@ impl<M: Memory> PPU<M> {
                 trace!("Entering vblank");
                 self.status.insert(Status::VBLANK);
 
-                if self.control.contains(Control::NMI_ON_VBLANK) {
+                if self.control.nmi_on_vblank() {
                     interrupt = true;
                 }
             }
@@ -382,7 +362,7 @@ fn set_all_bits_to_bit_at_index(byte: u8, index: u8) -> u8 {
 
 impl<M: Memory> PPURegisters for PPU<M> {
     fn write_control(&mut self, byte: u8) {
-        self.control = Control::from_bits_truncate(byte);
+        self.control = Control::from_bits(byte);
 
         // Set bits of temporary address to nametable
         self.temporary_address &= 0b1111_0011_1111_1111;
@@ -485,24 +465,6 @@ impl Color {
 }
 
 bitflags! {
-    struct Control: u8 {
-        const NMI_ON_VBLANK            = 0b1000_0000;
-        const PPU_MASTER_SLAVE         = 0b0100_0000;
-        const SPRITE_SIZE              = 0b0010_0000;
-        const BACKGROUND_PATTERN_TABLE = 0b0001_0000;
-        const SPRITE_PATTERN_TABLE     = 0b0000_1000;
-        const ADDRESS_INCREMENT        = 0b0000_0100;
-        const NAMETABLE_SELECT         = 0b0000_0011;
-    }
-}
-
-impl Control {
-    fn nametable_select(self) -> u8 {
-        (self & Control::NAMETABLE_SELECT).bits()
-    }
-}
-
-bitflags! {
     struct Mask: u8 {
         const EMPHASIZE_BLUE       = 0b1000_0000;
         const EMPHASIZE_GREEN      = 0b0100_0000;
@@ -544,7 +506,7 @@ mod tests {
         let mut ppu = PPU::with_memory(mem!());
 
         ppu.write_control(0b1010_1010);
-        assert_eq!(ppu.control.bits(), 0b1010_1010);
+        assert_eq!(ppu.control, Control::from_bits(0b1010_1010));
     }
 
     #[test]
@@ -595,26 +557,6 @@ mod tests {
         ppu.write_control(0b0000_0011);
         ppu.address = ppu.temporary_address;
         assert_eq!(ppu.attribute_address(), Address::new(0x2fc0));
-    }
-
-    #[test]
-    fn writing_ppu_control_sets_background_pattern_table_address() {
-        let mut ppu = PPU::with_memory(mem!());
-
-        ppu.write_control(0b0000_0000);
-        assert_eq!(ppu.background_pattern_table_address(), Address::new(0x0000));
-        ppu.write_control(0b0001_0000);
-        assert_eq!(ppu.background_pattern_table_address(), Address::new(0x1000));
-    }
-
-    #[test]
-    fn writing_ppu_control_sets_sprite_pattern_table_address() {
-        let mut ppu = PPU::with_memory(mem!());
-
-        ppu.write_control(0b0000_0000);
-        assert_eq!(ppu.sprite_pattern_table_address(), Address::new(0x0000));
-        ppu.write_control(0b0000_1000);
-        assert_eq!(ppu.sprite_pattern_table_address(), Address::new(0x1000));
     }
 
     #[test]
