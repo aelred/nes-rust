@@ -15,16 +15,26 @@ impl<CHR> NESPPUMemory<CHR> {
 
         NESPPUMemory { palette_ram, chr }
     }
+
+    fn palette_index(&self, address: Address) -> usize {
+        let mut index = (address.index() - PALETTE_OFFSET) % 0x0020;
+
+        let is_unused_colour = index % 0x04 == 0;
+
+        // unused colours mirror between sprite and background palettes
+        if is_unused_colour {
+            index &= 0b1111;
+        }
+
+        index
+    }
 }
 
 impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x0000...CHR_END => self.chr.read(address),
-            PALETTE_OFFSET...0x3fff => {
-                let index = (address.index() - PALETTE_OFFSET) % 0x0020;
-                self.palette_ram[index]
-            }
+            PALETTE_OFFSET...0x3fff => self.palette_ram[self.palette_index(address)],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -35,8 +45,7 @@ impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
         match address.index() {
             0x0000...CHR_END => self.chr.write(address, byte),
             PALETTE_OFFSET...0x3fff => {
-                let index = (address.index() - PALETTE_OFFSET) % 0x0020;
-                self.palette_ram[index] = byte;
+                self.palette_ram[self.palette_index(address)] = byte;
             }
             _ => {
                 panic!("Out of addressable range: {:?}", address);
@@ -74,7 +83,7 @@ mod tests {
             memory.write(address, (value + 1) as u8);
             assert_eq!(memory.read(address), (value + 1) as u8);
             assert_eq!(
-                memory.palette_ram[address.index() - 0x3f00],
+                memory.palette_ram[memory.palette_index(address)],
                 (value + 1) as u8
             );
         }
@@ -90,9 +99,31 @@ mod tests {
             memory.write(address, (value + 1) as u8);
             assert_eq!(memory.read(address), (value + 1) as u8);
             assert_eq!(
-                memory.palette_ram[address.index() % 0x0020],
+                memory.palette_ram[memory.palette_index(address)],
                 (value + 1) as u8
             );
+        }
+    }
+
+    #[test]
+    fn palette_ram_mirrors_0x3f1x_to_0x3f0x_for_0_4_8_and_c() {
+        let mut memory = nes_ppu_memory();
+
+        let addresses = [
+            (0x3f00, 0x3f10),
+            (0x3f04, 0x3f14),
+            (0x3f08, 0x3f18),
+            (0x3f0c, 0x3f1c),
+        ];
+
+        for (original, mirror) in addresses.iter() {
+            let original_address = Address::new(*original);
+            let mirror_address = Address::new(*mirror);
+
+            memory.write(original_address, 42);
+            assert_eq!(memory.read(mirror_address), 42);
+            memory.write(mirror_address, 24);
+            assert_eq!(memory.read(original_address), 24);
         }
     }
 

@@ -165,7 +165,12 @@ impl<M: Memory> PPU<M> {
         self.tile_pattern.shift();
         self.palette_select.shift();
 
-        let address = BACKGROUND_PALETTES + color_index.into();
+        let address = if lower_bits != 0 {
+            BACKGROUND_PALETTES + color_index.into()
+        } else {
+            // Use universal background colour
+            BACKGROUND_PALETTES
+        };
 
         Color(self.memory.read(address))
     }
