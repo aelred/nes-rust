@@ -1,5 +1,5 @@
 use bitflags::bitflags;
-use log::{trace, warn};
+use log::warn;
 
 use crate::Address;
 use crate::Memory;
@@ -8,11 +8,13 @@ use self::control::Control;
 pub use self::memory::NESPPUMemory;
 pub use self::registers::PPURegisters;
 use self::scroll::Scroll;
+use self::status::Status;
 
 mod control;
 mod memory;
 mod registers;
 mod scroll;
+mod status;
 
 const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
 const SPRITE_PALETTES: Address = Address::new(0x3f10);
@@ -50,7 +52,7 @@ impl<M: Memory> PPU<M> {
             active_sprites: [Sprite::default(); 8],
             control: Control::default(),
             mask: Mask::empty(),
-            status: Status::empty(),
+            status: Status::default(),
             address: 0,
             temporary_address: 0,
             write_lower: false,
@@ -241,7 +243,7 @@ impl<M: Memory> PPU<M> {
         let in_bounds = self.scanline < 240 && self.cycle_count < 256;
         let show_background = self.mask.contains(Mask::SHOW_BACKGROUND);
         let show_sprites = self.mask.contains(Mask::SHOW_SPRITES);
-        let vblank = self.status.contains(Status::VBLANK);
+        let vblank = self.status.vblank();
         (show_background || show_sprites) && !vblank && in_bounds
     }
 
@@ -258,8 +260,7 @@ impl<M: Memory> PPU<M> {
             self.load_sprites();
 
             if self.scanline == 241 {
-                trace!("Entering vblank");
-                self.status.insert(Status::VBLANK);
+                self.status.enter_vblank();
 
                 if self.control.nmi_on_vblank() {
                     interrupt = true;
@@ -269,8 +270,7 @@ impl<M: Memory> PPU<M> {
             // TODO: The VBLANK is much too long
             if self.scanline == 600 {
                 self.scanline = 0;
-                trace!("Exiting vblank");
-                self.status.remove(Status::VBLANK);
+                self.status.exit_vblank();
             }
         }
 
@@ -374,10 +374,8 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn read_status(&mut self) -> u8 {
-        let status = self.status;
-        self.status.remove(Status::VBLANK);
         self.write_lower = false;
-        status.bits()
+        self.status.read()
     }
 
     fn write_oam_address(&mut self, byte: u8) {
@@ -477,14 +475,6 @@ bitflags! {
     }
 }
 
-bitflags! {
-    struct Status: u8 {
-        const VBLANK          = 0b1000_0000;
-        const SPRITE_ZERO_HIT = 0b0100_0000;
-        const SPRITE_OVERFLOW = 0b0010_0000;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::mem;
@@ -570,18 +560,8 @@ mod tests {
     #[test]
     fn reading_ppu_status_returns_status() {
         let mut ppu = PPU::with_memory(mem!());
-        ppu.status = Status::from_bits_truncate(0b1010_0000);
-        assert_eq!(ppu.read_status(), 0b1010_0000);
-    }
-
-    #[test]
-    fn reading_ppu_status_resets_vblank() {
-        let mut ppu = PPU::with_memory(mem!());
-        ppu.status = Status::from_bits_truncate(0b1010_0000);
-
-        assert_eq!(ppu.status.contains(Status::VBLANK), true);
-        ppu.read_status();
-        assert_eq!(ppu.status.contains(Status::VBLANK), false);
+        ppu.status.enter_vblank();
+        assert_eq!(ppu.read_status(), 0b1000_0000);
     }
 
     #[test]
