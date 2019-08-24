@@ -261,6 +261,10 @@ impl<M: Memory> PPU<M> {
 
             self.load_sprites();
 
+            if self.scanline == 40 {
+                self.status.sprite_zero_hit();
+            }
+
             if self.scanline == 241 {
                 self.status.enter_vblank();
 
@@ -273,6 +277,7 @@ impl<M: Memory> PPU<M> {
             if self.scanline == 600 {
                 self.scanline = 0;
                 self.status.exit_vblank();
+                self.status.sprite_zero_clear();
             }
         }
 

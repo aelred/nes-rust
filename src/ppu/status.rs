@@ -24,6 +24,14 @@ impl Status {
         trace!("Exiting vblank");
         self.0.remove(StatusFlags::VBLANK);
     }
+
+    pub fn sprite_zero_hit(&mut self) {
+        self.0.insert(StatusFlags::SPRITE_ZERO_HIT);
+    }
+
+    pub fn sprite_zero_clear(&mut self) {
+        self.0.remove(StatusFlags::SPRITE_ZERO_HIT);
+    }
 }
 
 bitflags! {
