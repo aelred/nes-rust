@@ -33,8 +33,8 @@ impl<CHR> NESPPUMemory<CHR> {
 impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
-            0x0000...CHR_END => self.chr.read(address),
-            PALETTE_OFFSET...0x3fff => self.palette_ram[self.palette_index(address)],
+            0x0000..=CHR_END => self.chr.read(address),
+            PALETTE_OFFSET..=0x3fff => self.palette_ram[self.palette_index(address)],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -43,8 +43,8 @@ impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
 
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
-            0x0000...CHR_END => self.chr.write(address, byte),
-            PALETTE_OFFSET...0x3fff => {
+            0x0000..=CHR_END => self.chr.write(address, byte),
+            PALETTE_OFFSET..=0x3fff => {
                 self.palette_ram[self.palette_index(address)] = byte;
             }
             _ => {

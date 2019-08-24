@@ -22,7 +22,7 @@ const WIDTH: u16 = 256;
 const HEIGHT: u16 = 240;
 const SCALE: u16 = 3;
 
-fn main() -> Result<(), Box<Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let sdl_context = sdl2::init()?;

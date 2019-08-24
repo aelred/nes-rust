@@ -35,8 +35,8 @@ pub struct PRG {
 impl Memory for PRG {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
-            0x6000...0x7fff => self.prg_ram[address.index() - 0x6000],
-            0x8000...0xffff => self.prg_rom[(address.index() - 0x8000) % self.prg_rom.len()],
+            0x6000..=0x7fff => self.prg_ram[address.index() - 0x6000],
+            0x8000..=0xffff => self.prg_rom[(address.index() - 0x8000) % self.prg_rom.len()],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -45,10 +45,10 @@ impl Memory for PRG {
 
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
-            0x6000...0x7fff => {
+            0x6000..=0x7fff => {
                 self.prg_ram[address.index() - 0x6000] = byte;
             }
-            0x8000...0xffff => {
+            0x8000..=0xffff => {
                 panic!("Attempted to write to ROM: {:?}", address);
             }
             _ => {
@@ -66,8 +66,8 @@ pub struct CHR {
 impl Memory for CHR {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
-            0x0000...0x1fff => self.chr_rom[address.index()],
-            0x2000...0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800],
+            0x0000..=0x1fff => self.chr_rom[address.index()],
+            0x2000..=0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -76,10 +76,10 @@ impl Memory for CHR {
 
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
-            0x0000...0x1fff => {
+            0x0000..=0x1fff => {
                 panic!("Attempted to write to ROM: {:?}", address);
             }
-            0x2000...0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte,
+            0x2000..=0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte,
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
