@@ -27,6 +27,7 @@ impl Cartridge {
     }
 }
 
+/// Program memory on a NES cartridge, connected to the CPU
 pub struct PRG {
     prg_rom: Box<[u8]>,
     prg_ram: [u8; 0x2000],
@@ -58,6 +59,7 @@ impl Memory for PRG {
     }
 }
 
+/// Character memory on a NES cartridge, stores pattern tables and is connected to the PPU
 pub struct CHR {
     chr_rom: Box<[u8]>,
     ppu_ram: [u8; 0x800],
