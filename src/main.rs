@@ -3,7 +3,10 @@ use std::fs::File;
 use std::time::Duration;
 use std::time::Instant;
 
+use env_logger::fmt::Target;
+use log::{info, LevelFilter};
 use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
 use sdl2::rect::Point;
 use sdl2::render::Canvas;
 use sdl2::render::WindowCanvas;
@@ -11,9 +14,8 @@ use sdl2::video::Window;
 
 use nes_rust::Button;
 use nes_rust::INes;
-use nes_rust::NESDisplay;
 use nes_rust::NES;
-use sdl2::keyboard::Keycode;
+use nes_rust::NESDisplay;
 
 type SDLColor = sdl2::pixels::Color;
 type PPUColor = nes_rust::Color;
@@ -23,7 +25,7 @@ const HEIGHT: u16 = 240;
 const SCALE: u16 = 3;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    env_logger::builder().target(Target::Stdout).filter_level(LevelFilter::Info).init();
 
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
@@ -132,12 +134,15 @@ struct SDLDisplay {
 
 impl SDLDisplay {
     fn new(canvas: WindowCanvas) -> Self {
+        let now = Instant::now();
         // We start at the LAST tile, because the PPU is always loading data one tile ahead
         SDLDisplay {
             canvas,
             x: i32::from(WIDTH) - 8,
             y: i32::from(HEIGHT),
-            start_of_frame: Instant::now(),
+            start_of_frame: now,
+            last_fps_log: now,
+            frames_since_last_fps_log: 0,
         }
     }
 }
@@ -156,11 +161,21 @@ impl NESDisplay for SDLDisplay {
             self.y = 0;
             self.canvas.present();
 
-            let elapsed = Instant::now().duration_since(self.start_of_frame);
+            let elapsed = self.start_of_frame.elapsed();
             let time_to_sleep = FRAME_DURATION.checked_sub(elapsed).unwrap_or_default();
             std::thread::sleep(time_to_sleep);
 
             self.start_of_frame = Instant::now();
+
+            self.frames_since_last_fps_log += 1;
+
+            let elapsed_since_last_fps_log = self.last_fps_log.elapsed();
+            if elapsed_since_last_fps_log > Duration::from_secs(5) {
+                let fps = self.frames_since_last_fps_log / elapsed_since_last_fps_log.as_secs();
+                info!("FPS: {}", fps);
+                self.last_fps_log = Instant::now();
+                self.frames_since_last_fps_log = 0;
+            }
         }
     }
 }
