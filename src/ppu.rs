@@ -131,13 +131,12 @@ impl<M: Memory> PPU<M> {
     }
 
     fn next_color(&mut self) -> Option<Color> {
-        if self.rendering() {
-            let background = self.background_color();
-            let color = self.sprite_color().unwrap_or(background);
-            Some(color)
-        } else {
-            None
-        }
+        let color = self.sprite_color().unwrap_or_else(|| self.background_color());
+
+        self.tile_pattern.shift();
+        self.palette_select.shift();
+
+        Some(color)
     }
 
     fn background_color(&mut self) -> Color {
@@ -145,9 +144,6 @@ impl<M: Memory> PPU<M> {
         let higher_bits = self.palette_select.get_bits(self.fine_x);
 
         let color_index = lower_bits | (higher_bits << 2);
-
-        self.tile_pattern.shift();
-        self.palette_select.shift();
 
         let address = if lower_bits != 0 {
             BACKGROUND_PALETTES + color_index.into()
@@ -205,7 +201,7 @@ impl<M: Memory> PPU<M> {
     }
 
     fn read_pattern_row(&mut self, nametable: Address, pattern_index: u8, row: u8) -> (u8, u8) {
-        assert!(row < 8);
+        debug_assert!(row < 8);
 
         let index = u16::from(pattern_index) << 4 | u16::from(row);
         let pattern_address0 = nametable + index;
@@ -276,6 +272,8 @@ impl<M: Memory> PPU<M> {
             }
         }
 
+        let color: Option<Color>;
+
         if self.rendering() {
             if self.cycle_count == 0 {
                 self.increment_fine_y();
@@ -289,9 +287,12 @@ impl<M: Memory> PPU<M> {
             if self.cycle_count % 8 == 0 {
                 self.read_next_tile();
             }
+
+            color = self.next_color();
+        } else {
+            color = None;
         }
 
-        let color = self.next_color();
         PPUOutput { color, interrupt }
     }
 }
@@ -316,10 +317,10 @@ impl ShiftRegister {
     }
 
     fn get_bits(&self, bit: u8) -> u8 {
-        assert!(bit < 8);
+        debug_assert!(bit < 8);
         let bit0 = (self.0 >> (15 - bit)) & 0b1;
-        let bit1 = (self.1 >> (15 - bit)) & 0b1;
-        (bit0 | (bit1 << 1)) as u8
+        let bit1 = (self.1 >> (14 - bit)) & 0b10;
+        (bit0 | bit1) as u8
     }
 }
 
@@ -426,7 +427,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn read_data(&mut self) -> u8 {
-        if self.rendering() {
+        if cfg!(debug) && self.rendering() {
             warn!("Attempt to read from PPU during rendering");
         }
         let address = self.address();
@@ -443,7 +444,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn write_data(&mut self, byte: u8) {
-        if self.rendering() {
+        if cfg!(debug) && self.rendering() {
             warn!("Attempt to write to PPU during rendering");
         }
         self.memory.write(self.address(), byte);
@@ -466,10 +467,10 @@ impl Color {
 
 #[cfg(test)]
 mod tests {
-    use crate::mem;
-    use crate::ppu::Sprite;
     use crate::Address;
     use crate::ArrayMemory;
+    use crate::mem;
+    use crate::ppu::Sprite;
 
     use super::*;
 
