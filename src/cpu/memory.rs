@@ -1,10 +1,12 @@
 use std::borrow::BorrowMut;
 
-use crate::input::Input;
-use crate::ppu::PPURegisters;
+use log::trace;
+
 use crate::Address;
 use crate::ArrayMemory;
+use crate::input::Input;
 use crate::Memory;
+use crate::ppu::PPURegisters;
 
 const PPU_SPACE: Address = Address::new(0x2000);
 const PPU_CONTROL: Address = Address::new(0x2000);
@@ -111,9 +113,11 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
                     ppu_registers.write_scroll(byte);
                 }
                 PPU_ADDRESS => {
+                    trace!("Writing PPU address {:#04x}", byte);
                     ppu_registers.write_address(byte);
                 }
                 PPU_DATA => {
+                    trace!("Writing PPU data {:#04x}", byte);
                     ppu_registers.write_data(byte);
                 }
                 _ => {
