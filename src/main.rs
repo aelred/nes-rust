@@ -7,10 +7,9 @@ use env_logger::fmt::Target;
 use log::{info, LevelFilter};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::rect::Point;
-use sdl2::render::Canvas;
+use sdl2::render::{Texture, TextureCreator};
 use sdl2::render::WindowCanvas;
-use sdl2::video::Window;
+use sdl2::video::WindowContext;
 
 use nes_rust::Button;
 use nes_rust::INes;
@@ -56,7 +55,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     canvas.clear();
     canvas.present();
 
-    let display = SDLDisplay::new(canvas);
+    let texture_creator = canvas.texture_creator();
+    let display = SDLDisplay::new(&texture_creator, canvas);
 
     let args: Vec<String> = std::env::args().collect();
 
@@ -123,23 +123,33 @@ fn keycode_binding(keycode: Keycode) -> Option<Button> {
 }
 
 const FPS: u64 = 60;
-const FRAME_DURATION: Duration = Duration::from_millis(1000 / FPS);
+const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / FPS);
 
-struct SDLDisplay {
-    canvas: Canvas<Window>,
-    x: i32,
-    y: i32,
+struct SDLDisplay<'r> {
+    canvas: WindowCanvas,
+    texture: Texture<'r>,
+    buffer: [u8; WIDTH as usize * HEIGHT as usize * 4],
+    x: usize,
+    y: usize,
     start_of_frame: Instant,
+    last_fps_log: Instant,
+    frames_since_last_fps_log: u64,
 }
 
-impl SDLDisplay {
-    fn new(canvas: WindowCanvas) -> Self {
+impl<'r> SDLDisplay<'r> {
+    fn new(texture_creator: &'r TextureCreator<WindowContext>, canvas: WindowCanvas) -> Self {
+        let texture = texture_creator
+            .create_texture_streaming(None, WIDTH as u32, HEIGHT as u32)
+            .unwrap();
+
         let now = Instant::now();
         // We start at the LAST tile, because the PPU is always loading data one tile ahead
         SDLDisplay {
             canvas,
-            x: i32::from(WIDTH) - 8,
-            y: i32::from(HEIGHT),
+            texture,
+            buffer: [0; WIDTH as usize * HEIGHT as usize * 4],
+            x: usize::from(WIDTH) - 8,
+            y: usize::from(HEIGHT),
             start_of_frame: now,
             last_fps_log: now,
             frames_since_last_fps_log: 0,
@@ -147,18 +157,26 @@ impl SDLDisplay {
     }
 }
 
-impl NESDisplay for SDLDisplay {
+impl<'r> NESDisplay for SDLDisplay<'r> {
     fn draw_pixel(&mut self, color: PPUColor) {
-        self.canvas.set_draw_color(ppu_to_sdl(color));
-        self.canvas.draw_point(Point::new(self.x, self.y)).unwrap();
+        let offset = (self.y * WIDTH as usize + self.x) * 4;
+        if offset + 2 < self.buffer.len() {
+            let sdl_color = ppu_to_sdl(color);
+            self.buffer[offset] = sdl_color.b;
+            self.buffer[offset + 1] = sdl_color.g;
+            self.buffer[offset + 2] = sdl_color.r;
+        }
+
         self.x += 1;
 
-        if self.x == i32::from(WIDTH) {
+        if self.x == usize::from(WIDTH) {
             self.x = 0;
             self.y += 1;
         }
-        if self.y == i32::from(HEIGHT) {
+        if self.y == usize::from(HEIGHT) {
             self.y = 0;
+            self.texture.update(None, &self.buffer, WIDTH as usize * 4).unwrap();
+            self.canvas.copy(&self.texture, None, None).unwrap();
             self.canvas.present();
 
             let elapsed = self.start_of_frame.elapsed();
