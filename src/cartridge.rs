@@ -1,5 +1,5 @@
-use crate::mapper::Mapper;
 use crate::Address;
+use crate::mapper::Mapper;
 use crate::Memory;
 
 pub struct Cartridge {
@@ -89,7 +89,9 @@ impl Memory for CHR {
                 );
                 self.chr_rom[address.index()] = byte
             }
-            0x2000..=0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte,
+            0x2000..=0x3eff => {
+                self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte
+            }
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -99,9 +101,10 @@ impl Memory for CHR {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::mapper::Mapper;
     use crate::Address;
+    use crate::mapper::Mapper;
+
+    use super::*;
 
     #[test]
     fn cartridge_is_constructed_from_prg_rom_chr_rom_and_mapper() {

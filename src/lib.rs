@@ -2,10 +2,10 @@ pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
 use crate::cartridge::CHR;
 use crate::cartridge::PRG;
-pub use crate::cpu::instructions;
-pub use crate::cpu::Instruction;
-use crate::cpu::NESCPUMemory;
 pub use crate::cpu::CPU;
+pub use crate::cpu::Instruction;
+pub use crate::cpu::instructions;
+use crate::cpu::NESCPUMemory;
 pub use crate::i_nes::INes;
 pub use crate::i_nes::INesReadError;
 pub use crate::input::Button;
@@ -27,6 +27,9 @@ mod memory;
 mod ppu;
 mod serialize;
 
+pub const WIDTH: u16 = 256;
+pub const HEIGHT: u16 = 240;
+
 pub trait NESDisplay {
     fn draw_pixel(&mut self, color: Color);
 }
@@ -35,6 +38,48 @@ pub struct NoDisplay;
 
 impl NESDisplay for NoDisplay {
     fn draw_pixel(&mut self, _: Color) {}
+}
+
+pub struct BufferDisplay {
+    buffer: [u8; WIDTH as usize * HEIGHT as usize * 3],
+    x: usize,
+    y: usize,
+}
+
+impl BufferDisplay {
+    pub fn new() -> BufferDisplay {
+        BufferDisplay {
+            buffer: [0; WIDTH as usize * HEIGHT as usize * 3],
+            x: usize::from(WIDTH) - 8,
+            y: usize::from(HEIGHT),
+        }
+    }
+
+    pub fn buffer(&self) -> &[u8] {
+        &self.buffer
+    }
+}
+
+impl NESDisplay for BufferDisplay {
+    fn draw_pixel(&mut self, color: Color) {
+        let offset = (self.y * WIDTH as usize + self.x) * 3;
+        if offset + 2 < self.buffer.len() {
+            let (r, g, b) = color.to_rgb();
+            self.buffer[offset] = b;
+            self.buffer[offset + 1] = g;
+            self.buffer[offset + 2] = r;
+        }
+
+        self.x += 1;
+
+        if self.x == usize::from(WIDTH) {
+            self.x = 0;
+            self.y += 1;
+        }
+        if self.y == usize::from(HEIGHT) {
+            self.y = 0;
+        }
+    }
 }
 
 type StandardPPU<'a> = PPU<NESPPUMemory<&'a mut CHR>>;
@@ -54,6 +99,10 @@ impl<'a, D: NESDisplay> NES<'a, D> {
         let cpu = CPU::from_memory(cpu_memory);
 
         NES { cpu, display }
+    }
+
+    pub fn display(&self) -> &D {
+        &self.display
     }
 
     pub fn program_counter(&mut self) -> Address {
