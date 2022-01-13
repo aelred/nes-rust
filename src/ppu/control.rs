@@ -1,5 +1,6 @@
-use crate::Address;
 use bitflags::bitflags;
+
+use crate::Address;
 
 #[derive(Default, Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Control(ControlFlags);
@@ -14,27 +15,19 @@ impl Control {
     }
 
     pub fn background_pattern_table_address(self) -> Address {
-        if self.0.contains(ControlFlags::BACKGROUND_PATTERN_TABLE) {
-            Address::new(0x1000)
-        } else {
-            Address::new(0x0000)
-        }
+        // 0x1000 if flag is set, 0x0000 otherwise
+        Address::new(u16::from((self.0 & ControlFlags::BACKGROUND_PATTERN_TABLE).bits) << 8)
     }
 
     pub fn sprite_pattern_table_address(self) -> Address {
-        if self.0.contains(ControlFlags::SPRITE_PATTERN_TABLE) {
-            Address::new(0x1000)
-        } else {
-            Address::new(0x0000)
-        }
+        // 0x1000 if flag is set, 0x0000 otherwise
+        Address::new(u16::from((self.0 & ControlFlags::SPRITE_PATTERN_TABLE).bits) << 9)
     }
 
     pub fn address_increment(self) -> u16 {
-        if self.0.contains(ControlFlags::ADDRESS_INCREMENT) {
-            32
-        } else {
-            1
-        }
+        let set_case = (self.0 & ControlFlags::ADDRESS_INCREMENT).bits << 3;
+        let unset_case = (!self.0 & ControlFlags::ADDRESS_INCREMENT).bits >> 2;
+        (set_case | unset_case).into()
     }
 
     pub fn nmi_on_vblank(self) -> bool {
