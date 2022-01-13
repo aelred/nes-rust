@@ -19,6 +19,7 @@ impl Address {
         self.0
     }
 
+    #[inline(always)]
     pub fn index(self) -> usize {
         self.0 as usize
     }
