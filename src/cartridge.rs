@@ -8,7 +8,9 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn new(prg_rom: Box<[u8]>, chr_rom: Box<[u8]>, mapper: Mapper) -> Self {
+    pub fn new(
+        prg_rom: Box<[u8]>, chr_rom: Box<[u8]>, chr_ram_enabled: bool, mapper: Mapper,
+    ) -> Self {
         if mapper != Mapper::NROM {
             unimplemented!("Unsupported mapper {:?}", mapper);
         }
@@ -20,6 +22,7 @@ impl Cartridge {
 
         let chr = CHR {
             chr_rom,
+            chr_ram_enabled,
             ppu_ram: [0; 0x800],
         };
 
@@ -62,6 +65,7 @@ impl Memory for PRG {
 /// Character memory on a NES cartridge, stores pattern tables and is connected to the PPU
 pub struct CHR {
     chr_rom: Box<[u8]>,
+    chr_ram_enabled: bool,
     ppu_ram: [u8; 0x800],
 }
 
@@ -79,7 +83,11 @@ impl Memory for CHR {
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
             0x0000..=0x1fff => {
-                panic!("Attempted to write to ROM: {:?}", address);
+                debug_assert!(
+                    self.chr_ram_enabled,
+                    "Attempted to write to CHR-ROM, but writing is not enabled"
+                );
+                self.chr_rom[address.index()] = byte
             }
             0x2000..=0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte,
             _ => {
@@ -100,7 +108,7 @@ mod tests {
         let prg_rom = Box::new([0u8; 1024]);
         let chr_rom = Box::new([0u8; 1024]);
         let mapper = Mapper::NROM;
-        Cartridge::new(prg_rom, chr_rom, mapper);
+        Cartridge::new(prg_rom, chr_rom, false, mapper);
     }
 
     #[test]
@@ -137,7 +145,7 @@ mod tests {
             *item = i as u8;
         }
 
-        let mut prg = Cartridge::new(prg_rom, chr_rom, mapper).prg;
+        let mut prg = Cartridge::new(prg_rom, chr_rom, false, mapper).prg;
 
         for value in 0xc000..=0xffff {
             assert_eq!(prg.read(Address::new(value)), value as u8);
@@ -219,6 +227,6 @@ mod tests {
         let prg_rom = Box::new([0u8; 0x8000]);
         let chr_rom = Box::new([0u8; 0x8000]);
         let mapper = Mapper::NROM;
-        Cartridge::new(prg_rom, chr_rom, mapper)
+        Cartridge::new(prg_rom, chr_rom, false, mapper)
     }
 }

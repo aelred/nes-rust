@@ -44,6 +44,7 @@ impl From<io::Error> for INesReadError {
 pub struct INes {
     prg_rom: Box<[u8]>,
     chr_rom: Box<[u8]>,
+    chr_ram_enabled: bool,
     mapper: Mapper,
 }
 
@@ -59,12 +60,24 @@ impl INes {
         reader.read_exact(prg_rom.as_mut())?;
 
         let chr_rom_size = header[CHR_ROM_SIZE_LOCATION];
-        let mut chr_rom = vec![0u8; chr_rom_size as usize * _8KB];
-        reader.read_exact(chr_rom.as_mut())?;
+
+        let mut chr_rom: Vec<u8>;
+        let chr_ram_enabled: bool;
+
+        if chr_rom_size == 0 {
+            // when CHR ROM size is zero, it should behave like 8KB RAM instead
+            chr_rom = vec![0u8; _8KB];
+            chr_ram_enabled = true;
+        } else {
+            chr_rom = vec![0u8; chr_rom_size as usize * _8KB];
+            reader.read_exact(chr_rom.as_mut())?;
+            chr_ram_enabled = false;
+        };
 
         let ines = INes {
             prg_rom: prg_rom.into_boxed_slice(),
             chr_rom: chr_rom.into_boxed_slice(),
+            chr_ram_enabled,
             mapper,
         };
 
@@ -72,7 +85,7 @@ impl INes {
     }
 
     pub fn into_cartridge(self) -> Cartridge {
-        Cartridge::new(self.prg_rom, self.chr_rom, self.mapper)
+        Cartridge::new(self.prg_rom, self.chr_rom, self.chr_ram_enabled, self.mapper)
     }
 
     fn mapper(header: [u8; 16]) -> Result<Mapper, INesReadError> {
