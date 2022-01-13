@@ -14,3 +14,4 @@ bitflags = "1.0.4"
 
 [dev-dependencies]
 hexdump = "0.1.0"
+image = "0.23.14"
