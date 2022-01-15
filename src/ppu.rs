@@ -270,7 +270,7 @@ impl<M: Memory> PPU<M> {
         match (self.scanline, self.cycle_count) {
             (_, 0) => {
                 self.load_sprites();
-                if self.scanline == 40 {
+                if self.scanline == 31 {
                     // TODO: hack for mario I think
                     self.status.sprite_zero_hit();
                 }
