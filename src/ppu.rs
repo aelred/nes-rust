@@ -250,33 +250,27 @@ impl<M: Memory> PPU<M> {
     pub fn tick(&mut self) -> PPUOutput {
         let mut interrupt = false;
 
-        self.cycle_count += 1;
-
-        if self.cycle_count == 340 {
-            self.cycle_count = 0;
-
-            self.scanline += 1;
-
-            self.load_sprites();
-
-            if self.scanline == 40 {
-                self.status.sprite_zero_hit();
+        match (self.scanline, self.cycle_count) {
+            (_, 0) => {
+                self.load_sprites();
+                if self.scanline == 40 {
+                    // TODO: hack for mario I think
+                    self.status.sprite_zero_hit();
+                }
             }
-
-            if self.scanline == 241 {
+            (241, 1) => {
                 self.status.enter_vblank();
 
                 if self.control.nmi_on_vblank() {
                     interrupt = true;
                 }
             }
-
-            // TODO: The VBLANK is much too long
-            if self.scanline == 600 {
-                self.scanline = 0;
+            (261, 1) => {
+                // TODO: The VBLANK is much too long
                 self.status.exit_vblank();
                 self.status.sprite_zero_clear();
             }
+            _ => {}
         }
 
         let color: Option<Color>;
@@ -299,6 +293,17 @@ impl<M: Memory> PPU<M> {
         } else {
             color = None;
         }
+
+        if self.cycle_count < 340 {
+            self.cycle_count += 1;
+        } else {
+            self.cycle_count = 0;
+            if self.scanline < 261 {
+                self.scanline += 1;
+            } else {
+                self.scanline = 0;
+            }
+        };
 
         PPUOutput { color, interrupt }
     }
