@@ -391,11 +391,12 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn read_oam_data(&mut self) -> u8 {
-        unimplemented!()
+        self.object_attribute_memory[self.oam_address as usize]
     }
 
-    fn write_oam_data(&mut self, _byte: u8) {
-        unimplemented!()
+    fn write_oam_data(&mut self, byte: u8) {
+        self.object_attribute_memory[self.oam_address as usize] = byte;
+        self.oam_address += 1;
     }
 
     fn write_scroll(&mut self, byte: u8) {
@@ -456,7 +457,8 @@ impl<M: Memory> PPURegisters for PPU<M> {
         self.increment_address();
     }
 
-    fn write_oam_dma(&mut self, bytes: [u8; 256]) {
+    fn write_oam_dma(&mut self, mut bytes: [u8; 256]) {
+        bytes.rotate_right(self.oam_address as usize);
         self.object_attribute_memory = bytes;
     }
 }
@@ -794,6 +796,52 @@ mod tests {
         ppu.write_oam_dma(data);
 
         assert_eq!(ppu.object_attribute_memory.to_vec(), data.to_vec());
+    }
+
+    #[test]
+    fn writing_oam_dma_writes_from_oam_address_and_wraps() {
+        let mut ppu = PPU::with_memory(mem!());
+        ppu.oam_address = 0x42;
+
+        let mut data = [0; 256];
+
+        for (i, elem) in data.iter_mut().enumerate() {
+            *elem = i as u8;
+        }
+
+        ppu.write_oam_dma(data);
+
+        data.rotate_right(0x42);
+        assert_eq!(ppu.object_attribute_memory.to_vec(), data.to_vec());
+    }
+
+    #[test]
+    fn reading_oam_data_reads_from_oam_address() {
+        let mut ppu = PPU::with_memory(mem!());
+        ppu.oam_address = 0x42;
+        ppu.object_attribute_memory[0x42] = 0x43;
+
+        assert_eq!(ppu.read_oam_data(), 0x43);
+    }
+
+    #[test]
+    fn writing_oam_data_writes_to_oam_address() {
+        let mut ppu = PPU::with_memory(mem!());
+        ppu.oam_address = 0x42;
+
+        ppu.write_oam_data(0x43);
+
+        assert_eq!(ppu.object_attribute_memory[0x42], 0x43);
+    }
+
+    #[test]
+    fn writing_oam_data_increments_oam_address() {
+        let mut ppu = PPU::with_memory(mem!());
+        ppu.oam_address = 0x42;
+
+        ppu.write_oam_data(0x07);
+
+        assert_eq!(ppu.oam_address, 0x43);
     }
 
     #[test]

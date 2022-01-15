@@ -46,9 +46,7 @@ fn blargg_ppu_tests_power_up_palette() {
     blargg_ppu_test("power_up_palette", include_bytes!("blargg_ppu_tests/power_up_palette.nes"), 0xe3ac);
 }
 
-// TODO
 #[test]
-#[ignore]
 fn blargg_ppu_tests_sprite_ram() {
     blargg_ppu_test("sprite_ram", include_bytes!("blargg_ppu_tests/sprite_ram.nes"), 0xe467);
 }
