@@ -133,7 +133,19 @@ impl<M: Memory> PPU<M> {
     }
 
     fn next_color(&mut self) -> Option<Color> {
-        let color = self.sprite_color().unwrap_or_else(|| self.background_color());
+        let (sprite, sprite_priority) = self.sprite_color();
+
+        let color = match sprite {
+            Some(sprite) if sprite_priority => sprite,
+            _ => {
+                let (background, background_opaque) = self.background_color();
+                if background_opaque {
+                    background
+                } else {
+                    sprite.unwrap_or(background)
+                }
+            }
+        };
 
         self.tile_pattern.shift();
         self.palette_select.shift();
@@ -141,23 +153,23 @@ impl<M: Memory> PPU<M> {
         Some(color)
     }
 
-    fn background_color(&mut self) -> Color {
+    fn background_color(&mut self) -> (Color, bool) {
         let lower_bits = self.tile_pattern.get_bits(self.fine_x);
         let higher_bits = self.palette_select.get_bits(self.fine_x);
 
         let color_index = lower_bits | (higher_bits << 2);
 
-        let address = if lower_bits != 0 {
-            BACKGROUND_PALETTES + color_index.into()
+        let (address, opaque) = if lower_bits != 0 {
+            (BACKGROUND_PALETTES + color_index.into(), true)
         } else {
             // Use universal background colour
-            BACKGROUND_PALETTES
+            (BACKGROUND_PALETTES, false)
         };
 
-        Color(self.memory.read(address))
+        (Color(self.memory.read(address)), opaque)
     }
 
-    fn sprite_color(&mut self) -> Option<Color> {
+    fn sprite_color(&mut self) -> (Option<Color>, bool) {
         let cycle_count = self.cycle_count;
         let scanline = self.scanline;
 
@@ -193,17 +205,18 @@ impl<M: Memory> PPU<M> {
 
             let lower_index = (bit1 << 1) | bit0;
 
-            if lower_index == 0 {
+            let transparent = lower_index == 0;
+            if transparent {
                 continue;
             }
 
             let palette = (attr & SpriteAttributes::PALETTE).bits();
             let color_index = (palette << 2) | lower_index;
             let address = SPRITE_PALETTES + color_index.into();
-            return Some(Color(self.memory.read(address)));
+            return (Some(Color(self.memory.read(address))), !attr.contains(SpriteAttributes::PRIORITY));
         }
 
-        None
+        (None, false)
     }
 
     fn read_pattern_row(&mut self, nametable: Address, pattern_index: u8, row: u8) -> (u8, u8) {
