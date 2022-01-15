@@ -1,5 +1,4 @@
 use bitflags::bitflags;
-
 #[cfg(test)]
 use mockall::automock;
 
@@ -9,6 +8,7 @@ pub trait Input {
     fn write(&mut self, value: u8);
 }
 
+#[derive(Debug)]
 pub struct Controller {
     buttons: Buttons,
     strobe: bool,

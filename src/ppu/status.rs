@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use log::trace;
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug)]
 pub struct Status(StatusFlags);
 
 impl Status {

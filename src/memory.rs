@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Formatter};
+
 use crate::Address;
 
 pub trait Memory: Sized {
@@ -20,6 +22,12 @@ impl ArrayMemory {
 impl Default for ArrayMemory {
     fn default() -> Self {
         ArrayMemory([0; 0x10000])
+    }
+}
+
+impl Debug for ArrayMemory {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ArrayMemory").finish()
     }
 }
 

@@ -1,4 +1,5 @@
 use std::borrow::BorrowMut;
+use std::fmt::{Debug, Formatter};
 
 use log::trace;
 
@@ -59,6 +60,17 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> NESCPUMemory<PRG, PPU, IN> {
         }
 
         self.ppu_registers.write_oam_dma(data);
+    }
+}
+
+impl<PRG: Debug, PPU: Debug, IN: Debug> Debug for NESCPUMemory<PRG, PPU, IN> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NESCPUMemory")
+            .field("prg", &self.prg)
+            .field("ppu_registers", &self.ppu_registers)
+            .field("input", &self.input)
+            .field("the_rest", &self.the_rest)
+            .finish()
     }
 }
 
@@ -133,9 +145,11 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
 #[cfg(test)]
 mod tests {
     use mockall::predicate::eq;
-    use super::*;
-    use crate::ppu::MockPPURegisters;
+
     use crate::input::MockInput;
+    use crate::ppu::MockPPURegisters;
+
+    use super::*;
 
     #[test]
     fn can_read_and_write_internal_ram_in_nes_cpu_memory() {

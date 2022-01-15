@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Formatter};
+
 use crate::Address;
 use crate::mapper::Mapper;
 use crate::Memory;
@@ -36,6 +38,12 @@ pub struct PRG {
     prg_ram: [u8; 0x2000],
 }
 
+impl Debug for PRG {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PRG").finish()
+    }
+}
+
 impl Memory for PRG {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
@@ -67,6 +75,12 @@ pub struct CHR {
     chr_rom: Box<[u8]>,
     chr_ram_enabled: bool,
     ppu_ram: [u8; 0x800],
+}
+
+impl Debug for CHR {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CHR").field("chr_ram_enabled", &self.chr_ram_enabled).finish()
+    }
 }
 
 impl Memory for CHR {

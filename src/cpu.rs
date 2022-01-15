@@ -1,4 +1,5 @@
 use std::fmt;
+use std::fmt::Debug;
 
 use bitflags::bitflags;
 use log::trace;
@@ -6,8 +7,8 @@ use log::trace;
 use crate::address::Address;
 use crate::memory::Memory;
 
-pub use self::instruction::instructions;
 pub use self::instruction::Instruction;
+pub use self::instruction::instructions;
 pub use self::memory::NESCPUMemory;
 
 mod addressing_modes;
@@ -19,6 +20,7 @@ const NMI_VECTOR: Address = Address::new(0xFFFA);
 const RESET_VECTOR: Address = Address::new(0xFFFC);
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
+#[derive(Debug)]
 pub struct CPU<M> {
     memory: M,
     /// A
@@ -589,11 +591,11 @@ impl Status {
 
 #[cfg(test)]
 mod tests {
-    use crate::mem;
     use crate::ArrayMemory;
+    use crate::mem;
 
-    use super::instructions::*;
     use super::*;
+    use super::instructions::*;
 
     #[test]
     fn cpu_initialises_in_default_state() {

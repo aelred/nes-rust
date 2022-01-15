@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Formatter};
+
 use bitflags::bitflags;
 use log::warn;
 
@@ -299,6 +301,28 @@ impl<M: Memory> PPU<M> {
         }
 
         PPUOutput { color, interrupt }
+    }
+}
+
+impl<M: Debug> Debug for PPU<M> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PPU")
+            .field("memory", &self.memory)
+            .field("read_buffer", &self.read_buffer)
+            .field("scanline", &self.scanline)
+            .field("cycle_count", &self.cycle_count)
+            .field("tile_pattern", &self.tile_pattern)
+            .field("palette_select", &self.palette_select)
+            .field("active_sprites", &self.active_sprites)
+            .field("control", &self.control)
+            .field("status", &self.status)
+            .field("mask", &self.mask)
+            .field("address", &self.address)
+            .field("temporary_address", &self.temporary_address)
+            .field("write_lower", &self.write_lower)
+            .field("fine_x", &self.fine_x)
+            .field("oam_address", &self.oam_address)
+            .finish()
     }
 }
 

@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Formatter};
+
 use crate::Address;
 use crate::Memory;
 
@@ -30,6 +32,12 @@ impl<CHR> NESPPUMemory<CHR> {
         }
 
         index
+    }
+}
+
+impl<CHR: Debug> Debug for NESPPUMemory<CHR> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NESPPUMemory").field("chr", &self.chr).finish()
     }
 }
 

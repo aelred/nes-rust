@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Formatter};
+
 pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
 use crate::cartridge::CHR;
@@ -34,6 +36,7 @@ pub trait NESDisplay {
     fn draw_pixel(&mut self, color: Color);
 }
 
+#[derive(Debug)]
 pub struct NoDisplay;
 
 impl NESDisplay for NoDisplay {
@@ -57,6 +60,12 @@ impl BufferDisplay {
 
     pub fn buffer(&self) -> &[u8] {
         &self.buffer
+    }
+}
+
+impl Debug for BufferDisplay {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BufferDisplay").finish()
     }
 }
 
@@ -84,6 +93,7 @@ impl NESDisplay for BufferDisplay {
 
 type StandardPPU<'a> = PPU<NESPPUMemory<&'a mut CHR>>;
 
+#[derive(Debug)]
 pub struct NES<'a, D> {
     cpu: CPU<NESCPUMemory<&'a mut PRG, StandardPPU<'a>, Controller>>,
     display: D,
