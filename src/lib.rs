@@ -145,7 +145,11 @@ impl<'a, D: NESDisplay> NES<'a, D> {
     }
 
     fn tick_ppu(&mut self) {
-        for _ in 0..10 {
+        // Loops 6 times is a guess based on:
+        // - there are 3 PPU ticks per CPU tick
+        // - a CPU instruction takes a variable number of ticks to run (2-ish)
+        // TODO: accurately manage this
+        for _ in 0..6 {
             let output = self.ppu().tick();
 
             if output.interrupt {
