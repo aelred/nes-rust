@@ -172,7 +172,11 @@ impl<M: Memory> PPU<M> {
             }
 
             let x_in_sprite = (cycle_count - x - 8) as u8;
-            let y_in_sprite = (scanline - u16::from(sprite.y)) as u8;
+            let mut y_in_sprite = (scanline - u16::from(sprite.y)) as u8;
+
+            if attr.contains(SpriteAttributes::VERTICAL_FLIP) {
+                y_in_sprite = 7 - y_in_sprite;
+            }
 
             let table = self.control.sprite_pattern_table_address();
             let index = sprite.tile_index;
