@@ -203,7 +203,7 @@ impl<M: Memory> PPU<M> {
     }
 
     fn read_pattern_row(&mut self, nametable: Address, pattern_index: u8, row: u8) -> (u8, u8) {
-        debug_assert!(row < 8);
+        debug_assert!(row < 8, "expected row < 8, but row = {}", row);
 
         let index = u16::from(pattern_index) << 4 | u16::from(row);
         let pattern_address0 = nametable + index;
