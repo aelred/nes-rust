@@ -1,5 +1,9 @@
 use bitflags::bitflags;
 
+#[cfg(test)]
+use mockall::automock;
+
+#[cfg_attr(test, automock)]
 pub trait Input {
     fn read(&mut self) -> u8;
     fn write(&mut self, value: u8);

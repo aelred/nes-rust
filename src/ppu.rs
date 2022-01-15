@@ -7,7 +7,7 @@ use crate::Memory;
 use self::control::Control;
 use self::mask::Mask;
 pub use self::memory::NESPPUMemory;
-pub use self::registers::PPURegisters;
+pub use self::registers::*;
 use self::scroll::Scroll;
 use self::status::Status;
 

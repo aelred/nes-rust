@@ -132,7 +132,10 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
 
 #[cfg(test)]
 mod tests {
+    use mockall::predicate::eq;
     use super::*;
+    use crate::ppu::MockPPURegisters;
+    use crate::input::MockInput;
 
     #[test]
     fn can_read_and_write_internal_ram_in_nes_cpu_memory() {
@@ -166,30 +169,26 @@ mod tests {
     #[test]
     fn can_write_ppuctrl_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_write_control().times(2).with(eq(0x43)).return_const(());
 
         memory.write(Address::new(0x2000), 0x43);
-        assert_eq!(memory.ppu_registers.control, Some(0x43));
-
-        memory.write(Address::new(0x3ff8), 0x44);
-        assert_eq!(memory.ppu_registers.control, Some(0x44));
+        memory.write(Address::new(0x3ff8), 0x43);
     }
 
     #[test]
     fn can_write_ppumask_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_write_mask().times(2).with(eq(0x43)).return_const(());
 
         memory.write(Address::new(0x2001), 0x43);
-        assert_eq!(memory.ppu_registers.mask, Some(0x43));
-
-        memory.write(Address::new(0x3ff9), 0x44);
-        assert_eq!(memory.ppu_registers.mask, Some(0x44));
+        memory.write(Address::new(0x3ff9), 0x43);
     }
 
     #[test]
     fn can_read_ppustatus_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_read_status().times(2).return_const(0x43);
 
-        memory.ppu_registers.status = Some(0x43);
         assert_eq!(memory.read(Address::new(0x2002)), 0x43);
         assert_eq!(memory.read(Address::new(0x3ffa)), 0x43);
     }
@@ -197,81 +196,81 @@ mod tests {
     #[test]
     fn can_write_oamaddr_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_write_oam_address().times(2).with(eq(0x43)).return_const(());
 
         memory.write(Address::new(0x2003), 0x43);
-        assert_eq!(memory.ppu_registers.oam_address, Some(0x43));
-
-        memory.write(Address::new(0x3ffb), 0x44);
-        assert_eq!(memory.ppu_registers.oam_address, Some(0x44));
+        memory.write(Address::new(0x3ffb), 0x43);
     }
 
     #[test]
-    fn can_read_and_write_oamdata_in_nes_cpu_memory() {
+    fn can_read_oamdata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_read_oam_data().times(2).return_const(0x43);
+
+        assert_eq!(memory.read(Address::new(0x3ffc)), 0x43);
+        assert_eq!(memory.read(Address::new(0x2004)), 0x43);
+    }
+
+    #[test]
+    fn can_write_oamdata_in_nes_cpu_memory() {
+        let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_write_oam_data().times(2).with(eq(0x43)).return_const(());
 
         memory.write(Address::new(0x2004), 0x43);
-        assert_eq!(memory.read(Address::new(0x3ffc)), 0x43);
-        assert_eq!(memory.ppu_registers.oam_data, Some(0x43));
-
-        memory.write(Address::new(0x3ffc), 0x44);
-        assert_eq!(memory.read(Address::new(0x2004)), 0x44);
-        assert_eq!(memory.ppu_registers.oam_data, Some(0x44));
+        memory.write(Address::new(0x3ffc), 0x43);
     }
 
     #[test]
     fn can_write_oamdma_in_nes_cpu_memory() {
-        let mut expected = Vec::new();
+        let mut expected = [0u8; 256];
         for i in 0..=255 {
-            expected.push(i);
+            expected[i] = i as u8;
         }
 
         let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_write_oam_dma().once().with(eq(expected)).return_const(());
 
         for i in 0x0200..=0x02ff {
             memory.write(Address::new(i), expected[i as usize % 256]);
         }
 
         memory.write(Address::new(0x4014), 0x02);
-
-        assert_eq!(
-            memory.ppu_registers.oam_dma,
-            Some(expected.into_boxed_slice())
-        );
     }
 
     #[test]
     fn can_write_ppuscroll_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_write_scroll().times(2).with(eq(0x43)).return_const(());
 
         memory.write(Address::new(0x2005), 0x43);
-        assert_eq!(memory.ppu_registers.scroll, Some(0x43));
-
-        memory.write(Address::new(0x3ffd), 0x44);
-        assert_eq!(memory.ppu_registers.scroll, Some(0x44));
+        memory.write(Address::new(0x3ffd), 0x43);
     }
 
     #[test]
     fn can_write_ppuaddr_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_write_address().times(2).with(eq(0x43)).return_const(());
 
         memory.write(Address::new(0x2006), 0x43);
-        assert_eq!(memory.ppu_registers.address, Some(0x43));
-
-        memory.write(Address::new(0x3ffe), 0x44);
-        assert_eq!(memory.ppu_registers.address, Some(0x44));
+        memory.write(Address::new(0x3ffe), 0x43);
     }
 
     #[test]
-    fn can_read_and_write_ppudata_in_nes_cpu_memory() {
+    fn can_read_ppudata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_write_data().times(2).with(eq(0x43)).return_const(());
 
         memory.write(Address::new(0x2007), 0x43);
-        assert_eq!(memory.read(Address::new(0x3fff)), 0x43);
-        assert_eq!(memory.ppu_registers.data, Some(0x43));
+        memory.write(Address::new(0x3fff), 0x43);
+    }
 
-        memory.write(Address::new(0x3fff), 0x44);
-        assert_eq!(memory.read(Address::new(0x2007)), 0x44);
-        assert_eq!(memory.ppu_registers.data, Some(0x44));
+    #[test]
+    fn can_write_ppudata_in_nes_cpu_memory() {
+        let mut memory = nes_cpu_memory();
+        memory.ppu_registers.expect_read_data().times(2).return_const(0x43);
+
+        assert_eq!(memory.read(Address::new(0x3fff)), 0x43);
+        assert_eq!(memory.read(Address::new(0x2007)), 0x43);
     }
 
     #[test]
@@ -290,7 +289,7 @@ mod tests {
     #[test]
     fn reading_from_4016_reads_from_input_device() {
         let mut memory = nes_cpu_memory();
-        memory.input.0 = Some(24);
+        memory.input.expect_read().once().return_const(24);
 
         assert_eq!(memory.read(Address::new(0x4016)), 24);
     }
@@ -298,87 +297,15 @@ mod tests {
     #[test]
     fn writing_to_4016_writes_to_input_device() {
         let mut memory = nes_cpu_memory();
+        memory.input.expect_write().once().with(eq(52)).return_const(());
 
         memory.write(Address::new(0x4016), 52);
-        assert_eq!(memory.input.0, Some(52));
     }
 
     fn nes_cpu_memory() -> NESCPUMemory<ArrayMemory, MockPPURegisters, MockInput> {
-        let ppu = MockPPURegisters::default();
+        let ppu = MockPPURegisters::new();
         let prg = ArrayMemory::default();
-        let input = MockInput::default();
+        let input = MockInput::new();
         NESCPUMemory::new(prg, ppu, input)
-    }
-
-    #[derive(Default)]
-    struct MockPPURegisters {
-        control: Option<u8>,
-        mask: Option<u8>,
-        status: Option<u8>,
-        oam_address: Option<u8>,
-        oam_data: Option<u8>,
-        scroll: Option<u8>,
-        address: Option<u8>,
-        data: Option<u8>,
-        oam_dma: Option<Box<[u8]>>,
-    }
-
-    impl PPURegisters for MockPPURegisters {
-        fn write_control(&mut self, byte: u8) {
-            self.control = Some(byte);
-        }
-
-        fn write_mask(&mut self, byte: u8) {
-            self.mask = Some(byte);
-        }
-
-        fn read_status(&mut self) -> u8 {
-            self.status.unwrap()
-        }
-
-        fn write_oam_address(&mut self, byte: u8) {
-            self.oam_address = Some(byte);
-        }
-
-        fn read_oam_data(&mut self) -> u8 {
-            self.oam_data.unwrap()
-        }
-
-        fn write_oam_data(&mut self, byte: u8) {
-            self.oam_data = Some(byte);
-        }
-
-        fn write_scroll(&mut self, byte: u8) {
-            self.scroll = Some(byte);
-        }
-
-        fn write_address(&mut self, byte: u8) {
-            self.address = Some(byte);
-        }
-
-        fn read_data(&mut self) -> u8 {
-            self.data.unwrap()
-        }
-
-        fn write_data(&mut self, byte: u8) {
-            self.data = Some(byte);
-        }
-
-        fn write_oam_dma(&mut self, bytes: [u8; 256]) {
-            self.oam_dma = Some(Box::new(bytes));
-        }
-    }
-
-    #[derive(Default)]
-    struct MockInput(Option<u8>);
-
-    impl Input for MockInput {
-        fn read(&mut self) -> u8 {
-            self.0.unwrap()
-        }
-
-        fn write(&mut self, value: u8) {
-            self.0 = Some(value);
-        }
     }
 }
