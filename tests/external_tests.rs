@@ -51,7 +51,7 @@ fn blargg_ppu_tests_sprite_ram() {
     blargg_ppu_test("sprite_ram", include_bytes!("blargg_ppu_tests/sprite_ram.nes"), 0xe467);
 }
 
-// TODO
+// TODO: PPU tick isn't right relative to CPU, cus we need to know ticks for each instruction type
 #[test]
 #[ignore]
 fn blargg_ppu_tests_vbl_clear_time() {
