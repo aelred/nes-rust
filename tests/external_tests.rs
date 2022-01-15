@@ -9,7 +9,7 @@ use nes_rust::NoDisplay;
 
 #[test]
 fn nestest() {
-    env_logger::builder().is_test(true).filter_level(LevelFilter::Debug).init();
+    let _ = env_logger::builder().is_test(true).try_init();
 
     let cursor = Cursor::new(include_bytes!("nestest.nes"));
 
@@ -66,7 +66,7 @@ fn blargg_ppu_tests_vram_access() {
 }
 
 fn blargg_ppu_test(name: &str, test: &[u8], end_address: u16) {
-    env_logger::builder().is_test(true).init();
+    let _ = env_logger::builder().is_test(true).try_init();
 
     let cursor = Cursor::new(test);
 
