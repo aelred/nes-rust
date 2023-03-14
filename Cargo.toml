@@ -5,14 +5,14 @@ authors = ["Felix Chapman <aelred717@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-enum-primitive-derive = "0.1.2"
+enum-primitive-derive = "0.2.2"
 num-traits = "0.2.6"
 log = "0.4.6"
-env_logger = { version = "0.6.2", default-features = false, features = ["termcolor", "atty", "humantime"] }
-sdl2 = "0.32.1"
+env_logger = { version = "0.10.0", default-features = false, features = ["color", "auto-color", "humantime"] }
+sdl2 = { version = "0.35.2", features = ["bundled"] }
 bitflags = "1.0.4"
 
 [dev-dependencies]
 hexdump = "0.1.0"
-image = "0.23.14"
+image = "0.24.5"
 mockall = "0.11.0"
