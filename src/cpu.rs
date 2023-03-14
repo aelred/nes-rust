@@ -407,7 +407,7 @@ impl<M: Memory> CPU<M> {
         self.status_mut().set(Status::CARRY, carry_out);
     }
 
-    fn shift(&mut self, reference: Reference, carry_bit: u8, op: impl FnOnce(u8, u8) -> (u8)) {
+    fn shift(&mut self, reference: Reference, carry_bit: u8, op: impl FnOnce(u8, u8) -> u8) {
         let carry = self.status().contains(Status::CARRY);
 
         let old_value = self.read_reference(reference);
