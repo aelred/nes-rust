@@ -2,7 +2,7 @@
 name = "nes-rust"
 version = "0.1.0"
 authors = ["Felix Chapman <aelred717@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 enum-primitive-derive = "0.1.2"

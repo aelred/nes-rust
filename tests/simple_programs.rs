@@ -12,8 +12,8 @@ macro_rules! run {
     ($params:tt -> $expected:expr; $( $expr: tt )*) => {
         let memory = mem!($($expr)*);
         let mut cpu = CPU::from_memory(memory);
-        let params: Vec<u8> = $params.into_iter().cloned().collect();
-        let expected: Vec<u8> = $expected.into_iter().cloned().collect();
+        let params: Vec<u8> = $params.iter().cloned().collect();
+        let expected: Vec<u8> = $expected.iter().cloned().collect();
         run(&mut cpu, &params, &expected);
     };
 }
