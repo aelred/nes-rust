@@ -3,23 +3,24 @@ use bitflags::bitflags;
 use crate::Address;
 
 bitflags! {
+    #[derive(Copy, Clone)]
     pub struct Scroll: u16 {
         const COARSE_X             = 0b0000_0000_0001_1111;
         const COARSE_Y             = 0b0000_0011_1110_0000;
         const HORIZONTAL_NAMETABLE = 0b0000_0100_0000_0000;
         const VERTICAL_NAMETABLE   = 0b0000_1000_0000_0000;
         const FINE_Y               = 0b0111_0000_0000_0000;
-        const HORIZONTAL           = Self::COARSE_X.bits | Self::HORIZONTAL_NAMETABLE.bits;
-        const VERTICAL             = Self::COARSE_Y.bits | Self::VERTICAL_NAMETABLE.bits;
-        const COARSE               = Self::COARSE_X.bits | Self::COARSE_Y.bits;
-        const NAMETABLE_SELECT     = Self::HORIZONTAL_NAMETABLE.bits | Self::VERTICAL_NAMETABLE.bits;
-        const TILE_INDEX           = Self::HORIZONTAL.bits | Self::VERTICAL.bits;
+        const HORIZONTAL           = Self::COARSE_X.bits() | Self::HORIZONTAL_NAMETABLE.bits();
+        const VERTICAL             = Self::COARSE_Y.bits() | Self::VERTICAL_NAMETABLE.bits();
+        const COARSE               = Self::COARSE_X.bits() | Self::COARSE_Y.bits();
+        const NAMETABLE_SELECT     = Self::HORIZONTAL_NAMETABLE.bits() | Self::VERTICAL_NAMETABLE.bits();
+        const TILE_INDEX           = Self::HORIZONTAL.bits() | Self::VERTICAL.bits();
     }
 }
 
 impl Scroll {
     pub fn new(bits: u16) -> Scroll {
-        Self::from_bits_truncate(bits)
+        Self::from_bits_retain(bits)
     }
 
     pub fn coarse_x(self) -> u8 {
@@ -27,8 +28,8 @@ impl Scroll {
     }
 
     pub fn set_coarse_x(&mut self, coarse_x: u8) {
-        self.remove(Scroll::COARSE_X);
-        self.bits |= 0b1_1111 & u16::from(coarse_x);
+        self.remove(Self::COARSE_X);
+        *self |= Self::COARSE_X & Self::new(u16::from(coarse_x));
     }
 
     pub fn coarse_y(self) -> u8 {
@@ -37,7 +38,7 @@ impl Scroll {
 
     pub fn set_coarse_y(&mut self, coarse_y: u8) {
         self.remove(Scroll::COARSE_Y);
-        self.bits |= (0b1_1111 & u16::from(coarse_y)) << 5;
+        *self |= Self::COARSE_Y & Self::new(u16::from(coarse_y) << 5);
     }
 
     pub fn fine_y(self) -> u8 {
@@ -46,7 +47,7 @@ impl Scroll {
 
     pub fn set_fine_y(&mut self, fine_y: u8) {
         self.remove(Scroll::FINE_Y);
-        self.bits |= (0b111 & u16::from(fine_y)) << 12;
+        *self |= Self::FINE_Y & Self::new(u16::from(fine_y) << 12);
     }
 
     pub fn tile_address(self) -> Address {
@@ -63,7 +64,7 @@ impl Scroll {
 
     pub fn increment_coarse_x(&mut self) {
         if self.coarse_x() != 31 {
-            self.bits += 1;
+            *self = Self::new(self.bits() + 1)
         } else {
             self.remove(Scroll::COARSE_X);
             self.toggle(Scroll::HORIZONTAL_NAMETABLE);
@@ -72,12 +73,12 @@ impl Scroll {
 
     pub fn increment_fine_y(&mut self) {
         if self.fine_y() != 7 {
-            self.bits += 0b0001_0000_0000_0000;
+            *self = Self::new(self.bits() + 0b0001_0000_0000_0000)
         } else {
             self.remove(Scroll::FINE_Y);
 
             if self.coarse_y() != 29 {
-                self.bits += 0b0000_0000_0010_0000;
+                *self = Self::new(self.bits() + 0b0000_0000_0010_0000)
             } else {
                 self.remove(Scroll::COARSE_Y);
                 self.toggle(Scroll::VERTICAL_NAMETABLE);

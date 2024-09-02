@@ -401,7 +401,7 @@ impl Default for Sprite {
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
     struct SpriteAttributes: u8 {
         const VERTICAL_FLIP   = 0b1000_0000;
         const HORIZONTAL_FLIP = 0b0100_0000;

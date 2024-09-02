@@ -570,6 +570,7 @@ impl fmt::Display for Reference {
 }
 
 bitflags! {
+    #[derive(Copy, Clone, Debug)]
     struct Status: u8 {
         const NEGATIVE          = 0b1000_0000;
         const OVERFLOW          = 0b0100_0000;

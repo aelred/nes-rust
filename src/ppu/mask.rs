@@ -18,7 +18,7 @@ impl Mask {
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Default, Copy, Clone, Debug, Eq, PartialEq)]
     struct MaskFlags: u8 {
         const EMPHASIZE_BLUE       = 0b1000_0000;
         const EMPHASIZE_GREEN      = 0b0100_0000;

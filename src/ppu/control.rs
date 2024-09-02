@@ -16,17 +16,17 @@ impl Control {
 
     pub fn background_pattern_table_address(self) -> Address {
         // 0x1000 if flag is set, 0x0000 otherwise
-        Address::new(u16::from((self.0 & ControlFlags::BACKGROUND_PATTERN_TABLE).bits) << 8)
+        Address::new(u16::from((self.0 & ControlFlags::BACKGROUND_PATTERN_TABLE).bits()) << 8)
     }
 
     pub fn sprite_pattern_table_address(self) -> Address {
         // 0x1000 if flag is set, 0x0000 otherwise
-        Address::new(u16::from((self.0 & ControlFlags::SPRITE_PATTERN_TABLE).bits) << 9)
+        Address::new(u16::from((self.0 & ControlFlags::SPRITE_PATTERN_TABLE).bits()) << 9)
     }
 
     pub fn address_increment(self) -> u16 {
-        let set_case = (self.0 & ControlFlags::ADDRESS_INCREMENT).bits << 3;
-        let unset_case = (!self.0 & ControlFlags::ADDRESS_INCREMENT).bits >> 2;
+        let set_case = (self.0 & ControlFlags::ADDRESS_INCREMENT).bits() << 3;
+        let unset_case = (!self.0 & ControlFlags::ADDRESS_INCREMENT).bits() >> 2;
         (set_case | unset_case).into()
     }
 
@@ -36,7 +36,7 @@ impl Control {
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Default, Copy, Clone, Debug, Eq, PartialEq)]
     struct ControlFlags: u8 {
         const NMI_ON_VBLANK            = 0b1000_0000;
         const PPU_MASTER_SLAVE         = 0b0100_0000;

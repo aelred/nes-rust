@@ -73,7 +73,7 @@ pub enum Button {
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Default, Debug)]
     struct Buttons: u8 {
         const A      = 0b1000_0000;
         const B      = 0b0100_0000;

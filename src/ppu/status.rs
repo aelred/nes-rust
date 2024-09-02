@@ -35,7 +35,7 @@ impl Status {
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Default, Copy, Clone, Debug)]
     struct StatusFlags: u8 {
         const VBLANK          = 0b1000_0000;
         const SPRITE_ZERO_HIT = 0b0100_0000;
