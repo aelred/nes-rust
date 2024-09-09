@@ -1,11 +1,12 @@
+use std::fs;
 use std::io::Cursor;
 
 use image::ColorType;
 
-use nes_rust::{Address, BufferDisplay, HEIGHT, WIDTH};
 use nes_rust::INes;
-use nes_rust::NES;
 use nes_rust::NoDisplay;
+use nes_rust::NES;
+use nes_rust::{Address, BufferDisplay, HEIGHT, WIDTH};
 
 #[test]
 fn nestest() {
@@ -38,34 +39,62 @@ fn nestest() {
 
 #[test]
 fn blargg_ppu_tests_palette_ram() {
-    blargg_ppu_test("palette_ram", include_bytes!("blargg_ppu_tests/palette_ram.nes"), 0xe412);
+    blargg_test(
+        "blargg_ppu_tests_palette_ram",
+        include_bytes!("blargg_ppu_tests/palette_ram.nes"),
+        0xe412,
+    );
 }
 
 #[test]
 fn blargg_ppu_tests_power_up_palette() {
-    blargg_ppu_test("power_up_palette", include_bytes!("blargg_ppu_tests/power_up_palette.nes"), 0xe3ac);
+    blargg_test(
+        "blargg_ppu_tests_power_up_palette",
+        include_bytes!("blargg_ppu_tests/power_up_palette.nes"),
+        0xe3ac,
+    );
 }
 
 #[test]
 fn blargg_ppu_tests_sprite_ram() {
-    blargg_ppu_test("sprite_ram", include_bytes!("blargg_ppu_tests/sprite_ram.nes"), 0xe467);
+    blargg_test(
+        "blargg_ppu_tests_sprite_ram",
+        include_bytes!("blargg_ppu_tests/sprite_ram.nes"),
+        0xe467,
+    );
 }
 
 // TODO: PPU tick isn't right relative to CPU, cus we need to know ticks for each instruction type
 #[test]
-#[ignore]
 fn blargg_ppu_tests_vbl_clear_time() {
-    blargg_ppu_test("vbl_clear_time", include_bytes!("blargg_ppu_tests/vbl_clear_time.nes"), 0xe3b3);
+    blargg_test(
+        "blargg_ppu_test_vbl_clear_time",
+        include_bytes!("blargg_ppu_tests/vbl_clear_time.nes"),
+        0xe3b3,
+    );
 }
 
 // TODO
 #[test]
 #[ignore]
 fn blargg_ppu_tests_vram_access() {
-    blargg_ppu_test("vram_access", include_bytes!("blargg_ppu_tests/vram_access.nes"), 0xe48d);
+    blargg_test(
+        "blargg_ppu_test_vram_access",
+        include_bytes!("blargg_ppu_tests/vram_access.nes"),
+        0xe48d,
+    );
 }
 
-fn blargg_ppu_test(name: &str, test: &[u8], end_address: u16) {
+#[test]
+fn blargg_cpu_timing_test() {
+    blargg_test(
+        "blargg_cpu_timing_test",
+        include_bytes!("blargg_cpu_tests/cpu_timing_test.nes"),
+        0xea5a,
+    );
+}
+
+fn blargg_test(name: &str, test: &[u8], end_address: u16) {
     let _ = env_logger::builder().is_test(true).try_init();
 
     let cursor = Cursor::new(test);
@@ -75,7 +104,7 @@ fn blargg_ppu_test(name: &str, test: &[u8], end_address: u16) {
 
     let mut nes = NES::new(&mut cartridge, BufferDisplay::new());
 
-    for _ in 1..2_000_000 {
+    for _ in 1..5_000_000 {
         if nes.program_counter() == Address::new(end_address) {
             let byte = nes.read_cpu(Address::new(0xf0));
 
@@ -83,9 +112,14 @@ fn blargg_ppu_test(name: &str, test: &[u8], end_address: u16) {
                 return;
             } else {
                 let buffer = nes.display().buffer();
-                let fname = format!("blarrg_ppu_test_{}_failure.png", name);
-                image::save_buffer(&fname, buffer, WIDTH.into(), HEIGHT.into(), ColorType::Rgb8).unwrap();
-                panic!("Failed, error code: 0x{:02x}. Saved image in {}", byte, fname)
+                let fname = format!("./test_results/{}_failure.png", name);
+                fs::create_dir_all("test_results").unwrap();
+                image::save_buffer(&fname, buffer, WIDTH.into(), HEIGHT.into(), ColorType::Rgb8)
+                    .unwrap();
+                panic!(
+                    "Failed, error code: 0x{:02x}. Saved image in {}",
+                    byte, fname
+                )
             }
         }
 
