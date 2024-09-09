@@ -29,6 +29,7 @@ pub struct PPU<M> {
     object_attribute_memory: [u8; 256],
     scanline: u16,
     cycle_count: u16,
+    frame_count: u16,
     tile_pattern: ShiftRegister,
     palette_select: ShiftRegister,
     active_sprites: [Sprite; 8],
@@ -51,6 +52,7 @@ impl<M: Memory> PPU<M> {
             object_attribute_memory: [0; 256],
             scanline: 0,
             cycle_count: 0,
+            frame_count: 0,
             tile_pattern: ShiftRegister::default(),
             palette_select: ShiftRegister::default(),
             active_sprites: [Sprite::default(); 8],
@@ -213,7 +215,10 @@ impl<M: Memory> PPU<M> {
             let palette = (attr & SpriteAttributes::PALETTE).bits();
             let color_index = (palette << 2) | lower_index;
             let address = SPRITE_PALETTES + color_index.into();
-            return (Some(Color(self.memory.read(address))), !attr.contains(SpriteAttributes::PRIORITY));
+            return (
+                Some(Color(self.memory.read(address))),
+                !attr.contains(SpriteAttributes::PRIORITY),
+            );
         }
 
         (None, false)
@@ -591,10 +596,10 @@ const COLOR_LOOKUP: [(u8, u8, u8); 64] = [
 
 #[cfg(test)]
 mod tests {
-    use crate::Address;
-    use crate::ArrayMemory;
     use crate::mem;
     use crate::ppu::Sprite;
+    use crate::Address;
+    use crate::ArrayMemory;
 
     use super::*;
 

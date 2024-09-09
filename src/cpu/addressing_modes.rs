@@ -153,23 +153,27 @@ enum AddressingMode {
 impl<M: Memory> CPU<M> {
     fn exec_addressing_mode(&mut self, addressing_mode: AddressingMode) -> Reference {
         match addressing_mode {
-            AddressingMode::Accumulator => Reference::Accumulator,
-            AddressingMode::Immediate => {
-                let reference = Reference::Address(self.program_counter());
+            AddressingMode::Accumulator => {
                 self.fetch_at_program_counter();
-                reference
+                Reference::Accumulator
+            }
+            AddressingMode::Immediate => {
+                let value = self.fetch_and_incr_program_counter();
+                Reference::Immediate(value)
             }
             AddressingMode::ZeroPage => {
-                let address = Address::from_bytes(0, self.fetch_at_program_counter());
+                let address = Address::from_bytes(0, self.fetch_and_incr_program_counter());
                 Reference::Address(address)
             }
             AddressingMode::ZeroPageX => {
-                let operand: u8 = self.fetch_at_program_counter();
+                let operand: u8 = self.fetch_and_incr_program_counter();
+                self.read(Address::from_bytes(0, operand)); // CPU does a pointless read
                 let address = Address::from_bytes(0, operand.wrapping_add(self.x()));
                 Reference::Address(address)
             }
             AddressingMode::ZeroPageY => {
-                let operand: u8 = self.fetch_at_program_counter();
+                let operand: u8 = self.fetch_and_incr_program_counter();
+                self.read(Address::from_bytes(0, operand)); // CPU does a pointless read
                 let address = Address::from_bytes(0, operand.wrapping_add(self.y()));
                 Reference::Address(address)
             }
@@ -179,25 +183,27 @@ impl<M: Memory> CPU<M> {
             }
             AddressingMode::AbsoluteX => {
                 let address = self.absolute_address() + u16::from(self.x());
-                Reference::Address(address)
+                Reference::AbsoluteIndexedAddress(address)
             }
             AddressingMode::AbsoluteY => {
                 let address = self.absolute_address() + u16::from(self.y());
-                Reference::Address(address)
+                Reference::AbsoluteIndexedAddress(address)
             }
             AddressingMode::Indirect => {
                 let address = self.indirect_address();
                 Reference::Address(address)
             }
             AddressingMode::IndexedIndirect => {
-                let offset = self.fetch_at_program_counter().wrapping_add(self.x());
-                let address = self.read_zero_page_address(offset);
+                let offset = self.fetch_and_incr_program_counter();
+                self.read(Address::from_bytes(0, offset)); // Redundant read
+                let address = self.read_zero_page_address(offset.wrapping_add(self.x()));
                 Reference::Address(address)
             }
             AddressingMode::IndirectIndexed => {
-                let offset = self.fetch_at_program_counter();
+                let offset = self.fetch_and_incr_program_counter();
+                // self.read(Address::from_bytes(0, offset)); // Redundant read
                 let address = self.read_zero_page_address(offset) + u16::from(self.y());
-                Reference::Address(address)
+                Reference::AbsoluteIndexedAddress(address)
             }
         }
     }
@@ -233,14 +239,14 @@ mod tests {
         let mut cpu = cpu(mem! {56u8});
 
         let reference = cpu.exec_addressing_mode(Immediate);
-        assert_eq!(cpu.read_reference(reference), 56);
+        assert_eq!(cpu.read_reference(reference, true), 56);
     }
 
     #[test]
     fn accumulator_addressing_mode_fetches_accumulator_value() {
         let mut cpu = cpu(mem! {LDA_IMMEDIATE, 76u8});
         cpu.run_instruction();
-        assert_eq!(cpu.read_reference(Reference::Accumulator), 76);
+        assert_eq!(cpu.read_reference(Reference::Accumulator, true), 76);
     }
 
     #[test]
@@ -251,7 +257,7 @@ mod tests {
         ));
 
         let reference = cpu.exec_addressing_mode(ZeroPage);
-        assert_eq!(cpu.read_reference(reference), 35);
+        assert_eq!(cpu.read_reference(reference, true), 35);
     }
 
     #[test]
@@ -263,7 +269,7 @@ mod tests {
         cpu.set_x(3);
 
         let reference = cpu.exec_addressing_mode(ZeroPageX);
-        assert_eq!(cpu.read_reference(reference), 35);
+        assert_eq!(cpu.read_reference(reference, true), 35);
     }
 
     #[test]
@@ -274,7 +280,7 @@ mod tests {
         cpu.set_x(1);
 
         let reference = cpu.exec_addressing_mode(ZeroPageX);
-        assert_eq!(cpu.read_reference(reference), 0xFF);
+        assert_eq!(cpu.read_reference(reference, true), 0xFF);
     }
 
     #[test]
@@ -286,7 +292,7 @@ mod tests {
         cpu.set_y(3);
 
         let reference = cpu.exec_addressing_mode(ZeroPageY);
-        assert_eq!(cpu.read_reference(reference), 35);
+        assert_eq!(cpu.read_reference(reference, true), 35);
     }
 
     #[test]
@@ -297,7 +303,7 @@ mod tests {
         cpu.set_y(1);
 
         let reference = cpu.exec_addressing_mode(ZeroPageY);
-        assert_eq!(cpu.read_reference(reference), 0xFF);
+        assert_eq!(cpu.read_reference(reference, true), 0xFF);
     }
 
     #[test]
@@ -308,7 +314,7 @@ mod tests {
         ));
 
         let reference = cpu.exec_addressing_mode(Absolute);
-        assert_eq!(cpu.read_reference(reference), 35);
+        assert_eq!(cpu.read_reference(reference, true), 35);
     }
 
     #[test]
@@ -320,7 +326,7 @@ mod tests {
         cpu.set_x(3);
 
         let reference = cpu.exec_addressing_mode(AbsoluteX);
-        assert_eq!(cpu.read_reference(reference), 35);
+        assert_eq!(cpu.read_reference(reference, true), 35);
     }
 
     #[test]
@@ -332,7 +338,7 @@ mod tests {
         cpu.set_y(3);
 
         let reference = cpu.exec_addressing_mode(AbsoluteY);
-        assert_eq!(cpu.read_reference(reference), 35);
+        assert_eq!(cpu.read_reference(reference, true), 35);
     }
 
     #[test]
@@ -368,7 +374,7 @@ mod tests {
         cpu.set_x(3);
 
         let reference = cpu.exec_addressing_mode(IndexedIndirect);
-        assert_eq!(cpu.read_reference(reference), 57);
+        assert_eq!(cpu.read_reference(reference, true), 57);
     }
 
     #[test]
@@ -381,7 +387,7 @@ mod tests {
         cpu.set_x(255);
 
         let reference = cpu.exec_addressing_mode(IndexedIndirect);
-        assert_eq!(cpu.read_reference(reference), 57);
+        assert_eq!(cpu.read_reference(reference, true), 57);
     }
 
     #[test]
@@ -394,7 +400,7 @@ mod tests {
         cpu.set_x(0);
 
         let reference = cpu.exec_addressing_mode(IndexedIndirect);
-        assert_eq!(cpu.read_reference(reference), 57);
+        assert_eq!(cpu.read_reference(reference, true), 57);
     }
 
     #[test]
@@ -407,7 +413,7 @@ mod tests {
         cpu.set_y(3);
 
         let reference = cpu.exec_addressing_mode(IndirectIndexed);
-        assert_eq!(cpu.read_reference(reference), 57);
+        assert_eq!(cpu.read_reference(reference, true), 57);
     }
 
     #[test]
@@ -420,7 +426,7 @@ mod tests {
         cpu.set_y(0);
 
         let reference = cpu.exec_addressing_mode(IndirectIndexed);
-        assert_eq!(cpu.read_reference(reference), 57);
+        assert_eq!(cpu.read_reference(reference, true), 57);
     }
 
     fn cpu(memory: ArrayMemory) -> CPU<ArrayMemory> {

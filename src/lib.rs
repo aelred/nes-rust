@@ -4,10 +4,10 @@ pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
 use crate::cartridge::CHR;
 use crate::cartridge::PRG;
-pub use crate::cpu::CPU;
-pub use crate::cpu::Instruction;
 pub use crate::cpu::instructions;
+pub use crate::cpu::Instruction;
 use crate::cpu::NESCPUMemory;
+pub use crate::cpu::CPU;
 pub use crate::i_nes::INes;
 pub use crate::i_nes::INesReadError;
 pub use crate::input::Button;
@@ -132,12 +132,16 @@ impl<'a, D: NESDisplay> NES<'a, D> {
     }
 
     pub fn tick(&mut self) {
-        self.tick_cpu();
-        self.tick_ppu();
+        let cpu_cycles = self.tick_cpu();
+
+        // There are 3 PPU cycles to 1 CPU cycle
+        for _ in 0..3 * cpu_cycles {
+            self.tick_ppu();
+        }
     }
 
-    fn tick_cpu(&mut self) {
-        self.cpu.run_instruction();
+    fn tick_cpu(&mut self) -> u8 {
+        self.cpu.run_instruction()
     }
 
     fn ppu(&mut self) -> &mut StandardPPU<'a> {
@@ -145,30 +149,24 @@ impl<'a, D: NESDisplay> NES<'a, D> {
     }
 
     fn tick_ppu(&mut self) {
-        // Loops 6 times is a guess based on:
-        // - there are 3 PPU ticks per CPU tick
-        // - a CPU instruction takes a variable number of ticks to run (2-ish)
-        // TODO: accurately manage this
-        for _ in 0..6 {
-            let output = self.ppu().tick();
+        let output = self.ppu().tick();
 
-            if output.interrupt {
-                self.cpu.non_maskable_interrupt();
-            }
+        if output.interrupt {
+            self.cpu.non_maskable_interrupt();
+        }
 
-            if let Some(color) = output.color {
-                self.display.draw_pixel(color);
-            }
+        if let Some(color) = output.color {
+            self.display.draw_pixel(color);
         }
     }
 }
 
 #[macro_export]
 macro_rules! mem {
-    ($( $data: expr ),*) => {
+    ($( $data: expr ),* $(,)? ) => {
         mem!{0 => { $($data),* }}
     };
-    ($( $offset: expr => { $( $data: expr ),* } )*) => {
+    ($( $offset: expr => { $( $data: expr ),* $(,)? } )*) => {
         {
             #[allow(unused_variables, unused_mut)]
             let mut memory = $crate::ArrayMemory::default();
