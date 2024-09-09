@@ -601,9 +601,11 @@ impl<M: Memory> CPU<M> {
         match reference {
             Reference::Immediate(value) => value,
             Reference::Address(address) => self.read(address),
-            Reference::AbsoluteIndexedAddress(address) => {
-                let page_boundary = false; // TODO: page boundaries
-                if page_boundary || !readonly {
+            Reference::IndexedAddress {
+                address,
+                page_cross,
+            } => {
+                if page_cross || !readonly {
                     self.cycle_count += 1;
                 }
                 self.read(address)
@@ -621,7 +623,10 @@ impl<M: Memory> CPU<M> {
             Reference::Address(address) => {
                 self.write(address, byte);
             }
-            Reference::AbsoluteIndexedAddress(address) => {
+            Reference::IndexedAddress {
+                address,
+                page_cross: _,
+            } => {
                 // Redundant read
                 if writeonly {
                     self.cycle_count += 1;
@@ -671,10 +676,21 @@ enum Reference {
     Immediate(u8),
     Address(Address),
     // Some addressing modes will re-read the value (which impacts cycle count)
-    AbsoluteIndexedAddress(Address),
+    IndexedAddress { address: Address, page_cross: bool },
     Accumulator,
     X,
     Y,
+}
+
+impl Reference {
+    pub fn indexed_address(base: Address, offset: u8) -> Reference {
+        let page_cross = base.lower().checked_add(offset).is_none();
+        let address = base + u16::from(offset);
+        Reference::IndexedAddress {
+            address,
+            page_cross,
+        }
+    }
 }
 
 impl fmt::Display for Reference {
@@ -682,7 +698,10 @@ impl fmt::Display for Reference {
         match self {
             Reference::Immediate(value) => write!(f, "#{}", value),
             Reference::Address(address) => write!(f, "{}", address),
-            Reference::AbsoluteIndexedAddress(address) => write!(f, "{} (x2)", address),
+            Reference::IndexedAddress {
+                address,
+                page_cross: _,
+            } => write!(f, "{} (x2)", address),
             Reference::Accumulator => f.write_str("A"),
             Reference::X => f.write_str("X"),
             Reference::Y => f.write_str("Y"),
@@ -2378,7 +2397,7 @@ mod tests {
         asl_zpx = { ASL(ShiftAddressingMode::ZeroPageX), 6, Normal },
         asl_abs = { ASL(ShiftAddressingMode::Absolute), 6, Normal },
         asl_abx = { ASL(ShiftAddressingMode::AbsoluteX), 7, Normal },
-        asl_abx_cross = { ASL(ShiftAddressingMode::Absolute), 7, PageCross },
+        asl_abx_cross = { ASL(ShiftAddressingMode::AbsoluteX), 7, PageCross },
 
         lsr_acc = { LSR(ShiftAddressingMode::Accumulator), 2, Normal },
         lsr_zpa = { LSR(ShiftAddressingMode::ZeroPage), 5, Normal },
@@ -2467,7 +2486,6 @@ mod tests {
                 cpu.write(Address::new(0x01), 0x01);
                 cpu.x = 0xFF;
                 cpu.y = 0xFF;
-                return; // TODO: make these pass
             }
         };
 

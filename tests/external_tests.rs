@@ -97,6 +97,10 @@ fn blargg_cpu_timing_test() {
 fn blargg_test(name: &str, test: &[u8], end_address: u16) {
     let _ = env_logger::builder().is_test(true).try_init();
 
+    fs::create_dir_all("test_results").unwrap();
+    let fname = format!("./test_results/{}_failure.png", name);
+    let _ = fs::remove_file(&fname);
+
     let cursor = Cursor::new(test);
 
     let ines = INes::read(cursor).unwrap();
@@ -104,7 +108,9 @@ fn blargg_test(name: &str, test: &[u8], end_address: u16) {
 
     let mut nes = NES::new(&mut cartridge, BufferDisplay::new());
 
-    for _ in 1..5_000_000 {
+    const ITERATIONS: usize = 10_000_000;
+
+    for _ in 0..ITERATIONS {
         if nes.program_counter() == Address::new(end_address) {
             let byte = nes.read_cpu(Address::new(0xf0));
 
@@ -112,7 +118,6 @@ fn blargg_test(name: &str, test: &[u8], end_address: u16) {
                 return;
             } else {
                 let buffer = nes.display().buffer();
-                let fname = format!("./test_results/{}_failure.png", name);
                 fs::create_dir_all("test_results").unwrap();
                 image::save_buffer(&fname, buffer, WIDTH.into(), HEIGHT.into(), ColorType::Rgb8)
                     .unwrap();
@@ -133,7 +138,7 @@ fn blargg_test(name: &str, test: &[u8], end_address: u16) {
     let pc3 = nes.program_counter();
 
     panic!(
-        "Test didn't complete after 2,000,000 iterations, last 3 program counters were: {} {} {}",
-        pc1, pc2, pc3
+        "Test didn't complete after {} iterations, last 3 program counters were: {} {} {}",
+        ITERATIONS, pc1, pc2, pc3
     );
 }

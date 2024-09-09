@@ -182,12 +182,10 @@ impl<M: Memory> CPU<M> {
                 Reference::Address(address)
             }
             AddressingMode::AbsoluteX => {
-                let address = self.absolute_address() + u16::from(self.x());
-                Reference::AbsoluteIndexedAddress(address)
+                Reference::indexed_address(self.absolute_address(), self.x())
             }
             AddressingMode::AbsoluteY => {
-                let address = self.absolute_address() + u16::from(self.y());
-                Reference::AbsoluteIndexedAddress(address)
+                Reference::indexed_address(self.absolute_address(), self.y())
             }
             AddressingMode::Indirect => {
                 let address = self.indirect_address();
@@ -201,9 +199,7 @@ impl<M: Memory> CPU<M> {
             }
             AddressingMode::IndirectIndexed => {
                 let offset = self.fetch_and_incr_program_counter();
-                // self.read(Address::from_bytes(0, offset)); // Redundant read
-                let address = self.read_zero_page_address(offset) + u16::from(self.y());
-                Reference::AbsoluteIndexedAddress(address)
+                Reference::indexed_address(self.read_zero_page_address(offset), self.y())
             }
         }
     }
