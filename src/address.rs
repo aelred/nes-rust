@@ -35,6 +35,10 @@ impl Address {
     pub fn incr_lower(self) -> Self {
         Address::from_bytes(self.higher(), self.lower().wrapping_add(1))
     }
+
+    pub fn page_crossed(self, other: Address) -> bool {
+        self.higher() != other.higher()
+    }
 }
 
 impl fmt::Debug for Address {

@@ -549,8 +549,12 @@ impl<M: Memory> CPU<M> {
     fn branch_if(&mut self, cond: bool) {
         let offset = self.incr_program_counter() as i8;
         if cond {
+            let previous = self.program_counter;
             self.program_counter += offset as u16;
             self.cycle_count += 1;
+            if (self.program_counter.page_crossed(previous)) {
+                self.cycle_count += 1;
+            }
         }
     }
 
@@ -640,11 +644,10 @@ enum Reference {
 
 impl Reference {
     pub fn indexed_address(base: Address, offset: u8) -> Reference {
-        let page_cross = base.lower().checked_add(offset).is_none();
         let address = base + u16::from(offset);
         Reference::IndexedAddress {
             address,
-            page_cross,
+            page_cross: address.page_crossed(base),
         }
     }
 }
@@ -2451,7 +2454,7 @@ mod tests {
             Normal => {}
             PageCross => {
                 // Make sure a page cross happens with any addressing mode
-                cpu.write(Address::new(0x01), 0x01);
+                cpu.write(Address::new(0x01), 0x80);
                 cpu.x = 0xFF;
                 cpu.y = 0xFF;
             }
