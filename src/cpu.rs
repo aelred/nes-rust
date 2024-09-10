@@ -552,7 +552,7 @@ impl<M: Memory> CPU<M> {
             let previous = self.program_counter;
             self.program_counter += offset as u16;
             self.cycle_count += 1;
-            if (self.program_counter.page_crossed(previous)) {
+            if self.program_counter.page_crossed(previous) {
                 self.cycle_count += 1;
             }
         }
@@ -738,8 +738,8 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 52);
-        assert_eq!(cpu.status.contains(Status::OVERFLOW), false);
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(!cpu.status.contains(Status::OVERFLOW));
+        assert!(!cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -749,8 +749,8 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 41);
-        assert_eq!(cpu.status.contains(Status::OVERFLOW), false);
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert!(!cpu.status.contains(Status::OVERFLOW));
+        assert!(cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -760,8 +760,8 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator as i8, -87i8);
-        assert_eq!(cpu.status.contains(Status::OVERFLOW), true);
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(cpu.status.contains(Status::OVERFLOW));
+        assert!(!cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -780,7 +780,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0b1000);
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(!cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -790,7 +790,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0b0101_0100);
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert!(cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -881,7 +881,7 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert!(cpu.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -896,7 +896,7 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -909,7 +909,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status.contains(Status::OVERFLOW), false);
+        assert!(!cpu.status.contains(Status::OVERFLOW));
 
         let cpu = run_instr(
             mem!(
@@ -919,7 +919,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status.contains(Status::OVERFLOW), true);
+        assert!(cpu.status.contains(Status::OVERFLOW));
     }
 
     #[test]
@@ -932,7 +932,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
+        assert!(!cpu.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(
             mem!(
@@ -942,7 +942,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1056,7 +1056,7 @@ mod tests {
             cpu.status.insert(Status::CARRY);
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(!cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -1065,7 +1065,7 @@ mod tests {
             cpu.status.insert(Status::DECIMAL);
         });
 
-        assert_eq!(cpu.status.contains(Status::DECIMAL), false);
+        assert!(!cpu.status.contains(Status::DECIMAL));
     }
 
     #[test]
@@ -1074,7 +1074,7 @@ mod tests {
             cpu.status.insert(Status::INTERRUPT_DISABLE);
         });
 
-        assert_eq!(cpu.status.contains(Status::INTERRUPT_DISABLE), false);
+        assert!(!cpu.status.contains(Status::INTERRUPT_DISABLE));
     }
 
     #[test]
@@ -1083,7 +1083,7 @@ mod tests {
             cpu.status.insert(Status::OVERFLOW);
         });
 
-        assert_eq!(cpu.status.contains(Status::OVERFLOW), false);
+        assert!(!cpu.status.contains(Status::OVERFLOW));
     }
 
     #[test]
@@ -1092,19 +1092,19 @@ mod tests {
             cpu.accumulator = 1;
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(!cpu.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 10;
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert!(cpu.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 100;
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert!(cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -1113,19 +1113,19 @@ mod tests {
             cpu.accumulator = 1;
         });
 
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 10;
         });
 
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert!(cpu.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 100;
         });
 
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -1134,19 +1134,19 @@ mod tests {
             cpu.accumulator = 1;
         });
 
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(cpu.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 10;
         });
 
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
+        assert!(!cpu.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 100;
         });
 
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
+        assert!(!cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1155,25 +1155,25 @@ mod tests {
             cpu.x = 1;
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(!cpu.status.contains(Status::CARRY));
+        assert!(!cpu.status.contains(Status::ZERO));
+        assert!(cpu.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CPX_IMMEDIATE, 10u8), |cpu| {
             cpu.x = 10;
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
+        assert!(cpu.status.contains(Status::CARRY));
+        assert!(cpu.status.contains(Status::ZERO));
+        assert!(!cpu.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CPX_IMMEDIATE, 10u8), |cpu| {
             cpu.x = 100;
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
+        assert!(cpu.status.contains(Status::CARRY));
+        assert!(!cpu.status.contains(Status::ZERO));
+        assert!(!cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1182,25 +1182,25 @@ mod tests {
             cpu.y = 1;
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(!cpu.status.contains(Status::CARRY));
+        assert!(!cpu.status.contains(Status::ZERO));
+        assert!(cpu.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CPY_IMMEDIATE, 10u8), |cpu| {
             cpu.y = 10;
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
+        assert!(cpu.status.contains(Status::CARRY));
+        assert!(cpu.status.contains(Status::ZERO));
+        assert!(!cpu.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CPY_IMMEDIATE, 10u8), |cpu| {
             cpu.y = 100;
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
+        assert!(cpu.status.contains(Status::CARRY));
+        assert!(!cpu.status.contains(Status::ZERO));
+        assert!(!cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1227,7 +1227,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 44);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
             mem!(
@@ -1238,7 +1238,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 0);
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert!(cpu.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -1252,7 +1252,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 44);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
             mem!(
@@ -1263,7 +1263,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)) as i8, -1i8);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1282,14 +1282,14 @@ mod tests {
         });
 
         assert_eq!(cpu.x, 44);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEX), |cpu| {
             cpu.x = 1;
         });
 
         assert_eq!(cpu.x, 0);
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert!(cpu.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -1299,14 +1299,14 @@ mod tests {
         });
 
         assert_eq!(cpu.x, 44);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEX), |cpu| {
             cpu.x = 0;
         });
 
         assert_eq!(cpu.x as i8, -1i8);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1325,14 +1325,14 @@ mod tests {
         });
 
         assert_eq!(cpu.y, 44);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEY), |cpu| {
             cpu.y = 1;
         });
 
         assert_eq!(cpu.y, 0);
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert!(cpu.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -1342,14 +1342,14 @@ mod tests {
         });
 
         assert_eq!(cpu.y, 44);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEY), |cpu| {
             cpu.y = 0;
         });
 
         assert_eq!(cpu.y as i8, -1i8);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1385,7 +1385,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 46);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
             mem!(
@@ -1396,7 +1396,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 0);
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert!(cpu.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -1410,7 +1410,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 46);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
             mem!(
@@ -1421,7 +1421,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)) as i8, -9i8);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1524,7 +1524,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0b10);
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(!cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -1534,7 +1534,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0b10_1010);
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert!(cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -1647,7 +1647,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0b1000);
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(!cpu.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
             cpu.status.insert(Status::CARRY);
@@ -1655,7 +1655,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0b1001);
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(!cpu.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
             cpu.status.remove(Status::CARRY);
@@ -1663,7 +1663,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0);
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert!(cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -1674,7 +1674,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0b10);
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(!cpu.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
             cpu.status.insert(Status::CARRY);
@@ -1682,7 +1682,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0b1000_0010);
-        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert!(!cpu.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
             cpu.status.remove(Status::CARRY);
@@ -1690,7 +1690,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0);
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert!(cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -1725,7 +1725,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 32);
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert!(cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -1762,7 +1762,7 @@ mod tests {
             cpu.status.remove(Status::CARRY);
         });
 
-        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert!(cpu.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -1771,7 +1771,7 @@ mod tests {
             cpu.status.remove(Status::DECIMAL);
         });
 
-        assert_eq!(cpu.status.contains(Status::DECIMAL), true);
+        assert!(cpu.status.contains(Status::DECIMAL));
     }
 
     #[test]
@@ -1780,7 +1780,7 @@ mod tests {
             cpu.status.remove(Status::INTERRUPT_DISABLE);
         });
 
-        assert_eq!(cpu.status.contains(Status::INTERRUPT_DISABLE), true);
+        assert!(cpu.status.contains(Status::INTERRUPT_DISABLE));
     }
 
     #[test]
@@ -1863,8 +1863,8 @@ mod tests {
             cpu.status.insert(Status::NEGATIVE);
         });
 
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(cpu.status.contains(Status::ZERO));
+        assert!(cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1919,7 +1919,7 @@ mod tests {
         });
 
         let status = Status::from_bits_truncate(cpu.read(STACK + 4));
-        assert_eq!(status.contains(Status::BREAK), true);
+        assert!(status.contains(Status::BREAK));
     }
 
     #[test]
@@ -2020,7 +2020,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 43);
-        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert!(!cpu.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -2030,7 +2030,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 0);
-        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert!(cpu.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -2040,7 +2040,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator, 43);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
+        assert!(!cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -2050,7 +2050,7 @@ mod tests {
         });
 
         assert_eq!(cpu.accumulator as i8, -1i8);
-        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
+        assert!(cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -2144,7 +2144,7 @@ mod tests {
             cpu.non_maskable_interrupt = true;
         });
 
-        assert_eq!(cpu.non_maskable_interrupt, false);
+        assert!(!cpu.non_maskable_interrupt);
     }
 
     #[test]
@@ -2185,7 +2185,7 @@ mod tests {
 
         cpu.non_maskable_interrupt();
 
-        assert_eq!(cpu.non_maskable_interrupt, true);
+        assert!(cpu.non_maskable_interrupt);
     }
 
     enum ParameterizedScenario {

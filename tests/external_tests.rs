@@ -106,7 +106,7 @@ fn blargg_test(name: &str, test: &[u8], end_address: u16) {
     let ines = INes::read(cursor).unwrap();
     let mut cartridge = ines.into_cartridge();
 
-    let mut nes = NES::new(&mut cartridge, BufferDisplay::new());
+    let mut nes = NES::new(&mut cartridge, BufferDisplay::default());
 
     const ITERATIONS: usize = 10_000_000;
 

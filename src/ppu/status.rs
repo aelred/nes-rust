@@ -51,9 +51,9 @@ mod tests {
     fn reading_status_resets_vblank() {
         let mut status = Status(StatusFlags::from_bits_truncate(0b1010_0000));
 
-        assert_eq!(status.vblank(), true);
+        assert!(status.vblank());
         assert_eq!(status.read(), 0b1010_0000);
-        assert_eq!(status.vblank(), false);
+        assert!(!status.vblank());
         assert_eq!(status.read(), 0b0010_0000);
     }
 }

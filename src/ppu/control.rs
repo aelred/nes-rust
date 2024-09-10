@@ -85,8 +85,8 @@ mod tests {
     #[test]
     fn control_specifies_nmi_on_vblank() {
         let control = Control::from_bits(0b0000_0000);
-        assert_eq!(control.nmi_on_vblank(), false);
+        assert!(!control.nmi_on_vblank());
         let control = Control::from_bits(0b1000_0000);
-        assert_eq!(control.nmi_on_vblank(), true);
+        assert!(control.nmi_on_vblank());
     }
 }

@@ -29,7 +29,6 @@ pub struct PPU<M> {
     object_attribute_memory: [u8; 256],
     scanline: u16,
     cycle_count: u16,
-    frame_count: u16,
     tile_pattern: ShiftRegister,
     palette_select: ShiftRegister,
     active_sprites: [Sprite; 8],
@@ -52,7 +51,6 @@ impl<M: Memory> PPU<M> {
             object_attribute_memory: [0; 256],
             scanline: 0,
             cycle_count: 0,
-            frame_count: 0,
             tile_pattern: ShiftRegister::default(),
             palette_select: ShiftRegister::default(),
             active_sprites: [Sprite::default(); 8],
@@ -295,9 +293,9 @@ impl<M: Memory> PPU<M> {
             _ => {}
         }
 
-        let color: Option<Color>;
-
-        if self.rendering() {
+        let color = if !self.rendering() {
+            None
+        } else {
             if self.cycle_count == 0 {
                 self.increment_fine_y();
                 self.transfer_horizontal_scroll();
@@ -311,10 +309,8 @@ impl<M: Memory> PPU<M> {
                 self.read_next_tile();
             }
 
-            color = self.next_color();
-        } else {
-            color = None;
-        }
+            self.next_color()
+        };
 
         if self.cycle_count < 340 {
             self.cycle_count += 1;
@@ -484,7 +480,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn read_data(&mut self) -> u8 {
-        if cfg!(debug) && self.rendering() {
+        if cfg!(debug_assertions) && self.rendering() {
             warn!("Attempt to read from PPU during rendering");
         }
         let address = self.address();
@@ -501,7 +497,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn write_data(&mut self, byte: u8) {
-        if cfg!(debug) && self.rendering() {
+        if cfg!(debug_assertions) && self.rendering() {
             warn!("Attempt to write to PPU during rendering");
         }
         self.memory.write(self.address(), byte);

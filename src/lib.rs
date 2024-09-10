@@ -1,3 +1,5 @@
+#![allow(clippy::upper_case_acronyms)] // Allow upper case acronyms like NES, CPU because I think it's more readable!
+
 use std::fmt::{Debug, Formatter};
 
 pub use crate::address::Address;
@@ -49,15 +51,17 @@ pub struct BufferDisplay {
     y: usize,
 }
 
-impl BufferDisplay {
-    pub fn new() -> BufferDisplay {
+impl Default for BufferDisplay {
+    fn default() -> Self {
         BufferDisplay {
             buffer: [0; WIDTH as usize * HEIGHT as usize * 3],
             x: usize::from(WIDTH) - 8,
             y: usize::from(HEIGHT),
         }
     }
+}
 
+impl BufferDisplay {
     pub fn buffer(&self) -> &[u8] {
         &self.buffer
     }

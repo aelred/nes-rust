@@ -136,9 +136,10 @@ mod tests {
 
     #[test]
     fn when_strobe_is_toggled_off_button_status_is_reported() {
-        let mut controller = Controller::default();
-
-        controller.buttons = Buttons::from_bits_truncate(0b1001_0110);
+        let mut controller = Controller {
+            buttons: Buttons::from_bits_truncate(0b1001_0110),
+            ..Controller::default()
+        };
 
         controller.write(1);
         controller.write(0);
@@ -191,9 +192,10 @@ mod tests {
 
     #[test]
     fn after_reading_status_subsequent_reads_return_zero() {
-        let mut controller = Controller::default();
-
-        controller.buttons = Buttons::from_bits_truncate(0b1001_0110);
+        let mut controller = Controller {
+            buttons: Buttons::from_bits_truncate(0b1001_0110),
+            ..Controller::default()
+        };
 
         controller.write(1);
         controller.write(0);

@@ -3,11 +3,11 @@ use std::fmt::{Debug, Formatter};
 
 use log::trace;
 
+use crate::input::Input;
+use crate::ppu::PPURegisters;
 use crate::Address;
 use crate::ArrayMemory;
-use crate::input::Input;
 use crate::Memory;
-use crate::ppu::PPURegisters;
 
 const PPU_SPACE: Address = Address::new(0x2000);
 const PPU_CONTROL: Address = Address::new(0x2000);
@@ -183,7 +183,12 @@ mod tests {
     #[test]
     fn can_write_ppuctrl_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_write_control().times(2).with(eq(0x43)).return_const(());
+        memory
+            .ppu_registers
+            .expect_write_control()
+            .times(2)
+            .with(eq(0x43))
+            .return_const(());
 
         memory.write(Address::new(0x2000), 0x43);
         memory.write(Address::new(0x3ff8), 0x43);
@@ -192,7 +197,12 @@ mod tests {
     #[test]
     fn can_write_ppumask_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_write_mask().times(2).with(eq(0x43)).return_const(());
+        memory
+            .ppu_registers
+            .expect_write_mask()
+            .times(2)
+            .with(eq(0x43))
+            .return_const(());
 
         memory.write(Address::new(0x2001), 0x43);
         memory.write(Address::new(0x3ff9), 0x43);
@@ -201,7 +211,11 @@ mod tests {
     #[test]
     fn can_read_ppustatus_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_read_status().times(2).return_const(0x43);
+        memory
+            .ppu_registers
+            .expect_read_status()
+            .times(2)
+            .return_const(0x43);
 
         assert_eq!(memory.read(Address::new(0x2002)), 0x43);
         assert_eq!(memory.read(Address::new(0x3ffa)), 0x43);
@@ -210,7 +224,12 @@ mod tests {
     #[test]
     fn can_write_oamaddr_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_write_oam_address().times(2).with(eq(0x43)).return_const(());
+        memory
+            .ppu_registers
+            .expect_write_oam_address()
+            .times(2)
+            .with(eq(0x43))
+            .return_const(());
 
         memory.write(Address::new(0x2003), 0x43);
         memory.write(Address::new(0x3ffb), 0x43);
@@ -219,7 +238,11 @@ mod tests {
     #[test]
     fn can_read_oamdata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_read_oam_data().times(2).return_const(0x43);
+        memory
+            .ppu_registers
+            .expect_read_oam_data()
+            .times(2)
+            .return_const(0x43);
 
         assert_eq!(memory.read(Address::new(0x3ffc)), 0x43);
         assert_eq!(memory.read(Address::new(0x2004)), 0x43);
@@ -228,7 +251,12 @@ mod tests {
     #[test]
     fn can_write_oamdata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_write_oam_data().times(2).with(eq(0x43)).return_const(());
+        memory
+            .ppu_registers
+            .expect_write_oam_data()
+            .times(2)
+            .with(eq(0x43))
+            .return_const(());
 
         memory.write(Address::new(0x2004), 0x43);
         memory.write(Address::new(0x3ffc), 0x43);
@@ -237,12 +265,18 @@ mod tests {
     #[test]
     fn can_write_oamdma_in_nes_cpu_memory() {
         let mut expected = [0u8; 256];
+        #[allow(clippy::needless_range_loop)] // Cleaner like this
         for i in 0..=255 {
             expected[i] = i as u8;
         }
 
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_write_oam_dma().once().with(eq(expected)).return_const(());
+        memory
+            .ppu_registers
+            .expect_write_oam_dma()
+            .once()
+            .with(eq(expected))
+            .return_const(());
 
         for i in 0x0200..=0x02ff {
             memory.write(Address::new(i), expected[i as usize % 256]);
@@ -254,7 +288,12 @@ mod tests {
     #[test]
     fn can_write_ppuscroll_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_write_scroll().times(2).with(eq(0x43)).return_const(());
+        memory
+            .ppu_registers
+            .expect_write_scroll()
+            .times(2)
+            .with(eq(0x43))
+            .return_const(());
 
         memory.write(Address::new(0x2005), 0x43);
         memory.write(Address::new(0x3ffd), 0x43);
@@ -263,7 +302,12 @@ mod tests {
     #[test]
     fn can_write_ppuaddr_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_write_address().times(2).with(eq(0x43)).return_const(());
+        memory
+            .ppu_registers
+            .expect_write_address()
+            .times(2)
+            .with(eq(0x43))
+            .return_const(());
 
         memory.write(Address::new(0x2006), 0x43);
         memory.write(Address::new(0x3ffe), 0x43);
@@ -272,7 +316,12 @@ mod tests {
     #[test]
     fn can_read_ppudata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_write_data().times(2).with(eq(0x43)).return_const(());
+        memory
+            .ppu_registers
+            .expect_write_data()
+            .times(2)
+            .with(eq(0x43))
+            .return_const(());
 
         memory.write(Address::new(0x2007), 0x43);
         memory.write(Address::new(0x3fff), 0x43);
@@ -281,7 +330,11 @@ mod tests {
     #[test]
     fn can_write_ppudata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.expect_read_data().times(2).return_const(0x43);
+        memory
+            .ppu_registers
+            .expect_read_data()
+            .times(2)
+            .return_const(0x43);
 
         assert_eq!(memory.read(Address::new(0x3fff)), 0x43);
         assert_eq!(memory.read(Address::new(0x2007)), 0x43);
@@ -311,7 +364,12 @@ mod tests {
     #[test]
     fn writing_to_4016_writes_to_input_device() {
         let mut memory = nes_cpu_memory();
-        memory.input.expect_write().once().with(eq(52)).return_const(());
+        memory
+            .input
+            .expect_write()
+            .once()
+            .with(eq(52))
+            .return_const(());
 
         memory.write(Address::new(0x4016), 52);
     }

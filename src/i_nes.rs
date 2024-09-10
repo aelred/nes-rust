@@ -23,7 +23,7 @@ pub enum INesReadError {
 }
 
 impl fmt::Display for INesReadError {
-    fn fmt<'a>(&self, f: &mut fmt::Formatter<'a>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             INesReadError::IO(error) => fmt::Display::fmt(error, f),
             INesReadError::UnrecognisedMapper(mapper) => {
