@@ -102,14 +102,11 @@ impl<M: Memory> CPU<M> {
         self.memory.write(address, byte);
     }
 
-    fn accumulator(&self) -> u8 {
-        self.accumulator
-    }
-
     pub fn run_instruction(&mut self) -> u8 {
         self.cycle_count = 0;
 
-        let instruction = self.instr();
+        let instruction = Instruction::from_opcode(self.incr_program_counter());
+        trace!("        {:?}", instruction);
 
         if self.non_maskable_interrupt {
             self.non_maskable_interrupt = false;
@@ -121,62 +118,62 @@ impl<M: Memory> CPU<M> {
         self.cycle_count
     }
 
-    pub fn handle_instruction(&mut self, instruction: Instruction) {
+    fn handle_instruction(&mut self, instruction: Instruction) {
         use self::instruction::Instruction::*;
 
         match instruction {
             // Load/Store Operations
             LDA(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
+                let value = self.fetch(addressing_mode);
                 self.set_accumulator(value);
             }
             LDX(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
+                let value = self.fetch(addressing_mode);
                 self.set_x(value);
             }
             LDY(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
+                let value = self.fetch(addressing_mode);
                 self.set_y(value);
             }
             STA(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
-                self.write_reference(reference, self.accumulator(), true);
+                self.write_reference(reference, self.accumulator, true);
             }
             STX(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
-                self.write_reference(reference, self.x(), true);
+                self.write_reference(reference, self.x, true);
             }
             STY(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
-                self.write_reference(reference, self.y(), true);
+                self.write_reference(reference, self.y, true);
             }
 
             // Register Transfers
             TAX => {
                 self.fetch_at_program_counter();
-                self.set_x(self.accumulator());
+                self.set_x(self.accumulator);
             }
             TAY => {
                 self.fetch_at_program_counter();
-                self.set_y(self.accumulator());
+                self.set_y(self.accumulator);
             }
             TXA => {
                 self.fetch_at_program_counter();
-                self.set_accumulator(self.x());
+                self.set_accumulator(self.x);
             }
             TYA => {
                 self.fetch_at_program_counter();
-                self.set_accumulator(self.y());
+                self.set_accumulator(self.y);
             }
 
             // Stack Operations
             TSX => {
                 self.fetch_at_program_counter();
-                self.set_x(self.stack_pointer());
+                self.set_x(self.stack_pointer);
             }
             TXS => {
                 self.fetch_at_program_counter();
-                *self.stack_pointer_mut() = self.x();
+                self.stack_pointer = self.x;
             }
             PLA => {
                 self.fetch_at_program_counter();
@@ -187,11 +184,11 @@ impl<M: Memory> CPU<M> {
             PLP => {
                 self.fetch_at_program_counter();
                 self.increment_stack();
-                *self.status_mut() = Status::from_bits_truncate(self.pull_stack());
+                self.status = Status::from_bits_truncate(self.pull_stack());
             }
             PHA => {
                 self.fetch_at_program_counter();
-                self.push_stack(self.accumulator())
+                self.push_stack(self.accumulator)
             }
             PHP => {
                 self.fetch_at_program_counter();
@@ -200,47 +197,46 @@ impl<M: Memory> CPU<M> {
 
             // Logical
             AND(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
-                self.set_accumulator(self.accumulator() & value);
+                let value = self.fetch(addressing_mode);
+                self.set_accumulator(self.accumulator & value);
             }
             EOR(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
-                self.set_accumulator(self.accumulator() ^ value);
+                let value = self.fetch(addressing_mode);
+                self.set_accumulator(self.accumulator ^ value);
             }
             ORA(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
-                self.set_accumulator(self.accumulator() | value);
+                let value = self.fetch(addressing_mode);
+                self.set_accumulator(self.accumulator | value);
             }
             BIT(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
-                let result = self.accumulator() & value;
-                self.status_mut().set(Status::ZERO, result == 0);
-                self.status_mut()
-                    .set(Status::OVERFLOW, value & (1 << 6) != 0);
-                self.status_mut()
+                let value = self.fetch(addressing_mode);
+                let result = self.accumulator & value;
+                self.status.set(Status::ZERO, result == 0);
+                self.status.set(Status::OVERFLOW, value & (1 << 6) != 0);
+                self.status
                     .set(Status::NEGATIVE, (value as i8).is_negative());
             }
 
             // Arithmetic
             ADC(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
+                let value = self.fetch(addressing_mode);
                 self.add_to_accumulator(value);
             }
             SBC(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
+                let value = self.fetch(addressing_mode);
                 self.sub_from_accumulator(value);
             }
             CMP(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
-                self.compare(self.accumulator(), value);
+                let value = self.fetch(addressing_mode);
+                self.compare(self.accumulator, value);
             }
             CPX(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
-                self.compare(self.x(), value);
+                let value = self.fetch(addressing_mode);
+                self.compare(self.x, value);
             }
             CPY(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
-                self.compare(self.y(), value)
+                let value = self.fetch(addressing_mode);
+                self.compare(self.y, value)
             }
 
             // Increments & Decrements
@@ -289,8 +285,7 @@ impl<M: Memory> CPU<M> {
 
             // Jumps & Calls
             JMP(addressing_mode) => {
-                let addr = addressing_mode.fetch_address(self);
-                *self.program_counter_mut() = addr;
+                self.program_counter = addressing_mode.fetch_address(self);
             }
             JSR => {
                 let addr = self.fetch_address_at_program_counter();
@@ -299,60 +294,60 @@ impl<M: Memory> CPU<M> {
 
                 // For some reason the spec says the pointer must be to the last byte of the JSR
                 // instruction...
-                let data = self.program_counter() - 1;
+                let data = self.program_counter - 1;
 
                 self.push_stack(data.higher());
                 self.push_stack(data.lower());
 
-                *self.program_counter_mut() = addr;
+                self.program_counter = addr;
             }
             RTS => {
                 self.fetch_at_program_counter();
                 self.increment_stack();
                 let lower = self.pull_and_increment_stack();
                 let higher = self.pull_stack();
-                *self.program_counter_mut() = Address::from_bytes(higher, lower);
-                self.fetch_and_incr_program_counter();
+                self.program_counter = Address::from_bytes(higher, lower);
+                self.incr_program_counter();
             }
 
             // Branches
-            BCC => self.branch_if(!self.status().contains(Status::CARRY)),
-            BCS => self.branch_if(self.status().contains(Status::CARRY)),
-            BEQ => self.branch_if(self.status().contains(Status::ZERO)),
-            BMI => self.branch_if(self.status().contains(Status::NEGATIVE)),
-            BNE => self.branch_if(!self.status().contains(Status::ZERO)),
-            BPL => self.branch_if(!self.status().contains(Status::NEGATIVE)),
-            BVC => self.branch_if(!self.status().contains(Status::OVERFLOW)),
-            BVS => self.branch_if(self.status().contains(Status::OVERFLOW)),
+            BCC => self.branch_if(!self.status.contains(Status::CARRY)),
+            BCS => self.branch_if(self.status.contains(Status::CARRY)),
+            BEQ => self.branch_if(self.status.contains(Status::ZERO)),
+            BMI => self.branch_if(self.status.contains(Status::NEGATIVE)),
+            BNE => self.branch_if(!self.status.contains(Status::ZERO)),
+            BPL => self.branch_if(!self.status.contains(Status::NEGATIVE)),
+            BVC => self.branch_if(!self.status.contains(Status::OVERFLOW)),
+            BVS => self.branch_if(self.status.contains(Status::OVERFLOW)),
 
             // Status Flag Changes
             CLC => {
                 self.fetch_at_program_counter();
-                self.status_mut().remove(Status::CARRY)
+                self.status.remove(Status::CARRY)
             }
             CLD => {
                 self.fetch_at_program_counter();
-                self.status_mut().remove(Status::DECIMAL)
+                self.status.remove(Status::DECIMAL)
             }
             CLI => {
                 self.fetch_at_program_counter();
-                self.status_mut().remove(Status::INTERRUPT_DISABLE)
+                self.status.remove(Status::INTERRUPT_DISABLE)
             }
             CLV => {
                 self.fetch_at_program_counter();
-                self.status_mut().remove(Status::OVERFLOW)
+                self.status.remove(Status::OVERFLOW)
             }
             SEC => {
                 self.fetch_at_program_counter();
-                self.status_mut().insert(Status::CARRY)
+                self.status.insert(Status::CARRY)
             }
             SED => {
                 self.fetch_at_program_counter();
-                self.status_mut().insert(Status::DECIMAL)
+                self.status.insert(Status::DECIMAL)
             }
             SEI => {
                 self.fetch_at_program_counter();
-                self.status_mut().insert(Status::INTERRUPT_DISABLE)
+                self.status.insert(Status::INTERRUPT_DISABLE)
             }
 
             // System Functions
@@ -366,10 +361,10 @@ impl<M: Memory> CPU<M> {
             RTI => {
                 self.fetch_at_program_counter();
                 self.increment_stack();
-                *self.status_mut() = Status::from_bits_truncate(self.pull_and_increment_stack());
+                self.status = Status::from_bits_truncate(self.pull_and_increment_stack());
                 let lower = self.pull_and_increment_stack();
                 let higher = self.pull_stack();
-                *self.program_counter_mut() = Address::from_bytes(higher, lower);
+                self.program_counter = Address::from_bytes(higher, lower);
             }
 
             // Unofficial Opcodes
@@ -377,22 +372,22 @@ impl<M: Memory> CPU<M> {
                 self.fetch_ref(addressing_mode);
             }
             SKB => {
-                self.fetch_and_incr_program_counter();
+                self.incr_program_counter();
             }
             LAX(addressing_mode) => {
-                let value = self.fetch(addressing_mode, true);
+                let value = self.fetch(addressing_mode);
                 self.set_accumulator(value);
                 self.set_x(value);
             }
             SAX(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
-                self.write_reference(reference, self.accumulator() & self.x(), true);
+                self.write_reference(reference, self.accumulator & self.x, true);
             }
             DCP(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 self.decrement(reference);
                 let value = self.read_reference(reference, false);
-                self.compare(self.accumulator(), value);
+                self.compare(self.accumulator, value);
             }
             ISC(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
@@ -403,17 +398,17 @@ impl<M: Memory> CPU<M> {
             SLO(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 let value = self.asl(reference);
-                self.set_accumulator(self.accumulator() | value);
+                self.set_accumulator(self.accumulator | value);
             }
             RLA(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 let value = self.rol(reference);
-                self.set_accumulator(self.accumulator() & value);
+                self.set_accumulator(self.accumulator & value);
             }
             SRE(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
                 let value = self.lsr(reference);
-                self.set_accumulator(self.accumulator() ^ value);
+                self.set_accumulator(self.accumulator ^ value);
             }
             RRA(addressing_mode) => {
                 let reference = self.fetch_ref(addressing_mode);
@@ -446,26 +441,25 @@ impl<M: Memory> CPU<M> {
     fn interrupt(&mut self, address_vector: Address, break_flag: bool) {
         // For some reason the spec says the pointer must be to the last byte of the BRK
         // instruction...
-        let data = self.program_counter() - 1;
+        let data = self.program_counter - 1;
 
         self.push_stack(data.higher());
         self.push_stack(data.lower());
         self.push_status(break_flag);
 
-        *self.program_counter_mut() = self.read_address(address_vector);
+        self.program_counter = self.read_address(address_vector);
     }
 
     fn push_status(&mut self, break_flag: bool) {
-        let mut status = self.status();
-        status.insert(Status::UNUSED);
-        status.set(Status::BREAK, break_flag);
-        self.push_stack(status.bits());
+        self.status.insert(Status::UNUSED);
+        self.status.set(Status::BREAK, break_flag);
+        self.push_stack(self.status.bits());
     }
 
     fn add_to_accumulator(&mut self, value: u8) {
-        let accumulator = self.accumulator();
+        let accumulator = self.accumulator;
 
-        let carry_in = self.status().contains(Status::CARRY) as u16;
+        let carry_in = self.status.contains(Status::CARRY) as u16;
 
         let full_result = u16::from(accumulator)
             .wrapping_add(u16::from(value))
@@ -476,14 +470,14 @@ impl<M: Memory> CPU<M> {
 
         // Check if the sign bit has changed
         let overflow = (((accumulator ^ result) & (value ^ result)) as i8).is_negative();
-        self.status_mut().set(Status::OVERFLOW, overflow);
+        self.status.set(Status::OVERFLOW, overflow);
 
         self.set_accumulator(result);
-        self.status_mut().set(Status::CARRY, carry_out);
+        self.status.set(Status::CARRY, carry_out);
     }
 
     fn shift(&mut self, reference: Reference, carry_bit: u8, op: impl FnOnce(u8, u8) -> u8) -> u8 {
-        let carry = self.status().contains(Status::CARRY);
+        let carry = self.status.contains(Status::CARRY);
 
         let old_value = self.read_reference(reference, false);
         self.set_reference(reference, old_value, false); // Redundant write
@@ -491,29 +485,29 @@ impl<M: Memory> CPU<M> {
         let carry = old_value & (1 << carry_bit) != 0;
 
         self.set_reference(reference, new_value, false);
-        self.status_mut().set(Status::CARRY, carry);
+        self.status.set(Status::CARRY, carry);
         new_value
     }
 
     fn push_stack(&mut self, byte: u8) {
-        let stack_address = STACK + u16::from(self.stack_pointer());
+        let stack_address = STACK + u16::from(self.stack_pointer);
         self.write(stack_address, byte);
-        *self.stack_pointer_mut() = self.stack_pointer().wrapping_sub(1);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
 
     fn increment_stack(&mut self) {
-        *self.stack_pointer_mut() = self.stack_pointer().wrapping_add(1);
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
         self.cycle_count += 1;
     }
 
     fn pull_and_increment_stack(&mut self) -> u8 {
-        let stack_address = STACK + u16::from(self.stack_pointer());
-        *self.stack_pointer_mut() = self.stack_pointer().wrapping_add(1);
+        let stack_address = STACK + u16::from(self.stack_pointer);
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
         self.read(stack_address)
     }
 
     fn pull_stack(&mut self) -> u8 {
-        let stack_address = STACK + u16::from(self.stack_pointer());
+        let stack_address = STACK + u16::from(self.stack_pointer);
         self.read(stack_address)
     }
 
@@ -529,43 +523,15 @@ impl<M: Memory> CPU<M> {
         self.set_reference(reference, value.wrapping_sub(1), false);
     }
 
-    fn program_counter_mut(&mut self) -> &mut Address {
-        &mut self.program_counter
-    }
-
-    fn x(&self) -> u8 {
-        self.x
-    }
-
-    fn y(&self) -> u8 {
-        self.y
-    }
-
-    fn stack_pointer(&self) -> u8 {
-        self.stack_pointer
-    }
-
-    fn stack_pointer_mut(&mut self) -> &mut u8 {
-        &mut self.stack_pointer
-    }
-
-    fn status(&self) -> Status {
-        self.status
-    }
-
-    fn status_mut(&mut self) -> &mut Status {
-        &mut self.status
-    }
-
     fn compare(&mut self, register: u8, value: u8) {
         let (result, carry) = register.overflowing_sub(value);
-        self.status_mut().set(Status::CARRY, !carry);
-        self.status_mut().set_flags(result);
+        self.status.set(Status::CARRY, !carry);
+        self.status.set_flags(result);
     }
 
     fn set_reference(&mut self, reference: Reference, value: u8, writeonly: bool) {
         self.write_reference(reference, value, writeonly);
-        self.status_mut().set_flags(value);
+        self.status.set_flags(value);
     }
 
     fn set_accumulator(&mut self, value: u8) {
@@ -581,9 +547,9 @@ impl<M: Memory> CPU<M> {
     }
 
     fn branch_if(&mut self, cond: bool) {
-        let offset = self.fetch_and_incr_program_counter() as i8;
+        let offset = self.incr_program_counter() as i8;
         if cond {
-            *self.program_counter_mut() += offset as u16;
+            self.program_counter += offset as u16;
             self.cycle_count += 1;
         }
     }
@@ -592,9 +558,9 @@ impl<M: Memory> CPU<M> {
         addressing_mode.fetch_ref(self)
     }
 
-    fn fetch<T: ReferenceAddressingMode>(&mut self, addressing_mode: T, readonly: bool) -> u8 {
+    fn fetch<T: ReferenceAddressingMode>(&mut self, addressing_mode: T) -> u8 {
         let reference = self.fetch_ref(addressing_mode);
-        self.read_reference(reference, readonly)
+        self.read_reference(reference, true)
     }
 
     fn read_reference(&mut self, reference: Reference, readonly: bool) -> u8 {
@@ -610,9 +576,9 @@ impl<M: Memory> CPU<M> {
                 }
                 self.read(address)
             }
-            Reference::Accumulator => self.accumulator(),
-            Reference::X => self.x(),
-            Reference::Y => self.y(),
+            Reference::Accumulator => self.accumulator,
+            Reference::X => self.x,
+            Reference::Y => self.y,
         }
     }
 
@@ -639,30 +605,20 @@ impl<M: Memory> CPU<M> {
         };
     }
 
-    fn instr(&mut self) -> Instruction {
-        let instruction = Instruction::from_opcode(self.fetch_and_incr_program_counter());
-        trace!("        {:?}", instruction);
-        instruction
-    }
-
-    fn fetch_and_incr_program_counter(&mut self) -> u8 {
+    fn incr_program_counter(&mut self) -> u8 {
         let data = self.fetch_at_program_counter();
-        trace!("{}  {:#04x}", self.program_counter(), data);
-        self.incr_program_counter();
+        trace!("{}  {:#04x}", self.program_counter, data);
+        self.program_counter += 1u16;
         data
     }
 
-    fn incr_program_counter(&mut self) {
-        *self.program_counter_mut() += 1u16;
-    }
-
     fn fetch_at_program_counter(&mut self) -> u8 {
-        self.read(self.program_counter())
+        self.read(self.program_counter)
     }
 
     fn fetch_address_at_program_counter(&mut self) -> Address {
-        let lower = self.fetch_and_incr_program_counter();
-        let higher = self.fetch_and_incr_program_counter();
+        let lower = self.incr_program_counter();
+        let higher = self.incr_program_counter();
         Address::from_bytes(higher, lower)
     }
 }
@@ -694,7 +650,7 @@ impl Reference {
 }
 
 impl fmt::Display for Reference {
-    fn fmt<'a>(&self, f: &mut fmt::Formatter<'a>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Reference::Immediate(value) => write!(f, "#{}", value),
             Reference::Address(address) => write!(f, "{}", address),
@@ -736,14 +692,14 @@ mod tests {
 
     use crate::cpu::addressing_modes::{
         BITAddressingMode, CompareAddressingMode, FlexibleAddressingMode, IncDecAddressingMode,
-        JumpAddressingMode, LDXAddressingMode, LDYAddressingMode, SAXAddressingMode,
-        STXAddressingMode, STYAddressingMode, ShiftAddressingMode, StoreAddressingMode,
+        JumpAddressingMode, LDXAddressingMode, LDYAddressingMode, STXAddressingMode,
+        STYAddressingMode, ShiftAddressingMode, StoreAddressingMode,
     };
     use crate::mem;
     use crate::ArrayMemory;
     use crate::Instruction::{
         ADC, AND, ASL, BCC, BIT, CMP, CPX, CPY, DEC, EOR, INC, JMP, LDA, LDX, LDY, LSR, ORA, ROL,
-        ROR, SAX, SBC, SLO, SRE, STA, STX, STY, TAX,
+        ROR, SBC, STA, STX, STY, TAX,
     };
 
     use super::instructions::*;
@@ -769,7 +725,7 @@ mod tests {
 
         let cpu = CPU::from_memory(&mut memory);
 
-        assert_eq!(cpu.program_counter(), Address::new(0x1234));
+        assert_eq!(cpu.program_counter, Address::new(0x1234));
     }
 
     #[test]
@@ -778,9 +734,9 @@ mod tests {
             cpu.accumulator = 42;
         });
 
-        assert_eq!(cpu.accumulator(), 52);
-        assert_eq!(cpu.status().contains(Status::OVERFLOW), false);
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.accumulator, 52);
+        assert_eq!(cpu.status.contains(Status::OVERFLOW), false);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
     }
 
     #[test]
@@ -789,9 +745,9 @@ mod tests {
             cpu.accumulator = 42;
         });
 
-        assert_eq!(cpu.accumulator(), 41);
-        assert_eq!(cpu.status().contains(Status::OVERFLOW), false);
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
+        assert_eq!(cpu.accumulator, 41);
+        assert_eq!(cpu.status.contains(Status::OVERFLOW), false);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
     }
 
     #[test]
@@ -800,9 +756,9 @@ mod tests {
             cpu.accumulator = 42i8 as u8;
         });
 
-        assert_eq!(cpu.accumulator() as i8, -87i8);
-        assert_eq!(cpu.status().contains(Status::OVERFLOW), true);
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.accumulator as i8, -87i8);
+        assert_eq!(cpu.status.contains(Status::OVERFLOW), true);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
     }
 
     #[test]
@@ -811,7 +767,7 @@ mod tests {
             cpu.accumulator = 0b1010;
         });
 
-        assert_eq!(cpu.accumulator(), 0b1000);
+        assert_eq!(cpu.accumulator, 0b1000);
     }
 
     #[test]
@@ -820,8 +776,8 @@ mod tests {
             cpu.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator(), 0b1000);
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.accumulator, 0b1000);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
     }
 
     #[test]
@@ -830,8 +786,8 @@ mod tests {
             cpu.accumulator = 0b1010_1010;
         });
 
-        assert_eq!(cpu.accumulator(), 0b0101_0100);
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
+        assert_eq!(cpu.accumulator, 0b0101_0100);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
     }
 
     #[test]
@@ -855,7 +811,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter, Address::new(82));
     }
 
     #[test]
@@ -865,7 +821,7 @@ mod tests {
             cpu.status.insert(Status::CARRY);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter, Address::new(92));
     }
 
     #[test]
@@ -875,7 +831,7 @@ mod tests {
             cpu.status.remove(Status::CARRY);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter, Address::new(92));
     }
 
     #[test]
@@ -886,7 +842,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter, Address::new(82));
     }
 
     #[test]
@@ -896,7 +852,7 @@ mod tests {
             cpu.status.remove(Status::ZERO);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter, Address::new(92));
     }
 
     #[test]
@@ -907,7 +863,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter, Address::new(82));
     }
 
     #[test]
@@ -922,7 +878,7 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
     }
 
     #[test]
@@ -937,7 +893,7 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
     }
 
     #[test]
@@ -950,7 +906,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status().contains(Status::OVERFLOW), false);
+        assert_eq!(cpu.status.contains(Status::OVERFLOW), false);
 
         let cpu = run_instr(
             mem!(
@@ -960,7 +916,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status().contains(Status::OVERFLOW), true);
+        assert_eq!(cpu.status.contains(Status::OVERFLOW), true);
     }
 
     #[test]
@@ -973,7 +929,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), false);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
 
         let cpu = run_instr(
             mem!(
@@ -983,7 +939,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
     }
 
     #[test]
@@ -993,7 +949,7 @@ mod tests {
             cpu.status.remove(Status::NEGATIVE);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter, Address::new(92));
     }
 
     #[test]
@@ -1004,7 +960,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter, Address::new(82));
     }
 
     #[test]
@@ -1015,7 +971,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter, Address::new(82));
     }
 
     #[test]
@@ -1025,7 +981,7 @@ mod tests {
             cpu.status.insert(Status::ZERO);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter, Address::new(92));
     }
 
     #[test]
@@ -1036,7 +992,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter, Address::new(82));
     }
 
     #[test]
@@ -1046,7 +1002,7 @@ mod tests {
             cpu.status.insert(Status::NEGATIVE);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter, Address::new(92));
     }
 
     #[test]
@@ -1057,7 +1013,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter, Address::new(82));
     }
 
     #[test]
@@ -1067,7 +1023,7 @@ mod tests {
             cpu.status.insert(Status::OVERFLOW);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter, Address::new(92));
     }
 
     #[test]
@@ -1077,7 +1033,7 @@ mod tests {
             cpu.status.remove(Status::OVERFLOW);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(92));
+        assert_eq!(cpu.program_counter, Address::new(92));
     }
 
     #[test]
@@ -1088,7 +1044,7 @@ mod tests {
         });
 
         // 2 steps ahead because PC also automatically increments
-        assert_eq!(cpu.program_counter(), Address::new(82));
+        assert_eq!(cpu.program_counter, Address::new(82));
     }
 
     #[test]
@@ -1097,7 +1053,7 @@ mod tests {
             cpu.status.insert(Status::CARRY);
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
     }
 
     #[test]
@@ -1106,7 +1062,7 @@ mod tests {
             cpu.status.insert(Status::DECIMAL);
         });
 
-        assert_eq!(cpu.status().contains(Status::DECIMAL), false);
+        assert_eq!(cpu.status.contains(Status::DECIMAL), false);
     }
 
     #[test]
@@ -1115,7 +1071,7 @@ mod tests {
             cpu.status.insert(Status::INTERRUPT_DISABLE);
         });
 
-        assert_eq!(cpu.status().contains(Status::INTERRUPT_DISABLE), false);
+        assert_eq!(cpu.status.contains(Status::INTERRUPT_DISABLE), false);
     }
 
     #[test]
@@ -1124,7 +1080,7 @@ mod tests {
             cpu.status.insert(Status::OVERFLOW);
         });
 
-        assert_eq!(cpu.status().contains(Status::OVERFLOW), false);
+        assert_eq!(cpu.status.contains(Status::OVERFLOW), false);
     }
 
     #[test]
@@ -1133,19 +1089,19 @@ mod tests {
             cpu.accumulator = 1;
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 10;
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 100;
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
     }
 
     #[test]
@@ -1154,19 +1110,19 @@ mod tests {
             cpu.accumulator = 1;
         });
 
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 10;
         });
 
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 100;
         });
 
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
     }
 
     #[test]
@@ -1175,19 +1131,19 @@ mod tests {
             cpu.accumulator = 1;
         });
 
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 10;
         });
 
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), false);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
 
         let cpu = run_instr(mem!(CMP_IMMEDIATE, 10u8), |cpu| {
             cpu.accumulator = 100;
         });
 
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), false);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
     }
 
     #[test]
@@ -1196,25 +1152,25 @@ mod tests {
             cpu.x = 1;
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
 
         let cpu = run_instr(mem!(CPX_IMMEDIATE, 10u8), |cpu| {
             cpu.x = 10;
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), false);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
 
         let cpu = run_instr(mem!(CPX_IMMEDIATE, 10u8), |cpu| {
             cpu.x = 100;
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), false);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
     }
 
     #[test]
@@ -1223,25 +1179,25 @@ mod tests {
             cpu.y = 1;
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
 
         let cpu = run_instr(mem!(CPY_IMMEDIATE, 10u8), |cpu| {
             cpu.y = 10;
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), false);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
 
         let cpu = run_instr(mem!(CPY_IMMEDIATE, 10u8), |cpu| {
             cpu.y = 100;
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), false);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
     }
 
     #[test]
@@ -1268,7 +1224,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 44);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
 
         let mut cpu = run_instr(
             mem!(
@@ -1279,7 +1235,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 0);
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
     }
 
     #[test]
@@ -1293,7 +1249,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 44);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
 
         let mut cpu = run_instr(
             mem!(
@@ -1304,7 +1260,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)) as i8, -1i8);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
     }
 
     #[test]
@@ -1313,7 +1269,7 @@ mod tests {
             cpu.x = 45;
         });
 
-        assert_eq!(cpu.x(), 44);
+        assert_eq!(cpu.x, 44);
     }
 
     #[test]
@@ -1322,15 +1278,15 @@ mod tests {
             cpu.x = 45;
         });
 
-        assert_eq!(cpu.x(), 44);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.x, 44);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
 
         let cpu = run_instr(mem!(DEX), |cpu| {
             cpu.x = 1;
         });
 
-        assert_eq!(cpu.x(), 0);
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
+        assert_eq!(cpu.x, 0);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
     }
 
     #[test]
@@ -1339,15 +1295,15 @@ mod tests {
             cpu.x = 45;
         });
 
-        assert_eq!(cpu.x(), 44);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.x, 44);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
 
         let cpu = run_instr(mem!(DEX), |cpu| {
             cpu.x = 0;
         });
 
-        assert_eq!(cpu.x() as i8, -1i8);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.x as i8, -1i8);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
     }
 
     #[test]
@@ -1356,7 +1312,7 @@ mod tests {
             cpu.y = 45;
         });
 
-        assert_eq!(cpu.y(), 44);
+        assert_eq!(cpu.y, 44);
     }
 
     #[test]
@@ -1365,15 +1321,15 @@ mod tests {
             cpu.y = 45;
         });
 
-        assert_eq!(cpu.y(), 44);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.y, 44);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
 
         let cpu = run_instr(mem!(DEY), |cpu| {
             cpu.y = 1;
         });
 
-        assert_eq!(cpu.y(), 0);
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
+        assert_eq!(cpu.y, 0);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
     }
 
     #[test]
@@ -1382,15 +1338,15 @@ mod tests {
             cpu.y = 45;
         });
 
-        assert_eq!(cpu.y(), 44);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.y, 44);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
 
         let cpu = run_instr(mem!(DEY), |cpu| {
             cpu.y = 0;
         });
 
-        assert_eq!(cpu.y() as i8, -1i8);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.y as i8, -1i8);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
     }
 
     #[test]
@@ -1399,7 +1355,7 @@ mod tests {
             cpu.accumulator = 0b1010;
         });
 
-        assert_eq!(cpu.accumulator(), 0b0110);
+        assert_eq!(cpu.accumulator, 0b0110);
     }
 
     #[test]
@@ -1426,7 +1382,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 46);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
 
         let mut cpu = run_instr(
             mem!(
@@ -1437,7 +1393,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 0);
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
     }
 
     #[test]
@@ -1451,7 +1407,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 46);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
 
         let mut cpu = run_instr(
             mem!(
@@ -1462,7 +1418,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)) as i8, -9i8);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
     }
 
     #[test]
@@ -1471,7 +1427,7 @@ mod tests {
             cpu.x = 45;
         });
 
-        assert_eq!(cpu.x(), 46);
+        assert_eq!(cpu.x, 46);
     }
 
     #[test]
@@ -1480,7 +1436,7 @@ mod tests {
             cpu.y = 45;
         });
 
-        assert_eq!(cpu.y(), 46);
+        assert_eq!(cpu.y, 46);
     }
 
     #[test]
@@ -1489,7 +1445,7 @@ mod tests {
             cpu.program_counter = Address::new(200);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(100));
+        assert_eq!(cpu.program_counter, Address::new(100));
     }
 
     #[test]
@@ -1504,7 +1460,7 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.program_counter(), Address::new(10));
+        assert_eq!(cpu.program_counter, Address::new(10));
     }
 
     #[test]
@@ -1513,7 +1469,7 @@ mod tests {
             cpu.program_counter = Address::new(200);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(100));
+        assert_eq!(cpu.program_counter, Address::new(100));
     }
 
     #[test]
@@ -1541,21 +1497,21 @@ mod tests {
     fn instr_lda_loads_operand_into_accunmulator() {
         let cpu = run_instr(mem!(LDA_IMMEDIATE, 5u8), |_| {});
 
-        assert_eq!(cpu.accumulator(), 5);
+        assert_eq!(cpu.accumulator, 5);
     }
 
     #[test]
     fn instr_ldx_loads_operand_into_x_register() {
         let cpu = run_instr(mem!(LDX_IMMEDIATE, 5u8), |_| {});
 
-        assert_eq!(cpu.x(), 5);
+        assert_eq!(cpu.x, 5);
     }
 
     #[test]
     fn instr_ldy_loads_operand_into_y_register() {
         let cpu = run_instr(mem!(LDY_IMMEDIATE, 5u8), |_| {});
 
-        assert_eq!(cpu.y(), 5);
+        assert_eq!(cpu.y, 5);
     }
 
     #[test]
@@ -1564,8 +1520,8 @@ mod tests {
             cpu.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator(), 0b10);
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.accumulator, 0b10);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
     }
 
     #[test]
@@ -1574,8 +1530,8 @@ mod tests {
             cpu.accumulator = 0b101_0101;
         });
 
-        assert_eq!(cpu.accumulator(), 0b10_1010);
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
+        assert_eq!(cpu.accumulator, 0b10_1010);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
     }
 
     #[test]
@@ -1584,7 +1540,7 @@ mod tests {
             cpu.program_counter = Address::new(20);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(21));
+        assert_eq!(cpu.program_counter, Address::new(21));
     }
 
     #[test]
@@ -1593,7 +1549,7 @@ mod tests {
             cpu.accumulator = 0b1010;
         });
 
-        assert_eq!(cpu.accumulator(), 0b1110);
+        assert_eq!(cpu.accumulator, 0b1110);
     }
 
     #[test]
@@ -1646,7 +1602,7 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.accumulator(), 20);
+        assert_eq!(cpu.accumulator, 20);
     }
 
     #[test]
@@ -1668,7 +1624,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status().bits(), 31);
+        assert_eq!(cpu.status.bits(), 31);
     }
 
     #[test]
@@ -1687,24 +1643,24 @@ mod tests {
             cpu.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator(), 0b1000);
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.accumulator, 0b1000);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
 
         let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
             cpu.status.insert(Status::CARRY);
             cpu.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator(), 0b1001);
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.accumulator, 0b1001);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
 
         let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
             cpu.status.remove(Status::CARRY);
             cpu.accumulator = 0b1000_0000;
         });
 
-        assert_eq!(cpu.accumulator(), 0);
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
+        assert_eq!(cpu.accumulator, 0);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
     }
 
     #[test]
@@ -1714,24 +1670,24 @@ mod tests {
             cpu.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator(), 0b10);
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.accumulator, 0b10);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
 
         let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
             cpu.status.insert(Status::CARRY);
             cpu.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator(), 0b1000_0010);
-        assert_eq!(cpu.status().contains(Status::CARRY), false);
+        assert_eq!(cpu.accumulator, 0b1000_0010);
+        assert_eq!(cpu.status.contains(Status::CARRY), false);
 
         let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
             cpu.status.remove(Status::CARRY);
             cpu.accumulator = 0b1;
         });
 
-        assert_eq!(cpu.accumulator(), 0);
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
+        assert_eq!(cpu.accumulator, 0);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
     }
 
     #[test]
@@ -1746,7 +1702,7 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.program_counter(), Address::new(0x1235));
+        assert_eq!(cpu.program_counter, Address::new(0x1235));
     }
 
     #[test]
@@ -1765,8 +1721,8 @@ mod tests {
             cpu.accumulator = 42;
         });
 
-        assert_eq!(cpu.accumulator(), 32);
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
+        assert_eq!(cpu.accumulator, 32);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
     }
 
     #[test]
@@ -1778,8 +1734,12 @@ mod tests {
             });
 
             (
-                cpu.accumulator() as i8,
-                cpu.status().contains(Status::OVERFLOW),
+                cpu.accumulator as i8,
+                {
+                    let this = &cpu;
+                    this.status
+                }
+                .contains(Status::OVERFLOW),
             )
         }
 
@@ -1799,7 +1759,7 @@ mod tests {
             cpu.status.remove(Status::CARRY);
         });
 
-        assert_eq!(cpu.status().contains(Status::CARRY), true);
+        assert_eq!(cpu.status.contains(Status::CARRY), true);
     }
 
     #[test]
@@ -1808,7 +1768,7 @@ mod tests {
             cpu.status.remove(Status::DECIMAL);
         });
 
-        assert_eq!(cpu.status().contains(Status::DECIMAL), true);
+        assert_eq!(cpu.status.contains(Status::DECIMAL), true);
     }
 
     #[test]
@@ -1817,7 +1777,7 @@ mod tests {
             cpu.status.remove(Status::INTERRUPT_DISABLE);
         });
 
-        assert_eq!(cpu.status().contains(Status::INTERRUPT_DISABLE), true);
+        assert_eq!(cpu.status.contains(Status::INTERRUPT_DISABLE), true);
     }
 
     #[test]
@@ -1853,7 +1813,7 @@ mod tests {
             cpu.accumulator = 65;
         });
 
-        assert_eq!(cpu.x(), 65);
+        assert_eq!(cpu.x, 65);
     }
 
     #[test]
@@ -1862,7 +1822,7 @@ mod tests {
             cpu.accumulator = 65;
         });
 
-        assert_eq!(cpu.y(), 65);
+        assert_eq!(cpu.y, 65);
     }
 
     #[test]
@@ -1871,7 +1831,7 @@ mod tests {
             cpu.stack_pointer = 65;
         });
 
-        assert_eq!(cpu.x(), 65);
+        assert_eq!(cpu.x, 65);
     }
 
     #[test]
@@ -1880,7 +1840,7 @@ mod tests {
             cpu.x = 65;
         });
 
-        assert_eq!(cpu.accumulator(), 65);
+        assert_eq!(cpu.accumulator, 65);
     }
 
     #[test]
@@ -1900,8 +1860,8 @@ mod tests {
             cpu.status.insert(Status::NEGATIVE);
         });
 
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
     }
 
     #[test]
@@ -1910,7 +1870,7 @@ mod tests {
             cpu.y = 65;
         });
 
-        assert_eq!(cpu.accumulator(), 65);
+        assert_eq!(cpu.accumulator, 65);
     }
 
     #[test]
@@ -1923,7 +1883,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.program_counter(), Address::new(0x1234));
+        assert_eq!(cpu.program_counter, Address::new(0x1234));
     }
 
     #[test]
@@ -1971,8 +1931,8 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.program_counter(), Address::new(0x1234));
-        assert_eq!(cpu.status().bits(), 0x56);
+        assert_eq!(cpu.program_counter, Address::new(0x1234));
+        assert_eq!(cpu.status.bits(), 0x56);
     }
 
     #[test]
@@ -2000,8 +1960,12 @@ mod tests {
                     let carry_bit = *carry_in as u16;
                     let expected = u16::from(*x) + u16::from(*y) + carry_bit;
 
-                    let carry_out = cpu.status().contains(Status::CARRY) as u8;
-                    let actual = u16::from_be_bytes([carry_out, cpu.accumulator()]);
+                    let carry_out = {
+                        let this = &cpu;
+                        this.status
+                    }
+                    .contains(Status::CARRY) as u8;
+                    let actual = u16::from_be_bytes([carry_out, cpu.accumulator]);
 
                     assert_eq!(actual, expected, "{} + {} + {}", x, y, carry_bit);
                 }
@@ -2028,8 +1992,12 @@ mod tests {
                         .wrapping_sub(1 - carry_bit);
                     let expected = expected & 0b1_1111_1111;
 
-                    let carry_out = cpu.status().contains(Status::CARRY) as u8;
-                    let accumulator = cpu.accumulator();
+                    let carry_out = {
+                        let this = &cpu;
+                        this.status
+                    }
+                    .contains(Status::CARRY) as u8;
+                    let accumulator = cpu.accumulator;
                     let actual = u16::from_be_bytes([1 - carry_out, accumulator]);
 
                     assert_eq!(
@@ -2048,8 +2016,8 @@ mod tests {
             cpu.accumulator = 42;
         });
 
-        assert_eq!(cpu.accumulator(), 43);
-        assert_eq!(cpu.status().contains(Status::ZERO), false);
+        assert_eq!(cpu.accumulator, 43);
+        assert_eq!(cpu.status.contains(Status::ZERO), false);
     }
 
     #[test]
@@ -2058,8 +2026,8 @@ mod tests {
             cpu.accumulator = 42;
         });
 
-        assert_eq!(cpu.accumulator(), 0);
-        assert_eq!(cpu.status().contains(Status::ZERO), true);
+        assert_eq!(cpu.accumulator, 0);
+        assert_eq!(cpu.status.contains(Status::ZERO), true);
     }
 
     #[test]
@@ -2068,8 +2036,8 @@ mod tests {
             cpu.accumulator = 42;
         });
 
-        assert_eq!(cpu.accumulator(), 43);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), false);
+        assert_eq!(cpu.accumulator, 43);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), false);
     }
 
     #[test]
@@ -2078,8 +2046,8 @@ mod tests {
             cpu.accumulator = 0;
         });
 
-        assert_eq!(cpu.accumulator() as i8, -1i8);
-        assert_eq!(cpu.status().contains(Status::NEGATIVE), true);
+        assert_eq!(cpu.accumulator as i8, -1i8);
+        assert_eq!(cpu.status.contains(Status::NEGATIVE), true);
     }
 
     #[test]
@@ -2088,7 +2056,7 @@ mod tests {
             cpu.program_counter = Address::new(100)
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(101));
+        assert_eq!(cpu.program_counter, Address::new(101));
     }
 
     #[test]
@@ -2097,7 +2065,7 @@ mod tests {
             cpu.program_counter = Address::new(100)
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(102));
+        assert_eq!(cpu.program_counter, Address::new(102));
     }
 
     #[test]
@@ -2106,7 +2074,7 @@ mod tests {
             cpu.program_counter = Address::new(100)
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(103));
+        assert_eq!(cpu.program_counter, Address::new(103));
     }
 
     #[test]
@@ -2146,7 +2114,7 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.program_counter(), Address::new(0x1237));
+        assert_eq!(cpu.program_counter, Address::new(0x1237));
     }
 
     #[test]
@@ -2155,7 +2123,7 @@ mod tests {
             cpu.program_counter = Address::new(0xffff);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(0));
+        assert_eq!(cpu.program_counter, Address::new(0));
     }
 
     #[test]
@@ -2164,7 +2132,7 @@ mod tests {
             cpu.program_counter = Address::new(0xfffe);
         });
 
-        assert_eq!(cpu.program_counter(), Address::new(0x1234));
+        assert_eq!(cpu.program_counter, Address::new(0x1234));
     }
 
     #[test]
@@ -2204,7 +2172,7 @@ mod tests {
             },
         );
 
-        assert_eq!(cpu.program_counter(), Address::new(0x5678));
+        assert_eq!(cpu.program_counter, Address::new(0x5678));
     }
 
     #[test]

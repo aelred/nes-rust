@@ -158,23 +158,23 @@ impl<M: Memory> CPU<M> {
                 Reference::Accumulator
             }
             AddressingMode::Immediate => {
-                let value = self.fetch_and_incr_program_counter();
+                let value = self.incr_program_counter();
                 Reference::Immediate(value)
             }
             AddressingMode::ZeroPage => {
-                let address = Address::from_bytes(0, self.fetch_and_incr_program_counter());
+                let address = Address::from_bytes(0, self.incr_program_counter());
                 Reference::Address(address)
             }
             AddressingMode::ZeroPageX => {
-                let operand: u8 = self.fetch_and_incr_program_counter();
+                let operand: u8 = self.incr_program_counter();
                 self.read(Address::from_bytes(0, operand)); // CPU does a pointless read
-                let address = Address::from_bytes(0, operand.wrapping_add(self.x()));
+                let address = Address::from_bytes(0, operand.wrapping_add(self.x));
                 Reference::Address(address)
             }
             AddressingMode::ZeroPageY => {
-                let operand: u8 = self.fetch_and_incr_program_counter();
+                let operand: u8 = self.incr_program_counter();
                 self.read(Address::from_bytes(0, operand)); // CPU does a pointless read
-                let address = Address::from_bytes(0, operand.wrapping_add(self.y()));
+                let address = Address::from_bytes(0, operand.wrapping_add(self.y));
                 Reference::Address(address)
             }
             AddressingMode::Absolute => {
@@ -182,24 +182,24 @@ impl<M: Memory> CPU<M> {
                 Reference::Address(address)
             }
             AddressingMode::AbsoluteX => {
-                Reference::indexed_address(self.absolute_address(), self.x())
+                Reference::indexed_address(self.absolute_address(), self.x)
             }
             AddressingMode::AbsoluteY => {
-                Reference::indexed_address(self.absolute_address(), self.y())
+                Reference::indexed_address(self.absolute_address(), self.y)
             }
             AddressingMode::Indirect => {
                 let address = self.indirect_address();
                 Reference::Address(address)
             }
             AddressingMode::IndexedIndirect => {
-                let offset = self.fetch_and_incr_program_counter();
+                let offset = self.incr_program_counter();
                 self.read(Address::from_bytes(0, offset)); // Redundant read
-                let address = self.read_zero_page_address(offset.wrapping_add(self.x()));
+                let address = self.read_zero_page_address(offset.wrapping_add(self.x));
                 Reference::Address(address)
             }
             AddressingMode::IndirectIndexed => {
-                let offset = self.fetch_and_incr_program_counter();
-                Reference::indexed_address(self.read_zero_page_address(offset), self.y())
+                let offset = self.incr_program_counter();
+                Reference::indexed_address(self.read_zero_page_address(offset), self.y)
             }
         }
     }
