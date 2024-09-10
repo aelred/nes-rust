@@ -2455,6 +2455,7 @@ mod tests {
             PageCross => {
                 // Make sure a page cross happens with any addressing mode
                 cpu.write(Address::new(0x01), 0x80);
+                cpu.write(Address::new(0x80), 0xFF);
                 cpu.x = 0xFF;
                 cpu.y = 0xFF;
             }
