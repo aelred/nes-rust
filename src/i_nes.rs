@@ -85,7 +85,12 @@ impl INes {
     }
 
     pub fn into_cartridge(self) -> Cartridge {
-        Cartridge::new(self.prg_rom, self.chr_rom, self.chr_ram_enabled, self.mapper)
+        Cartridge::new(
+            self.prg_rom,
+            self.chr_rom,
+            self.chr_ram_enabled,
+            self.mapper,
+        )
     }
 
     fn mapper(header: [u8; 16]) -> Result<Mapper, INesReadError> {

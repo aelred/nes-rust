@@ -7,19 +7,22 @@ use env_logger::fmt::Target;
 use log::{info, LevelFilter};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::render::{Texture, TextureCreator};
 use sdl2::render::WindowCanvas;
+use sdl2::render::{Texture, TextureCreator};
 use sdl2::video::WindowContext;
 
-use nes_rust::{Button, Color, HEIGHT, WIDTH};
 use nes_rust::INes;
-use nes_rust::NES;
 use nes_rust::NESDisplay;
+use nes_rust::NES;
+use nes_rust::{Button, Color, HEIGHT, WIDTH};
 
 const SCALE: u16 = 3;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::builder().target(Target::Stdout).filter_level(LevelFilter::Info).init();
+    env_logger::builder()
+        .target(Target::Stdout)
+        .filter_level(LevelFilter::Info)
+        .init();
 
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
@@ -170,7 +173,9 @@ impl<'r> NESDisplay for SDLDisplay<'r> {
         }
         if self.y == usize::from(HEIGHT) {
             self.y = 0;
-            self.texture.update(None, &self.buffer, WIDTH as usize * 4).unwrap();
+            self.texture
+                .update(None, &self.buffer, WIDTH as usize * 4)
+                .unwrap();
             self.canvas.copy(&self.texture, None, None).unwrap();
             self.canvas.present();
 

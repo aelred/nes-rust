@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
 
-use crate::Address;
 use crate::mapper::Mapper;
+use crate::Address;
 use crate::Memory;
 
 pub struct Cartridge {
@@ -11,7 +11,10 @@ pub struct Cartridge {
 
 impl Cartridge {
     pub fn new(
-        prg_rom: Box<[u8]>, chr_rom: Box<[u8]>, chr_ram_enabled: bool, mapper: Mapper,
+        prg_rom: Box<[u8]>,
+        chr_rom: Box<[u8]>,
+        chr_ram_enabled: bool,
+        mapper: Mapper,
     ) -> Self {
         if mapper != Mapper::NROM {
             unimplemented!("Unsupported mapper {:?}", mapper);
@@ -79,7 +82,9 @@ pub struct CHR {
 
 impl Debug for CHR {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CHR").field("chr_ram_enabled", &self.chr_ram_enabled).finish()
+        f.debug_struct("CHR")
+            .field("chr_ram_enabled", &self.chr_ram_enabled)
+            .finish()
     }
 }
 
@@ -103,9 +108,7 @@ impl Memory for CHR {
                 );
                 self.chr_rom[address.index()] = byte
             }
-            0x2000..=0x3eff => {
-                self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte
-            }
+            0x2000..=0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte,
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -115,8 +118,8 @@ impl Memory for CHR {
 
 #[cfg(test)]
 mod tests {
-    use crate::Address;
     use crate::mapper::Mapper;
+    use crate::Address;
 
     use super::*;
 
