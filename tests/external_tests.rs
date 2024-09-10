@@ -43,6 +43,7 @@ fn blargg_ppu_tests_palette_ram() {
         "blargg_ppu_tests_palette_ram",
         include_bytes!("blargg_ppu_tests/palette_ram.nes"),
         0xe412,
+        None,
     );
 }
 
@@ -52,6 +53,7 @@ fn blargg_ppu_tests_power_up_palette() {
         "blargg_ppu_tests_power_up_palette",
         include_bytes!("blargg_ppu_tests/power_up_palette.nes"),
         0xe3ac,
+        None,
     );
 }
 
@@ -61,6 +63,7 @@ fn blargg_ppu_tests_sprite_ram() {
         "blargg_ppu_tests_sprite_ram",
         include_bytes!("blargg_ppu_tests/sprite_ram.nes"),
         0xe467,
+        None,
     );
 }
 
@@ -71,6 +74,7 @@ fn blargg_ppu_tests_vbl_clear_time() {
         "blargg_ppu_test_vbl_clear_time",
         include_bytes!("blargg_ppu_tests/vbl_clear_time.nes"),
         0xe3b3,
+        None,
     );
 }
 
@@ -82,6 +86,7 @@ fn blargg_ppu_tests_vram_access() {
         "blargg_ppu_test_vram_access",
         include_bytes!("blargg_ppu_tests/vram_access.nes"),
         0xe48d,
+        None,
     );
 }
 
@@ -91,10 +96,11 @@ fn blargg_cpu_timing_test() {
         "blargg_cpu_timing_test",
         include_bytes!("blargg_cpu_tests/cpu_timing_test.nes"),
         0xea5a,
+        Some(include_bytes!("blargg_cpu_tests/success_screen.png")),
     );
 }
 
-fn blargg_test(name: &str, test: &[u8], end_address: u16) {
+fn blargg_test(name: &str, test: &[u8], end_address: u16, success_screen_bytes: Option<&[u8]>) {
     let _ = env_logger::builder().is_test(true).try_init();
 
     fs::create_dir_all("test_results").unwrap();
@@ -113,19 +119,25 @@ fn blargg_test(name: &str, test: &[u8], end_address: u16) {
     for _ in 0..ITERATIONS {
         if nes.program_counter() == Address::new(end_address) {
             let byte = nes.read_cpu(Address::new(0xf0));
-
             if byte == 0x01 {
                 return;
-            } else {
-                let buffer = nes.display().buffer();
-                fs::create_dir_all("test_results").unwrap();
-                image::save_buffer(&fname, buffer, WIDTH.into(), HEIGHT.into(), ColorType::Rgb8)
-                    .unwrap();
-                panic!(
-                    "Failed, error code: 0x{:02x}. Saved image in {}",
-                    byte, fname
-                )
             }
+
+            let buffer = nes.display().buffer();
+            if let Some(success_screen_bytes) = success_screen_bytes {
+                let success_screen = image::load_from_memory(success_screen_bytes).unwrap();
+                if success_screen.as_bytes() == buffer {
+                    return;
+                }
+            }
+
+            fs::create_dir_all("test_results").unwrap();
+            image::save_buffer(&fname, buffer, WIDTH.into(), HEIGHT.into(), ColorType::Rgb8)
+                .unwrap();
+            panic!(
+                "Failed, error code: 0x{:02x}. Saved image in {}",
+                byte, fname
+            )
         }
 
         nes.tick();
