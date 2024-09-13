@@ -15,6 +15,7 @@ enum Setup {
 }
 
 enum Terminate {
+    Never,
     Address(u16),
 }
 
@@ -55,6 +56,54 @@ enum Success {
         "blargg_cpu_timing_test", include_bytes!("blargg_cpu_tests/cpu_timing_test.nes"),
         Setup::Default, Terminate::Address(0xea5a), Success::Screen(include_bytes!("blargg_cpu_tests/success_screen.png"))
     },
+    vbl_basics = {
+        "vbl_basics", include_bytes!("ppu_vbl_nmi/rom_singles/01-vbl_basics.nes"),
+        Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
+    },
+    // TODO
+    // vbl_set_time = {
+    //     "vbl_set_time", include_bytes!("ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes"),
+    //     Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
+    // },
+    vbl_clear_time = {
+        "vbl_clear_time", include_bytes!("ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes"),
+        Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
+    },
+    // TODO
+    // nmi_control = {
+    //     "nmi_control", include_bytes!("ppu_vbl_nmi/rom_singles/04-nmi_control.nes"),
+    //     Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
+    // },
+    // TODO
+    // nmi_timing = {
+    //     "nmi_timing", include_bytes!("ppu_vbl_nmi/rom_singles/05-nmi_timing.nes"),
+    //     Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
+    // },
+    // TODO
+    // suppression = {
+    //     "suppression", include_bytes!("ppu_vbl_nmi/rom_singles/06-suppression.nes"),
+    //     Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
+    // },
+    // TODO
+    // nmi_on_timing = {
+    //     "nmi_on_timing", include_bytes!("ppu_vbl_nmi/rom_singles/07-nmi_on_timing.nes"),
+    //     Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
+    // },
+    // TODO
+    // nmi_off_timing = {
+    //     "nmi_off_timing", include_bytes!("ppu_vbl_nmi/rom_singles/08-nmi_off_timing.nes"),
+    //     Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
+    // },
+    // TODO
+    // even_odd_frames = {
+    //     "even_odd_frames", include_bytes!("ppu_vbl_nmi/rom_singles/09-even_odd_frames.nes"),
+    //     Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
+    // },
+    // TODO
+    // even_odd_timing = {
+    //     "even_odd_timing", include_bytes!("ppu_vbl_nmi/rom_singles/10-even_odd_timing.nes"),
+    //     Setup::Default, Terminate::Address(0xead5), Success::Byte(0x6000, 0x00)
+    // },
 )]
 fn external_test(
     name: &str,
@@ -81,6 +130,7 @@ fn external_test(
 
     for cycles in 0..ITERATIONS {
         let terminated = match terminate_check {
+            Terminate::Never => false,
             Terminate::Address(address) => nes.program_counter() == Address::new(address),
         };
 
