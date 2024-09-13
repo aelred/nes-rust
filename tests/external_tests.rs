@@ -61,7 +61,6 @@ enum Success {
         "vbl_basics", include_bytes!("ppu_vbl_nmi/rom_singles/01-vbl_basics.nes"),
         Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
     },
-    // TODO
     vbl_set_time = {
         "vbl_set_time", include_bytes!("ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes"),
         Setup::Default, Terminate::Address(0xe8d5), Success::Byte(0x6000, 0x00)
