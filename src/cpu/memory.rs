@@ -133,7 +133,8 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
                     ppu_registers.write_data(byte);
                 }
                 _ => {
-                    unimplemented!();
+                    // Writing to a read-only register
+                    // TODO: check behaviour https://www.nesdev.org/wiki/PPU_registers
                 }
             }
         } else {

@@ -443,7 +443,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
 
     fn write_oam_data(&mut self, byte: u8) {
         self.object_attribute_memory[self.oam_address as usize] = byte;
-        self.oam_address += 1;
+        self.oam_address = self.oam_address.wrapping_add(1);
     }
 
     fn write_scroll(&mut self, byte: u8) {
