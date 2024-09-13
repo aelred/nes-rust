@@ -1,146 +1,106 @@
 use std::fs;
 use std::io::Cursor;
+use std::ops::Range;
 
 use image::ColorType;
 
 use nes_rust::INes;
-use nes_rust::NoDisplay;
 use nes_rust::NES;
 use nes_rust::{Address, BufferDisplay, HEIGHT, WIDTH};
+use yare::parameterized;
 
-#[test]
-fn nestest() {
+enum Setup {
+    Default,
+    ProgramCounter(u16),
+}
+
+enum Terminate {
+    Address(u16),
+}
+
+enum Success {
+    Screen(&'static [u8]),
+    Byte(u16, u8),
+    Short(u16, u16),
+}
+
+#[parameterized(
+    nestest = {
+        "nestest", include_bytes!("nestest/nestest.nes"),
+        Setup::ProgramCounter(0xc000), Terminate::Address(0xc66e), Success::Short(0x02, 0x0000)
+    },
+    blargg_ppu_tests_palette_ram = {
+        "blargg_ppu_tests_palette_ram", include_bytes!("blargg_ppu_tests/palette_ram.nes"),
+        Setup::Default, Terminate::Address(0xe412), Success::Byte(0xf0, 0x01)
+    },
+    blargg_ppu_tests_power_up_palette = {
+        "blargg_ppu_tests_power_up_palette", include_bytes!("blargg_ppu_tests/power_up_palette.nes"),
+        Setup::Default, Terminate::Address(0xe3ac), Success::Byte(0xf0, 0x01)
+    },
+    blargg_ppu_tests_sprite_ram = {
+        "blargg_ppu_tests_sprite_ram", include_bytes!("blargg_ppu_tests/sprite_ram.nes"),
+        Setup::Default, Terminate::Address(0xe467), Success::Byte(0xf0, 0x01)
+    },
+    // TODO: PPU tick isn't right relative to CPU, cus we need to know ticks for each instruction type
+    blargg_ppu_tests_vbl_clear_time = {
+        "blargg_ppu_test_vbl_clear_time", include_bytes!("blargg_ppu_tests/vbl_clear_time.nes"),
+        Setup::Default, Terminate::Address(0xe3b3), Success::Byte(0xf0, 0x01)
+    },
+    // TODO
+    // blargg_ppu_tests_vram_access = {
+    //     "blargg_ppu_test_vram_access", include_bytes!("blargg_ppu_tests/vram_access.nes"),
+    //     Setup::Default, Terminate::Address(0xe48d), Success::Byte(0xf0, 0x01)
+    // },
+    blargg_cpu_timing_test = {
+        "blargg_cpu_timing_test", include_bytes!("blargg_cpu_tests/cpu_timing_test.nes"),
+        Setup::Default, Terminate::Address(0xea5a), Success::Screen(include_bytes!("blargg_cpu_tests/success_screen.png"))
+    },
+)]
+fn external_test(
+    name: &str,
+    test: &[u8],
+    setup: Setup,
+    terminate_check: Terminate,
+    success_check: Success,
+) {
     let _ = env_logger::builder().is_test(true).try_init();
-
-    let cursor = Cursor::new(include_bytes!("nestest.nes"));
-
-    let ines = INes::read(cursor).unwrap();
-    let mut cartridge = ines.into_cartridge();
-
-    let mut nes = NES::new(&mut cartridge, NoDisplay);
-
-    nes.set_program_counter(Address::new(0xc000));
-
-    loop {
-        if nes.program_counter() == Address::new(0xc66e) {
-            let byte0 = nes.read_cpu(Address::new(0x02));
-            let byte1 = nes.read_cpu(Address::new(0x03));
-
-            if (byte0, byte1) == (0, 0) {
-                break;
-            } else {
-                panic!("Failed, error code: 0x{:02x}{:02x}", byte0, byte1)
-            }
-        }
-
-        nes.tick();
-    }
-}
-
-#[test]
-fn blargg_ppu_tests_palette_ram() {
-    blargg_test(
-        "blargg_ppu_tests_palette_ram",
-        include_bytes!("blargg_ppu_tests/palette_ram.nes"),
-        0xe412,
-        None,
-    );
-}
-
-#[test]
-fn blargg_ppu_tests_power_up_palette() {
-    blargg_test(
-        "blargg_ppu_tests_power_up_palette",
-        include_bytes!("blargg_ppu_tests/power_up_palette.nes"),
-        0xe3ac,
-        None,
-    );
-}
-
-#[test]
-fn blargg_ppu_tests_sprite_ram() {
-    blargg_test(
-        "blargg_ppu_tests_sprite_ram",
-        include_bytes!("blargg_ppu_tests/sprite_ram.nes"),
-        0xe467,
-        None,
-    );
-}
-
-// TODO: PPU tick isn't right relative to CPU, cus we need to know ticks for each instruction type
-#[test]
-fn blargg_ppu_tests_vbl_clear_time() {
-    blargg_test(
-        "blargg_ppu_test_vbl_clear_time",
-        include_bytes!("blargg_ppu_tests/vbl_clear_time.nes"),
-        0xe3b3,
-        None,
-    );
-}
-
-// TODO
-#[test]
-#[ignore]
-fn blargg_ppu_tests_vram_access() {
-    blargg_test(
-        "blargg_ppu_test_vram_access",
-        include_bytes!("blargg_ppu_tests/vram_access.nes"),
-        0xe48d,
-        None,
-    );
-}
-
-#[test]
-fn blargg_cpu_timing_test() {
-    blargg_test(
-        "blargg_cpu_timing_test",
-        include_bytes!("blargg_cpu_tests/cpu_timing_test.nes"),
-        0xea5a,
-        Some(include_bytes!("blargg_cpu_tests/success_screen.png")),
-    );
-}
-
-fn blargg_test(name: &str, test: &[u8], end_address: u16, success_screen_bytes: Option<&[u8]>) {
-    let _ = env_logger::builder().is_test(true).try_init();
-
-    fs::create_dir_all("test_results").unwrap();
-    let fname = format!("./test_results/{}_failure.png", name);
-    let _ = fs::remove_file(&fname);
+    clear_nes_test_result_image(name);
 
     let cursor = Cursor::new(test);
-
     let ines = INes::read(cursor).unwrap();
     let mut cartridge = ines.into_cartridge();
 
     let mut nes = NES::new(&mut cartridge, BufferDisplay::default());
 
+    match setup {
+        Setup::Default => {}
+        Setup::ProgramCounter(address) => nes.set_program_counter(Address::new(address)),
+    }
+
     const ITERATIONS: usize = 10_000_000;
 
-    for _ in 0..ITERATIONS {
-        if nes.program_counter() == Address::new(end_address) {
-            let byte = nes.read_cpu(Address::new(0xf0));
-            if byte == 0x01 {
-                return;
-            }
+    for cycles in 0..ITERATIONS {
+        let terminated = match terminate_check {
+            Terminate::Address(address) => nes.program_counter() == Address::new(address),
+        };
 
-            let buffer = nes.display().buffer();
-            if let Some(success_screen_bytes) = success_screen_bytes {
-                let success_screen = image::load_from_memory(success_screen_bytes).unwrap();
-                if success_screen.as_bytes() == buffer {
-                    return;
-                }
-            }
-
-            fs::create_dir_all("test_results").unwrap();
-            image::save_buffer(&fname, buffer, WIDTH.into(), HEIGHT.into(), ColorType::Rgb8)
-                .unwrap();
-            panic!(
-                "Failed, error code: 0x{:02x}. Saved image in {}",
-                byte, fname
-            )
+        if !terminated {
+            nes.tick();
+            continue;
         }
 
-        nes.tick();
+        match get_result(success_check, &mut nes) {
+            Ok(()) => {
+                if cycles < 10 {
+                    panic!("Test passed suspiciously quickly, only {} cycles", cycles);
+                }
+                return;
+            }
+            Err(message) => {
+                let fname = save_nes_test_result_image(name, &nes);
+                panic!("Failed: {}. Saved image in {}", message, fname)
+            }
+        }
     }
 
     let pc1 = nes.program_counter();
@@ -153,4 +113,52 @@ fn blargg_test(name: &str, test: &[u8], end_address: u16, success_screen_bytes: 
         "Test didn't complete after {} iterations, last 3 program counters were: {} {} {}",
         ITERATIONS, pc1, pc2, pc3
     );
+}
+
+fn get_result(success_check: Success, nes: &mut NES<BufferDisplay>) -> Result<(), String> {
+    match success_check {
+        Success::Screen(bytes) => {
+            let success_screen = image::load_from_memory(bytes).unwrap();
+            if success_screen.as_bytes() == nes.display().buffer() {
+                Ok(())
+            } else {
+                Err("Screen doesn't match success".to_owned())
+            }
+        }
+        Success::Byte(address, expected) => {
+            let result = nes.read_cpu(Address::new(address));
+            if result == expected {
+                Ok(())
+            } else {
+                Err(format!("Expected 0x{:02x}, got 0x{:02x}", expected, result))
+            }
+        }
+        Success::Short(address, expected) => {
+            let byte1 = nes.read_cpu(Address::new(address));
+            let byte2 = nes.read_cpu(Address::new(address + 1));
+            let result = byte1 as u16 | (byte2 as u16) << 8;
+            if result == expected {
+                Ok(())
+            } else {
+                Err(format!("Expected 0x{:04x}, got 0x{:04x}", expected, result))
+            }
+        }
+    }
+}
+
+fn clear_nes_test_result_image(name: &str) {
+    let fname = nes_test_result_image_name(name);
+    fs::create_dir_all("test_results").unwrap();
+    let _ = fs::remove_file(&fname);
+}
+
+fn save_nes_test_result_image(name: &str, nes: &NES<BufferDisplay>) -> String {
+    let fname = nes_test_result_image_name(name);
+    let buffer = nes.display().buffer();
+    image::save_buffer(&fname, buffer, WIDTH.into(), HEIGHT.into(), ColorType::Rgb8).unwrap();
+    fname
+}
+
+fn nes_test_result_image_name(name: &str) -> String {
+    format!("./test_results/{}_failure.png", name)
 }
