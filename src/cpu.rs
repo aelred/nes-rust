@@ -31,7 +31,7 @@ const RESET_VECTOR: Address = Address::new(0xFFFC);
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
 #[derive(Debug)]
-pub struct CPU<M> {
+pub struct CPU<M = NESCPUMemory> {
     memory: M,
     /// A - 8-bit accumulator register.
     accumulator: u8,

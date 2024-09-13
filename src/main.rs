@@ -14,7 +14,7 @@ use sdl2::video::WindowContext;
 use nes_rust::INes;
 use nes_rust::NESDisplay;
 use nes_rust::NES;
-use nes_rust::{Button, Color, HEIGHT, WIDTH};
+use nes_rust::{Buttons, Color, HEIGHT, WIDTH};
 
 const SCALE: u16 = 3;
 
@@ -67,9 +67,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         INes::read(handle)?
     };
 
-    let mut cartridge = ines.into_cartridge();
+    let cartridge = ines.into_cartridge();
 
-    let mut nes = NES::new(&mut cartridge, display);
+    let mut nes = NES::new(cartridge, display);
 
     loop {
         // Arbitrary number of ticks so we don't poll events too much
@@ -104,16 +104,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn keycode_binding(keycode: Keycode) -> Option<Button> {
+fn keycode_binding(keycode: Keycode) -> Option<Buttons> {
     let button = match keycode {
-        Keycode::Z => Button::A,
-        Keycode::X => Button::B,
-        Keycode::RShift => Button::Select,
-        Keycode::Return => Button::Start,
-        Keycode::Up => Button::Up,
-        Keycode::Down => Button::Down,
-        Keycode::Left => Button::Left,
-        Keycode::Right => Button::Right,
+        Keycode::Z => Buttons::A,
+        Keycode::X => Buttons::B,
+        Keycode::RShift => Buttons::SELECT,
+        Keycode::Return => Buttons::START,
+        Keycode::Up => Buttons::UP,
+        Keycode::Down => Buttons::DOWN,
+        Keycode::Left => Buttons::LEFT,
+        Keycode::Right => Buttons::RIGHT,
         _ => return None,
     };
 

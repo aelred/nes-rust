@@ -1,7 +1,3 @@
-#[cfg(test)]
-use mockall::automock;
-
-#[cfg_attr(test, automock)]
 pub trait PPURegisters {
     fn write_control(&mut self, byte: u8);
 

@@ -4,15 +4,13 @@ use std::fmt::{Debug, Formatter};
 
 pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
-use crate::cartridge::CHR;
-use crate::cartridge::PRG;
 pub use crate::cpu::instructions;
 pub use crate::cpu::Instruction;
 use crate::cpu::NESCPUMemory;
 pub use crate::cpu::CPU;
 pub use crate::i_nes::INes;
 pub use crate::i_nes::INesReadError;
-pub use crate::input::Button;
+pub use crate::input::Buttons;
 use crate::input::Controller;
 pub use crate::memory::ArrayMemory;
 pub use crate::memory::Memory;
@@ -95,21 +93,19 @@ impl NESDisplay for BufferDisplay {
     }
 }
 
-type StandardPPU<'a> = PPU<NESPPUMemory<&'a mut CHR>>;
-
 #[derive(Debug)]
-pub struct NES<'a, D> {
-    cpu: CPU<NESCPUMemory<&'a mut PRG, StandardPPU<'a>, Controller>>,
+pub struct NES<D> {
+    cpu: CPU,
     display: D,
 }
 
-impl<'a, D: NESDisplay> NES<'a, D> {
-    pub fn new(cartridge: &'a mut Cartridge, display: D) -> Self {
-        let ppu_memory = NESPPUMemory::new(&mut cartridge.chr);
+impl<D: NESDisplay> NES<D> {
+    pub fn new(cartridge: Cartridge, display: D) -> Self {
+        let ppu_memory = NESPPUMemory::new(cartridge.chr);
         let ppu = PPU::with_memory(ppu_memory);
         let controller = Controller::default();
 
-        let cpu_memory = NESCPUMemory::new(&mut cartridge.prg, ppu, controller);
+        let cpu_memory = NESCPUMemory::new(cartridge.prg, ppu, controller);
         let cpu = CPU::from_memory(cpu_memory);
 
         NES { cpu, display }
@@ -148,7 +144,7 @@ impl<'a, D: NESDisplay> NES<'a, D> {
         self.cpu.run_instruction()
     }
 
-    fn ppu(&mut self) -> &mut StandardPPU<'a> {
+    fn ppu(&mut self) -> &mut PPU {
         self.cpu.memory().ppu_registers()
     }
 

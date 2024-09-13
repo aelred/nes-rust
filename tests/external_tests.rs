@@ -1,6 +1,5 @@
 use std::fs;
 use std::io::Cursor;
-use std::ops::Range;
 
 use image::ColorType;
 
@@ -117,9 +116,9 @@ fn external_test(
 
     let cursor = Cursor::new(test);
     let ines = INes::read(cursor).unwrap();
-    let mut cartridge = ines.into_cartridge();
+    let cartridge = ines.into_cartridge();
 
-    let mut nes = NES::new(&mut cartridge, BufferDisplay::default());
+    let mut nes = NES::new(cartridge, BufferDisplay::default());
 
     match setup {
         Setup::Default => {}

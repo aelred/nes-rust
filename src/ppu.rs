@@ -2,6 +2,7 @@ use std::fmt::{Debug, Formatter};
 
 use bitflags::bitflags;
 use log::warn;
+pub use registers::PPURegisters;
 
 use crate::Address;
 use crate::Memory;
@@ -9,7 +10,6 @@ use crate::Memory;
 use self::control::Control;
 use self::mask::Mask;
 pub use self::memory::NESPPUMemory;
-pub use self::registers::*;
 use self::scroll::Scroll;
 use self::status::Status;
 
@@ -23,7 +23,7 @@ mod status;
 const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
 const SPRITE_PALETTES: Address = Address::new(0x3f10);
 
-pub struct PPU<M> {
+pub struct PPU<M = NESPPUMemory> {
     memory: M,
     read_buffer: u8,
     object_attribute_memory: [u8; 256],

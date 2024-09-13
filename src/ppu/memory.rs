@@ -1,12 +1,13 @@
 use std::fmt::{Debug, Formatter};
 
+use crate::cartridge;
 use crate::Address;
 use crate::Memory;
 
 const CHR_END: usize = PALETTE_OFFSET - 1;
 const PALETTE_OFFSET: usize = 0x3f00;
 
-pub struct NESPPUMemory<CHR> {
+pub struct NESPPUMemory<CHR = cartridge::CHR> {
     palette_ram: [u8; 0x20],
     chr: CHR,
 }

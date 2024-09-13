@@ -1,8 +1,5 @@
 use bitflags::bitflags;
-#[cfg(test)]
-use mockall::automock;
 
-#[cfg_attr(test, automock)]
 pub trait Input {
     fn read(&mut self) -> u8;
     fn write(&mut self, value: u8);
@@ -18,12 +15,12 @@ pub struct Controller {
 const CURSOR_START: u8 = 0b1000_0000;
 
 impl Controller {
-    pub fn press(&mut self, button: Button) {
-        self.buttons.insert(button.into());
+    pub fn press(&mut self, buttons: Buttons) {
+        self.buttons.insert(buttons);
     }
 
-    pub fn release(&mut self, button: Button) {
-        self.buttons.remove(button.into());
+    pub fn release(&mut self, buttons: Buttons) {
+        self.buttons.remove(buttons);
     }
 }
 
@@ -61,20 +58,9 @@ impl Input for Controller {
     }
 }
 
-pub enum Button {
-    A,
-    B,
-    Select,
-    Start,
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
 bitflags! {
     #[derive(Default, Debug)]
-    struct Buttons: u8 {
+    pub struct Buttons: u8 {
         const A      = 0b1000_0000;
         const B      = 0b0100_0000;
         const SELECT = 0b0010_0000;
@@ -83,21 +69,6 @@ bitflags! {
         const DOWN   = 0b0000_0100;
         const LEFT   = 0b0000_0010;
         const RIGHT  = 0b0000_0001;
-    }
-}
-
-impl From<Button> for Buttons {
-    fn from(button: Button) -> Self {
-        match button {
-            Button::A => Buttons::A,
-            Button::B => Buttons::B,
-            Button::Select => Buttons::SELECT,
-            Button::Start => Buttons::START,
-            Button::Up => Buttons::UP,
-            Button::Down => Buttons::DOWN,
-            Button::Left => Buttons::LEFT,
-            Button::Right => Buttons::RIGHT,
-        }
     }
 }
 
@@ -110,27 +81,27 @@ mod tests {
         let mut controller = Controller::default();
         assert_eq!(controller.buttons.bits(), 0b0000_0000);
 
-        controller.press(Button::A);
-        controller.press(Button::B);
-        controller.press(Button::Select);
-        controller.press(Button::Start);
+        controller.press(Buttons::A);
+        controller.press(Buttons::B);
+        controller.press(Buttons::SELECT);
+        controller.press(Buttons::START);
         assert_eq!(controller.buttons.bits(), 0b1111_0000);
 
-        controller.release(Button::A);
+        controller.release(Buttons::A);
         assert_eq!(controller.buttons.bits(), 0b0111_0000);
 
-        controller.press(Button::Up);
+        controller.press(Buttons::UP);
         assert_eq!(controller.buttons.bits(), 0b0111_1000);
 
-        controller.press(Button::Down);
-        controller.press(Button::Left);
-        controller.press(Button::Right);
+        controller.press(Buttons::DOWN);
+        controller.press(Buttons::LEFT);
+        controller.press(Buttons::RIGHT);
         assert_eq!(controller.buttons.bits(), 0b0111_1111);
 
-        controller.release(Button::Up);
-        controller.release(Button::Down);
-        controller.release(Button::Left);
-        controller.release(Button::Right);
+        controller.release(Buttons::UP);
+        controller.release(Buttons::DOWN);
+        controller.release(Buttons::LEFT);
+        controller.release(Buttons::RIGHT);
         assert_eq!(controller.buttons.bits(), 0b0111_0000);
     }
 
@@ -176,15 +147,15 @@ mod tests {
         assert_eq!(controller.read(), 0);
         assert_eq!(controller.read(), 0);
 
-        controller.press(Button::A);
+        controller.press(Buttons::A);
         assert_eq!(controller.read(), 1);
         assert_eq!(controller.read(), 1);
 
-        controller.release(Button::A);
+        controller.release(Buttons::A);
         assert_eq!(controller.read(), 0);
         assert_eq!(controller.read(), 0);
 
-        controller.press(Button::A);
+        controller.press(Buttons::A);
         controller.write(0);
         assert_eq!(controller.read(), 1);
         assert_eq!(controller.read(), 0);
