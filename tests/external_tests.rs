@@ -14,6 +14,8 @@ enum Setup {
 }
 
 enum Terminate {
+    #[allow(dead_code)]
+    // Useful for debugging or adding new tests
     Never,
     Address(u16),
 }

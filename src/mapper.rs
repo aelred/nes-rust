@@ -15,7 +15,7 @@ impl TryFrom<u8> for Mapper {
             0 => Self::NROM,
             1 => Self::MMC1,
             19 => Self::Namco129,
-            _ => return Err(Self::Error::UnrecognisedMapper((value))),
+            _ => return Err(Self::Error::UnrecognisedMapper(value)),
         })
     }
 }

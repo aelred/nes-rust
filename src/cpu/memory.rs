@@ -4,7 +4,7 @@ use std::fmt::{Debug, Formatter};
 use log::trace;
 
 use crate::input::{Controller, Input};
-use crate::ppu::{self, PPURegisters, PPU};
+use crate::ppu::{self, PPURegisters};
 use crate::ArrayMemory;
 use crate::Memory;
 use crate::{cartridge, Address};
