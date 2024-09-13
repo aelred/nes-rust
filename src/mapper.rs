@@ -1,8 +1,21 @@
-use enum_primitive_derive::Primitive;
+use crate::INesReadError;
 
-#[derive(Debug, Eq, PartialEq, Primitive)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Mapper {
-    NROM = 0,
-    MMC1 = 1,
-    Namco129 = 19,
+    NROM,
+    MMC1,
+    Namco129,
+}
+
+impl TryFrom<u8> for Mapper {
+    type Error = INesReadError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0 => Self::NROM,
+            1 => Self::MMC1,
+            19 => Self::Namco129,
+            _ => return Err(Self::Error::UnrecognisedMapper((value))),
+        })
+    }
 }

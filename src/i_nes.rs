@@ -3,8 +3,6 @@ use std::fmt;
 use std::io;
 use std::io::Read;
 
-use num_traits::cast::FromPrimitive;
-
 use crate::cartridge::Cartridge;
 use crate::mapper::Mapper;
 
@@ -97,7 +95,7 @@ impl INes {
         let low = header[MAPPER_LOW_LOCATION] >> 4;
         let high = header[MAPPER_HIGH_LOCATION] & 0b1111_0000;
         let byte = low | high;
-        Mapper::from_u8(byte).ok_or_else(|| INesReadError::UnrecognisedMapper(byte))
+        Mapper::try_from(byte)
     }
 }
 
