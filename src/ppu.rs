@@ -41,6 +41,8 @@ pub struct PPU<M = NESPPUMemory> {
     write_lower: bool,
     fine_x: u8,
     oam_address: u8,
+    // Reading vblank just before it's set will prevent it being set and NMI being triggered
+    suppress_vblank: bool,
 }
 
 impl<M: Memory> PPU<M> {
@@ -62,6 +64,7 @@ impl<M: Memory> PPU<M> {
             write_lower: false,
             fine_x: 0,
             oam_address: 0,
+            suppress_vblank: false,
         }
     }
 
@@ -279,10 +282,13 @@ impl<M: Memory> PPU<M> {
                 }
             }
             (241, 1) => {
-                self.status.enter_vblank();
+                // TODO: also suppress NMI the frame after, apparently
+                if !self.suppress_vblank {
+                    self.status.enter_vblank();
 
-                if self.control.nmi_on_vblank() {
-                    interrupt = true;
+                    if self.control.nmi_on_vblank() {
+                        interrupt = true;
+                    }
                 }
             }
             (261, 1) => {
@@ -292,6 +298,8 @@ impl<M: Memory> PPU<M> {
             }
             _ => {}
         }
+
+        self.suppress_vblank = false;
 
         let color = if !self.rendering() {
             None
@@ -430,6 +438,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
 
     fn read_status(&mut self) -> u8 {
         self.write_lower = false;
+        self.suppress_vblank = true;
         self.status.read()
     }
 
