@@ -147,7 +147,7 @@ impl<'r> SDLDisplay<'r> {
             texture,
             buffer: [0; WIDTH as usize * HEIGHT as usize * 4],
             x: usize::from(WIDTH) - 8,
-            y: usize::from(HEIGHT),
+            y: usize::from(HEIGHT) - 1,
             start_of_frame: now,
             last_fps_log: now,
             frames_since_last_fps_log: 0,
