@@ -26,7 +26,6 @@ mod addressing_modes;
 mod instruction;
 mod memory;
 mod stack;
-mod stack_instructions;
 
 const NMI_VECTOR: Address = Address::new(0xFFFA);
 const RESET_VECTOR: Address = Address::new(0xFFFC);
@@ -124,30 +123,12 @@ impl<M: Memory> CPU<M> {
 
         match instruction {
             // Load/Store Operations
-            LDA(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_accumulator(value);
-            }
-            LDX(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_x(value);
-            }
-            LDY(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_y(value);
-            }
-            STA(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.write_reference(reference, self.accumulator, true);
-            }
-            STX(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.write_reference(reference, self.x, true);
-            }
-            STY(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.write_reference(reference, self.y, true);
-            }
+            LDA(addressing_mode) => self.lda(addressing_mode),
+            LDX(addressing_mode) => self.ldx(addressing_mode),
+            LDY(addressing_mode) => self.ldy(addressing_mode),
+            STA(addressing_mode) => self.sta(addressing_mode),
+            STX(addressing_mode) => self.stx(addressing_mode),
+            STY(addressing_mode) => self.sty(addressing_mode),
 
             // Register Transfers
             TAX => {
@@ -1461,27 +1442,6 @@ mod tests {
     }
 
     #[test]
-    fn instr_lda_loads_operand_into_accunmulator() {
-        let cpu = run_instr(mem!(LDA_IMMEDIATE, 5u8), |_| {});
-
-        assert_eq!(cpu.accumulator, 5);
-    }
-
-    #[test]
-    fn instr_ldx_loads_operand_into_x_register() {
-        let cpu = run_instr(mem!(LDX_IMMEDIATE, 5u8), |_| {});
-
-        assert_eq!(cpu.x, 5);
-    }
-
-    #[test]
-    fn instr_ldy_loads_operand_into_y_register() {
-        let cpu = run_instr(mem!(LDY_IMMEDIATE, 5u8), |_| {});
-
-        assert_eq!(cpu.y, 5);
-    }
-
-    #[test]
     fn instr_lsr_shifts_right() {
         let cpu = run_instr(mem!(LSR_ACCUMULATOR), |cpu| {
             cpu.accumulator = 0b100;
@@ -1661,33 +1621,6 @@ mod tests {
         });
 
         assert!(cpu.status.contains(Status::INTERRUPT_DISABLE));
-    }
-
-    #[test]
-    fn instr_sta_stores_accumulator_in_memory() {
-        let mut cpu = run_instr(mem!(STA_ABSOLUTE, 0x32, 0), |cpu| {
-            cpu.accumulator = 65;
-        });
-
-        assert_eq!(cpu.read(Address::new(0x32)), 65);
-    }
-
-    #[test]
-    fn instr_stx_stores_x_register_in_memory() {
-        let mut cpu = run_instr(mem!(STX_ABSOLUTE, 0x32, 0), |cpu| {
-            cpu.x = 65;
-        });
-
-        assert_eq!(cpu.read(Address::new(0x32)), 65);
-    }
-
-    #[test]
-    fn instr_sty_stores_y_register_in_memory() {
-        let mut cpu = run_instr(mem!(STY_ABSOLUTE, 0x32, 0), |cpu| {
-            cpu.y = 65;
-        });
-
-        assert_eq!(cpu.read(Address::new(0x32)), 65);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use crate::Memory;
 
-use super::{Status, CPU};
+use crate::cpu::{Status, CPU};
 
 impl<M: Memory> CPU<M> {
     pub fn pla(&mut self) {

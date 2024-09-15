@@ -12,6 +12,9 @@ use super::addressing_modes::STYAddressingMode;
 use super::addressing_modes::ShiftAddressingMode;
 use super::addressing_modes::StoreAddressingMode;
 
+pub mod load_store;
+pub mod stack;
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Instruction {
     // Load / Store Operations
