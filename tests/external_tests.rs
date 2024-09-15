@@ -21,6 +21,9 @@ enum Terminate {
 }
 
 enum Success {
+    #[allow(dead_code)]
+    // Useful for debugging or adding new tests
+    Never,
     Screen(&'static [u8]),
     Byte(u16, u8),
     Short(u16, u16),
@@ -104,6 +107,58 @@ enum Success {
     //     "even_odd_timing", include_bytes!("ppu_vbl_nmi/rom_singles/10-even_odd_timing.nes"),
     //     Setup::Default, Terminate::Address(0xead5), Success::Byte(0x6000, 0x00)
     // },
+    sprite_hit_basics = {
+        "sprite_hit_basics", include_bytes!("sprite_hit_tests/01.basics.nes"),
+        Setup::Default, Terminate::Address(0xe635), Success::Screen(include_bytes!("sprite_hit_tests/01.basics.success.png"))
+    },
+    sprite_hit_alignment = {
+        "sprite_hit_alignment", include_bytes!("sprite_hit_tests/02.alignment.nes"),
+        Setup::Default, Terminate::Address(0xe635), Success::Screen(include_bytes!("sprite_hit_tests/02.alignment.success.png"))
+    },
+    sprite_hit_corners = {
+        "sprite_hit_corners", include_bytes!("sprite_hit_tests/03.corners.nes"),
+        Setup::Default, Terminate::Address(0xe635), Success::Screen(include_bytes!("sprite_hit_tests/03.corners.success.png"))
+    },
+    // TODO
+    // sprite_hit_flip = {
+    //     "sprite_hit_flip", include_bytes!("sprite_hit_tests/04.flip.nes"),
+    //     Setup::Default, Terminate::Address(0xe635), Success::Never
+    // },
+    // TODO
+    // sprite_hit_left_clip = {
+    //     "sprite_hit_left_clip", include_bytes!("sprite_hit_tests/05.left_clip.nes"),
+    //     Setup::Default, Terminate::Address(0xe635), Success::Never
+    // },
+    // TODO
+    // sprite_hit_right_edge = {
+    //     "sprite_hit_right_edge", include_bytes!("sprite_hit_tests/06.right_edge.nes"),
+    //     Setup::Default, Terminate::Address(0xe635), Success::Never
+    // },
+    // TODO
+    // sprite_hit_screen_bottom = {
+    //     "sprite_hit_screen_bottom", include_bytes!("sprite_hit_tests/07.screen_bottom.nes"),
+    //     Setup::Default, Terminate::Address(0xe635), Success::Never
+    // },
+    // TODO
+    // sprite_hit_double_height = {
+    //     "sprite_hit_double_height", include_bytes!("sprite_hit_tests/08.double_height.nes"),
+    //     Setup::Default, Terminate::Address(0xe635), Success::Never
+    // },
+    // TODO
+    // sprite_hit_timing_basics = {
+    //     "sprite_hit_timing_basics", include_bytes!("sprite_hit_tests/09.timing_basics.nes"),
+    //     Setup::Default, Terminate::Address(0xe635), Success::Never
+    // },
+    // TODO
+    // sprite_hit_timing_order = {
+    //     "sprite_hit_timing_order", include_bytes!("sprite_hit_tests/10.timing_order.nes"),
+    //     Setup::Default, Terminate::Address(0xe635), Success::Never
+    // },
+    // TODO
+    // sprite_hit_edge_timing = {
+    //     "sprite_hit_edge_timing", include_bytes!("sprite_hit_tests/11.edge_timing.nes"),
+    //     Setup::Default, Terminate::Address(0xe635), Success::Never
+    // },
 )]
 fn external_test(
     name: &str,
@@ -167,6 +222,7 @@ fn external_test(
 
 fn get_result(success_check: Success, nes: &mut NES<BufferDisplay>) -> Result<(), String> {
     match success_check {
+        Success::Never => Err("Always fails".to_owned()),
         Success::Screen(bytes) => {
             let success_screen = image::load_from_memory(bytes).unwrap();
             if success_screen.as_bytes() == nes.display().buffer() {
