@@ -1013,19 +1013,26 @@ mod tests {
 
         let oam = [
             // y, index, attributes, x
-            0, 0, 0, 0, 22, 1, 1, 1, 23, 2, 2, 2, 30, 3, 3, 3, 31, 4, 4, 4, 255, 5, 5, 5,
-        ];
+            [0, 0, 0, 0],
+            [22, 1, 1, 1],
+            [23, 2, 2, 2],
+            [29, 3, 3, 3],
+            [30, 4, 4, 4],
+            [31, 5, 5, 5],
+            [255, 6, 6, 6],
+        ]
+        .as_flattened();
 
-        ppu.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
+        ppu.object_attribute_memory[..oam.len()].copy_from_slice(oam);
 
         ppu.scanline = 30;
 
         ppu.load_sprites();
 
         let expected = [
+            Sprite::new(1, 22, 1, SpriteAttributes::from_bits_truncate(1)),
             Sprite::new(2, 23, 2, SpriteAttributes::from_bits_truncate(2)),
-            Sprite::new(3, 30, 3, SpriteAttributes::from_bits_truncate(3)),
-            Sprite::default(),
+            Sprite::new(3, 29, 3, SpriteAttributes::from_bits_truncate(3)),
             Sprite::default(),
             Sprite::default(),
             Sprite::default(),
@@ -1070,7 +1077,7 @@ mod tests {
     fn loading_sprites_clears_active_sprites() {
         let mut ppu = PPU::with_memory(mem!());
 
-        let oam = [30, 3, 3, 3];
+        let oam = [29, 3, 3, 3];
         ppu.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
 
         ppu.scanline = 30;
