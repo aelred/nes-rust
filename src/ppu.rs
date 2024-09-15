@@ -32,11 +32,13 @@ pub struct PPU<M = NESPPUMemory> {
     tile_pattern: ShiftRegister,
     palette_select: ShiftRegister,
     active_sprites: [Sprite; 8],
+    active_sprites_has_zero: bool,
     control: Control,
     status: Status,
     mask: Mask,
-    // These are raw u16s and not Addresses because they're also used for scrolling information.
+    // Sometimes called 'v', can hold address _or_ scrolling information.
     address: u16,
+    // Sometimes called 't', can hold address _or_ scrolling information.
     temporary_address: u16,
     write_lower: bool,
     fine_x: u8,
@@ -56,6 +58,7 @@ impl<M: Memory> PPU<M> {
             tile_pattern: ShiftRegister::default(),
             palette_select: ShiftRegister::default(),
             active_sprites: [Sprite::default(); 8],
+            active_sprites_has_zero: false,
             control: Control::default(),
             mask: Mask::default(),
             status: Status::default(),
@@ -116,39 +119,46 @@ impl<M: Memory> PPU<M> {
     }
 
     fn load_sprites(&mut self) {
+        if self.scanline == 0 {
+            return;
+        }
+
         let all_sprites = self.object_attribute_memory.chunks_exact(4).map(|chunk| {
             let attributes = SpriteAttributes::from_bits_truncate(chunk[2]);
             Sprite::new(chunk[3], chunk[0], chunk[1], attributes)
         });
 
-        let scanline = self.scanline;
+        let scanline = self.scanline - 1;
 
-        let sprites_on_scanline = all_sprites.filter(|sprite| {
+        let sprites_on_scanline = all_sprites.enumerate().filter(|(_, sprite)| {
             let y = u16::from(sprite.y);
             scanline >= y && scanline < y + 8
         });
 
         self.active_sprites = [Sprite::default(); 8];
+        self.active_sprites_has_zero = false;
 
-        for (dest, src) in self.active_sprites.iter_mut().zip(sprites_on_scanline) {
+        for (dest, (i, src)) in self.active_sprites.iter_mut().zip(sprites_on_scanline) {
+            self.active_sprites_has_zero |= i == 0;
             *dest = src;
         }
     }
 
     fn next_color(&mut self) -> Option<Color> {
-        let (sprite, sprite_priority) = self.sprite_color();
+        let sprite = self.sprite_color();
+        let (background, background_opaque) = self.background_color();
 
         let color = match sprite {
-            Some(sprite) if sprite_priority => sprite,
-            _ => {
-                let (background, background_opaque) = self.background_color();
-                if background_opaque {
-                    background
-                } else {
-                    sprite.unwrap_or(background)
-                }
-            }
+            Some((sprite, priority, _)) if priority => sprite,
+            _ if background_opaque => background,
+            _ => sprite.map(|(sprite, _, _)| sprite).unwrap_or(background),
         };
+
+        if let Some((_, _, index)) = sprite {
+            if self.active_sprites_has_zero && index == 0 && background_opaque {
+                self.status.sprite_zero_hit();
+            }
+        }
 
         self.tile_pattern.shift();
         self.palette_select.shift();
@@ -157,28 +167,36 @@ impl<M: Memory> PPU<M> {
     }
 
     fn background_color(&mut self) -> (Color, bool) {
-        let lower_bits = self.tile_pattern.get_bits(self.fine_x);
-        let higher_bits = self.palette_select.get_bits(self.fine_x);
+        let (address, opaque) = if self.mask.show_background() {
+            let lower_bits = self.tile_pattern.get_bits(self.fine_x);
+            let higher_bits = self.palette_select.get_bits(self.fine_x);
 
-        let color_index = lower_bits | (higher_bits << 2);
+            let color_index = lower_bits | (higher_bits << 2);
 
-        let (address, opaque) = if lower_bits != 0 {
-            (BACKGROUND_PALETTES + color_index.into(), true)
+            if lower_bits != 0 {
+                (BACKGROUND_PALETTES + color_index.into(), true)
+            } else {
+                // Use universal background colour
+                (BACKGROUND_PALETTES, false)
+            }
         } else {
-            // Use universal background colour
             (BACKGROUND_PALETTES, false)
         };
 
         (Color(self.memory.read(address)), opaque)
     }
 
-    fn sprite_color(&mut self) -> (Option<Color>, bool) {
+    fn sprite_color(&mut self) -> Option<(Color, bool, usize)> {
+        if !self.mask.show_sprites() || self.scanline == 0 {
+            return None;
+        }
+
         let cycle_count = self.cycle_count;
-        let scanline = self.scanline;
+        let scanline = self.scanline - 1;
 
         let sprites = self.active_sprites;
 
-        for sprite in sprites.iter() {
+        for (i, sprite) in sprites.iter().enumerate() {
             let x = u16::from(sprite.x);
             let attr = sprite.attributes;
 
@@ -216,13 +234,14 @@ impl<M: Memory> PPU<M> {
             let palette = (attr & SpriteAttributes::PALETTE).bits();
             let color_index = (palette << 2) | lower_index;
             let address = SPRITE_PALETTES + color_index.into();
-            return (
-                Some(Color(self.memory.read(address))),
+            return Some((
+                Color(self.memory.read(address)),
                 !attr.contains(SpriteAttributes::PRIORITY),
-            );
+                i,
+            ));
         }
 
-        (None, false)
+        None
     }
 
     fn read_pattern_row(&mut self, nametable: Address, pattern_index: u8, row: u8) -> (u8, u8) {
@@ -258,67 +277,50 @@ impl<M: Memory> PPU<M> {
         let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
 
         self.palette_select.set_next_bytes(palette0, palette1);
-
-        self.increment_coarse_x();
     }
 
     fn rendering(&self) -> bool {
-        let in_bounds = self.scanline < 240 && self.cycle_count < 256;
-        let show_background = self.mask.show_background();
-        let show_sprites = self.mask.show_sprites();
-        let vblank = self.status.vblank();
-        (show_background || show_sprites) && !vblank && in_bounds
+        self.mask.show_background() || self.mask.show_sprites()
     }
 
     pub fn tick(&mut self) -> PPUOutput {
         let mut interrupt = false;
 
-        match (self.scanline, self.cycle_count) {
-            (_, 0) => {
-                self.load_sprites();
-                if self.scanline == 31 {
-                    // TODO: hack for mario I think
-                    self.status.sprite_zero_hit();
-                }
-            }
-            (241, 1) => {
-                // TODO: also suppress NMI the frame after, apparently
-                if !self.suppress_vblank {
-                    self.status.enter_vblank();
+        self.suppress_vblank = false;
 
-                    if self.control.nmi_on_vblank() {
-                        interrupt = true;
-                    }
+        let in_bounds = self.scanline < 240 && self.cycle_count < 256;
+        let rendering = self.rendering();
+
+        match (self.scanline, self.cycle_count) {
+            (_, 0) => self.load_sprites(),
+            (241, 1) if !self.suppress_vblank => {
+                // TODO: also suppress NMI the frame after, apparently
+                self.status.enter_vblank();
+
+                if self.control.nmi_on_vblank() {
+                    interrupt = true;
                 }
             }
             (261, 1) => {
                 // TODO: The VBLANK is much too long
                 self.status.exit_vblank();
                 self.status.sprite_zero_clear();
+                // if rendering {
+                //     self.set_address(Address::new(self.temporary_address));
+                // }
             }
+            (0..=239, 256) if rendering => self.increment_fine_y(),
+            (0..=239, 257) if rendering => self.transfer_horizontal_scroll(),
             _ => {}
         }
 
-        self.suppress_vblank = false;
+        // TODO: not sure about these conditions
+        if rendering && self.cycle_count <= 256 - 8 && self.cycle_count % 8 == 0 {
+            self.read_next_tile();
+            self.increment_coarse_x();
+        }
 
-        let color = if !self.rendering() {
-            None
-        } else {
-            if self.cycle_count == 0 {
-                self.increment_fine_y();
-                self.transfer_horizontal_scroll();
-            }
-
-            if self.scanline == 0 {
-                self.set_address(Address::new(self.temporary_address));
-            }
-
-            if self.cycle_count % 8 == 0 {
-                self.read_next_tile();
-            }
-
-            self.next_color()
-        };
+        let color = if in_bounds { self.next_color() } else { None };
 
         if self.cycle_count < 340 {
             self.cycle_count += 1;
@@ -519,7 +521,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub struct Color(u8);
 
 impl Color {
