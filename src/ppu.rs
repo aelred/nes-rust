@@ -167,7 +167,7 @@ impl<M: Memory> PPU<M> {
     }
 
     fn background_color(&mut self) -> (Color, bool) {
-        let (address, opaque) = if self.mask.show_background() {
+        let (address, opaque) = if self.mask.contains(Mask::SHOW_BACKGROUND) {
             let lower_bits = self.tile_pattern.get_bits(self.fine_x);
             let higher_bits = self.palette_select.get_bits(self.fine_x);
 
@@ -187,7 +187,7 @@ impl<M: Memory> PPU<M> {
     }
 
     fn sprite_color(&mut self) -> Option<(Color, bool, usize)> {
-        if !self.mask.show_sprites() || self.scanline == 0 {
+        if !self.mask.contains(Mask::SHOW_SPRITES) || self.scanline == 0 {
             return None;
         }
 
@@ -280,7 +280,8 @@ impl<M: Memory> PPU<M> {
     }
 
     fn rendering(&self) -> bool {
-        self.mask.show_background() || self.mask.show_sprites()
+        self.mask
+            .intersects(Mask::SHOW_BACKGROUND | Mask::SHOW_SPRITES)
     }
 
     pub fn tick(&mut self) -> PPUOutput {
@@ -434,7 +435,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 
     fn write_mask(&mut self, byte: u8) {
-        self.mask = Mask::from_bits(byte);
+        self.mask = Mask::from_bits_truncate(byte);
     }
 
     fn read_status(&mut self) -> u8 {
@@ -681,7 +682,7 @@ mod tests {
         let mut ppu = PPU::with_memory(mem!());
 
         ppu.write_mask(0b1010_1010);
-        assert_eq!(ppu.mask, Mask::from_bits(0b1010_1010));
+        assert_eq!(ppu.mask, Mask::from_bits_truncate(0b1010_1010));
     }
 
     #[test]
