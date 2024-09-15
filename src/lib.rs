@@ -172,7 +172,7 @@ macro_rules! mem {
             let mut memory = $crate::ArrayMemory::default();
             $(
                 #[allow(unused_variables, unused_mut)]
-                let mut addr: Address = Address::from($offset);
+                let mut addr: $crate::Address = $crate::Address::from($offset);
                 $(
                     let byte = $crate::SerializeByte::to_byte($data);
                     $crate::Memory::write(&mut memory, addr, byte);
