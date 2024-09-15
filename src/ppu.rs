@@ -156,7 +156,7 @@ impl<M: Memory> PPU<M> {
 
         if let Some((_, _, index)) = sprite {
             if self.active_sprites_has_zero && index == 0 && background_opaque {
-                self.status.sprite_zero_hit();
+                self.status |= Status::SPRITE_ZERO_HIT;
             }
         }
 
@@ -295,7 +295,7 @@ impl<M: Memory> PPU<M> {
             (_, 0) => self.load_sprites(),
             (241, 1) if !self.suppress_vblank => {
                 // TODO: also suppress NMI the frame after, apparently
-                self.status.enter_vblank();
+                self.status |= Status::VBLANK;
 
                 if self.control.nmi_on_vblank() {
                     interrupt = true;
@@ -303,8 +303,7 @@ impl<M: Memory> PPU<M> {
             }
             (261, 1) => {
                 // TODO: The VBLANK is much too long
-                self.status.exit_vblank();
-                self.status.sprite_zero_clear();
+                self.status -= Status::VBLANK | Status::SPRITE_ZERO_HIT;
                 if rendering {
                     self.set_address(Address::new(self.temporary_address));
                 }
@@ -441,7 +440,9 @@ impl<M: Memory> PPURegisters for PPU<M> {
     fn read_status(&mut self) -> u8 {
         self.write_lower = false;
         self.suppress_vblank = true;
-        self.status.read()
+        let bits = self.status.bits();
+        self.status.remove(Status::VBLANK);
+        bits
     }
 
     fn write_oam_address(&mut self, byte: u8) {
@@ -684,10 +685,11 @@ mod tests {
     }
 
     #[test]
-    fn reading_ppu_status_returns_status() {
+    fn reading_ppu_status_returns_status_and_clears_vblank() {
         let mut ppu = PPU::with_memory(mem!());
-        ppu.status.enter_vblank();
+        ppu.status |= Status::VBLANK;
         assert_eq!(ppu.read_status(), 0b1000_0000);
+        assert!(!ppu.status.contains(Status::VBLANK));
     }
 
     #[test]
