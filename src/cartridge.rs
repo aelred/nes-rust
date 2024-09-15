@@ -21,6 +21,7 @@ impl Cartridge {
             Mapper::UxROM => 0x4000,
             Mapper::MMC1 => 0x4000,
             Mapper::Namco129 => 0x2000,
+            #[allow(unreachable_patterns)] // Allow because we might add more mappers
             _ => unimplemented!("Unsupported mapper {:?}", mapper),
         };
 
