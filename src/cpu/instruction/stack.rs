@@ -1,28 +1,29 @@
+//! Stack Operations
 use crate::Memory;
 
 use crate::cpu::{Status, CPU};
 
 impl<M: Memory> CPU<M> {
     pub fn pla(&mut self) {
-        self.fetch_at_program_counter();
+        self.ignore_argument();
         self.increment_stack();
         let accumulator = self.pull_stack();
         self.set_accumulator(accumulator);
     }
 
     pub fn plp(&mut self) {
-        self.fetch_at_program_counter();
+        self.ignore_argument();
         self.increment_stack();
         self.status = Status::from_bits_truncate(self.pull_stack());
     }
 
     pub fn pha(&mut self) {
-        self.fetch_at_program_counter();
+        self.ignore_argument();
         self.push_stack(self.accumulator)
     }
 
     pub fn php(&mut self) {
-        self.fetch_at_program_counter();
+        self.ignore_argument();
         self.push_status(true)
     }
 }

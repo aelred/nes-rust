@@ -14,6 +14,7 @@ use super::addressing_modes::StoreAddressingMode;
 
 pub mod load_store;
 pub mod stack;
+pub mod transfer;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Instruction {

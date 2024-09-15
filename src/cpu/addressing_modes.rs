@@ -154,7 +154,7 @@ impl<M: Memory> CPU<M> {
     fn exec_addressing_mode(&mut self, addressing_mode: AddressingMode) -> Reference {
         match addressing_mode {
             AddressingMode::Accumulator => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 Reference::Accumulator
             }
             AddressingMode::Immediate => {

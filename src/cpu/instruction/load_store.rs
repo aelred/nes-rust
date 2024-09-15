@@ -1,3 +1,4 @@
+//! Load/Store Operations
 use crate::{
     cpu::addressing_modes::{
         FlexibleAddressingMode, LDXAddressingMode, LDYAddressingMode, STXAddressingMode,

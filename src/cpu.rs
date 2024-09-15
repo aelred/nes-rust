@@ -131,30 +131,12 @@ impl<M: Memory> CPU<M> {
             STY(addressing_mode) => self.sty(addressing_mode),
 
             // Register Transfers
-            TAX => {
-                self.fetch_at_program_counter();
-                self.set_x(self.accumulator);
-            }
-            TAY => {
-                self.fetch_at_program_counter();
-                self.set_y(self.accumulator);
-            }
-            TXA => {
-                self.fetch_at_program_counter();
-                self.set_accumulator(self.x);
-            }
-            TYA => {
-                self.fetch_at_program_counter();
-                self.set_accumulator(self.y);
-            }
-            TSX => {
-                self.fetch_at_program_counter();
-                self.set_x(self.stack_pointer.0);
-            }
-            TXS => {
-                self.fetch_at_program_counter();
-                self.stack_pointer.0 = self.x;
-            }
+            TAX => self.tax(),
+            TAY => self.tay(),
+            TXA => self.txa(),
+            TYA => self.tya(),
+            TSX => self.tsx(),
+            TXS => self.txs(),
 
             // Stack Operations
             PLA => self.pla(),
@@ -212,11 +194,11 @@ impl<M: Memory> CPU<M> {
                 self.increment(reference);
             }
             INX => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.increment(Reference::X)
             }
             INY => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.increment(Reference::Y)
             }
             DEC(addressing_mode) => {
@@ -224,11 +206,11 @@ impl<M: Memory> CPU<M> {
                 self.decrement(reference);
             }
             DEX => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.decrement(Reference::X)
             }
             DEY => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.decrement(Reference::Y)
             }
 
@@ -269,7 +251,7 @@ impl<M: Memory> CPU<M> {
                 self.program_counter = addr;
             }
             RTS => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.increment_stack();
                 let lower = self.pull_and_increment_stack();
                 let higher = self.pull_stack();
@@ -289,44 +271,44 @@ impl<M: Memory> CPU<M> {
 
             // Status Flag Changes
             CLC => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.status.remove(Status::CARRY)
             }
             CLD => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.status.remove(Status::DECIMAL)
             }
             CLI => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.status.remove(Status::INTERRUPT_DISABLE)
             }
             CLV => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.status.remove(Status::OVERFLOW)
             }
             SEC => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.status.insert(Status::CARRY)
             }
             SED => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.status.insert(Status::DECIMAL)
             }
             SEI => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.status.insert(Status::INTERRUPT_DISABLE)
             }
 
             // System Functions
             BRK => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.interrupt(INTERRUPT_VECTOR, true)
             }
             NOP => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
             }
             RTI => {
-                self.fetch_at_program_counter();
+                self.ignore_argument();
                 self.increment_stack();
                 self.status = Status::from_bits_truncate(self.pull_and_increment_stack());
                 let lower = self.pull_and_increment_stack();
@@ -555,14 +537,15 @@ impl<M: Memory> CPU<M> {
     }
 
     fn incr_program_counter(&mut self) -> u8 {
-        let data = self.fetch_at_program_counter();
+        let data = self.read(self.program_counter);
         trace!("{}  {:#04x}", self.program_counter, data);
         self.program_counter += 1u16;
         data
     }
 
-    fn fetch_at_program_counter(&mut self) -> u8 {
-        self.read(self.program_counter)
+    /// When instructions have no arguments the CPU still reads the value - emulate to make the clock cycle is correct.
+    fn ignore_argument(&mut self) {
+        self.read(self.program_counter);
     }
 
     fn fetch_address_at_program_counter(&mut self) -> Address {
@@ -1621,72 +1604,6 @@ mod tests {
         });
 
         assert!(cpu.status.contains(Status::INTERRUPT_DISABLE));
-    }
-
-    #[test]
-    fn instr_tax_transfers_accumulator_to_x_register() {
-        let cpu = run_instr(mem!(TAX), |cpu| {
-            cpu.accumulator = 65;
-        });
-
-        assert_eq!(cpu.x, 65);
-    }
-
-    #[test]
-    fn instr_tay_transfers_accumulator_to_y_register() {
-        let cpu = run_instr(mem!(TAY), |cpu| {
-            cpu.accumulator = 65;
-        });
-
-        assert_eq!(cpu.y, 65);
-    }
-
-    #[test]
-    fn instr_txa_transfers_x_register_to_accumulator() {
-        let cpu = run_instr(mem!(TXA), |cpu| {
-            cpu.x = 65;
-        });
-
-        assert_eq!(cpu.accumulator, 65);
-    }
-
-    #[test]
-    fn instr_tya_transfers_y_register_to_accumulator() {
-        let cpu = run_instr(mem!(TYA), |cpu| {
-            cpu.y = 65;
-        });
-
-        assert_eq!(cpu.accumulator, 65);
-    }
-
-    #[test]
-    fn instr_tsx_transfers_stack_pointer_to_x_register() {
-        let cpu = run_instr(mem!(TSX), |cpu| {
-            cpu.stack_pointer.0 = 65;
-        });
-
-        assert_eq!(cpu.x, 65);
-    }
-
-    #[test]
-    fn instr_txs_transfers_x_register_to_stack_pointer() {
-        let cpu = run_instr(mem!(TXS), |cpu| {
-            cpu.x = 65;
-        });
-
-        assert_eq!(cpu.stack_pointer.0, 65);
-    }
-
-    #[test]
-    fn instr_txs_does_not_modify_zero_or_negative_register() {
-        let cpu = run_instr(mem!(TXS), |cpu| {
-            cpu.x = 65;
-            cpu.status.insert(Status::ZERO);
-            cpu.status.insert(Status::NEGATIVE);
-        });
-
-        assert!(cpu.status.contains(Status::ZERO));
-        assert!(cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
