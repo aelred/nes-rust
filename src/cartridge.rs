@@ -16,13 +16,21 @@ impl Cartridge {
         chr_ram_enabled: bool,
         mapper: Mapper,
     ) -> Self {
-        if mapper != Mapper::NROM {
-            unimplemented!("Unsupported mapper {:?}", mapper);
-        }
+        let prg_rom_window = match mapper {
+            Mapper::NROM => 0x4000,
+            Mapper::UxROM => 0x4000,
+            Mapper::MMC1 => 0x4000,
+            Mapper::Namco129 => 0x2000,
+            _ => unimplemented!("Unsupported mapper {:?}", mapper),
+        };
+
+        let prg_rom_len = prg_rom.len() as u16;
 
         let prg = PRG {
-            prg_rom,
-            prg_ram: [0; 0x2000],
+            rom: prg_rom,
+            rom_window: prg_rom_window.min(prg_rom_len),
+            rom_bank: 0,
+            ram: [0; 0x2000],
         };
 
         let chr = CHR {
@@ -37,8 +45,21 @@ impl Cartridge {
 
 /// Program memory on a NES cartridge, connected to the CPU
 pub struct PRG {
-    prg_rom: Box<[u8]>,
-    prg_ram: [u8; 0x2000],
+    rom: Box<[u8]>,
+    rom_window: u16,
+    rom_bank: u8,
+    ram: [u8; 0x2000],
+}
+
+impl PRG {
+    fn read_bank(&self, bank: u8, address: Address) -> u8 {
+        let window = self.rom_window as usize;
+        self.rom[bank as usize * window + (address.index() % window)]
+    }
+
+    fn last_bank(&self) -> u8 {
+        ((self.rom.len() / (self.rom_window as usize)) - 1) as u8
+    }
 }
 
 impl Debug for PRG {
@@ -50,8 +71,9 @@ impl Debug for PRG {
 impl Memory for PRG {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
-            0x6000..=0x7fff => self.prg_ram[address.index() - 0x6000],
-            0x8000..=0xffff => self.prg_rom[(address.index() - 0x8000) % self.prg_rom.len()],
+            0x6000..=0x7fff => self.ram[address.index() - 0x6000],
+            0x8000..=0xbfff => self.read_bank(self.rom_bank, address - 0x8000),
+            0xc000..=0xffff => self.read_bank(self.last_bank(), address - 0xc000),
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -61,10 +83,10 @@ impl Memory for PRG {
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
             0x6000..=0x7fff => {
-                self.prg_ram[address.index() - 0x6000] = byte;
+                self.ram[address.index() - 0x6000] = byte;
             }
             0x8000..=0xffff => {
-                panic!("Attempted to write to ROM: {:?}", address);
+                self.rom_bank = byte;
             }
             _ => {
                 panic!("Out of addressable range: {:?}", address);
@@ -138,7 +160,7 @@ mod tests {
         for value in 0x6000..=0x7fff {
             prg.write(Address::new(value), value as u8);
             assert_eq!(prg.read(Address::new(value)), value as u8);
-            assert_eq!(prg.prg_ram[value as usize - 0x6000], value as u8);
+            assert_eq!(prg.ram[value as usize - 0x6000], value as u8);
         }
     }
 
@@ -146,7 +168,7 @@ mod tests {
     fn nrom_cartridge_maps_0x8000_through_0xffff_to_prg_rom() {
         let mut prg = nrom_cartridge().prg;
 
-        for (i, item) in prg.prg_rom.iter_mut().enumerate() {
+        for (i, item) in prg.rom.iter_mut().enumerate() {
             *item = i as u8;
         }
 
