@@ -54,7 +54,7 @@ impl Default for BufferDisplay {
         BufferDisplay {
             buffer: [0; WIDTH as usize * HEIGHT as usize * 3],
             x: usize::from(WIDTH) - 8,
-            y: usize::from(HEIGHT),
+            y: usize::from(HEIGHT) - 1,
         }
     }
 }

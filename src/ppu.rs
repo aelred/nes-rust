@@ -305,9 +305,9 @@ impl<M: Memory> PPU<M> {
                 // TODO: The VBLANK is much too long
                 self.status.exit_vblank();
                 self.status.sprite_zero_clear();
-                // if rendering {
-                //     self.set_address(Address::new(self.temporary_address));
-                // }
+                if rendering {
+                    self.set_address(Address::new(self.temporary_address));
+                }
             }
             (0..=239, 256) if rendering => self.increment_fine_y(),
             (0..=239, 257) if rendering => self.transfer_horizontal_scroll(),
@@ -315,7 +315,7 @@ impl<M: Memory> PPU<M> {
         }
 
         // TODO: not sure about these conditions
-        if rendering && self.cycle_count <= 256 - 8 && self.cycle_count % 8 == 0 {
+        if rendering && in_bounds && self.cycle_count % 8 == 0 {
             self.read_next_tile();
             self.increment_coarse_x();
         }
