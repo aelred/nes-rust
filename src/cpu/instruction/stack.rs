@@ -32,8 +32,8 @@ impl<M: Memory> CPU<M> {
 mod tests {
     use crate::{
         cpu::{stack, tests::run_instr, Status},
-        instructions::{PHA, PHP, PLA, PLP},
-        mem,
+        instructions::{JSR, PHA, PHP, PLA, PLP, RTS},
+        mem, Address,
     };
 
     #[test]
@@ -118,5 +118,45 @@ mod tests {
         });
 
         assert_eq!(cpu.stack_pointer.0, 5);
+    }
+
+    #[test]
+    fn stack_pointer_wraps_on_overflow() {
+        let cpu = run_instr(mem!(PLA), |cpu| {
+            cpu.stack_pointer.0 = 255;
+        });
+
+        assert_eq!(cpu.stack_pointer.0, 0);
+
+        let cpu = run_instr(mem!(PHA), |cpu| {
+            cpu.stack_pointer.0 = 0;
+        });
+
+        assert_eq!(cpu.stack_pointer.0, 255);
+    }
+
+    #[test]
+    fn stack_operations_wrap_value_on_overflow() {
+        let mut cpu = run_instr(mem!(0x1234 => { JSR, 100, 0 }), |cpu| {
+            cpu.stack_pointer.0 = 0;
+            cpu.program_counter = Address::new(0x1234);
+        });
+
+        assert_eq!(cpu.read(stack::BASE), 0x12);
+        assert_eq!(cpu.read(stack::BASE + 0xff), 0x36);
+
+        let cpu = run_instr(
+            mem!(
+                40 => { RTS }
+                stack::BASE => { 0x12u8 }
+                stack::BASE + 0xff => { 0x36u8 }
+            ),
+            |cpu| {
+                cpu.stack_pointer.0 = 0xfe;
+                cpu.program_counter = Address::new(40);
+            },
+        );
+
+        assert_eq!(cpu.program_counter, Address::new(0x1237));
     }
 }

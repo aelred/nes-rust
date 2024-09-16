@@ -228,4 +228,70 @@ mod tests {
         assert!(!cpu.status.contains(Status::ZERO));
         assert!(!cpu.status.contains(Status::NEGATIVE));
     }
+
+    #[test]
+    fn addition_behaves_appropriately_across_many_values() {
+        let carry_values = [true, false];
+        let values = [0, 1, 2, 3, 126, 127, 128, 129, 252, 253, 254, 255];
+
+        for x in values.iter() {
+            for y in values.iter() {
+                for carry_in in carry_values.iter() {
+                    let cpu = run_instr(mem!(ADC_IMMEDIATE, *y), |cpu| {
+                        cpu.status.set(Status::CARRY, *carry_in);
+                        cpu.accumulator = *x;
+                    });
+
+                    let carry_bit = *carry_in as u16;
+                    let expected = u16::from(*x) + u16::from(*y) + carry_bit;
+
+                    let carry_out = {
+                        let this = &cpu;
+                        this.status
+                    }
+                    .contains(Status::CARRY) as u8;
+                    let actual = u16::from_be_bytes([carry_out, cpu.accumulator]);
+
+                    assert_eq!(actual, expected, "{} + {} + {}", x, y, carry_bit);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn subtraction_behaves_appropriately_across_many_values() {
+        let carry_values = [true, false];
+        let values = [0, 1, 2, 3, 126, 127, 128, 129, 252, 253, 254, 255];
+
+        for x in values.iter() {
+            for y in values.iter() {
+                for carry_in in carry_values.iter() {
+                    let cpu = run_instr(mem!(SBC_IMMEDIATE, *y), |cpu| {
+                        cpu.status.set(Status::CARRY, *carry_in);
+                        cpu.accumulator = *x;
+                    });
+
+                    let carry_bit = *carry_in as u16;
+                    let expected = (u16::from(*x))
+                        .wrapping_sub(u16::from(*y))
+                        .wrapping_sub(1 - carry_bit);
+                    let expected = expected & 0b1_1111_1111;
+
+                    let carry_out = {
+                        let this = &cpu;
+                        this.status
+                    }
+                    .contains(Status::CARRY) as u8;
+                    let accumulator = cpu.accumulator;
+                    let actual = u16::from_be_bytes([1 - carry_out, accumulator]);
+
+                    assert_eq!(
+                        actual, expected,
+                        "\n input: {} - {} - (1 - {})\noutput: {}, carry {} = {}",
+                        x, y, carry_bit, accumulator, carry_out, actual
+                    );
+                }
+            }
+        }
+    }
 }
