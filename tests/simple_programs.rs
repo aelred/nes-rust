@@ -52,20 +52,20 @@ fn run<M: Memory>(cpu: &mut CPU<M>, params: &[u8], expected: &[u8]) {
 fn hello_world() {
     run!(b"Felix\0" -> b"hello world from Felix!\0";
         0 => {
-            LDX_IMMEDIATE, 255u8,
-            LDY_IMMEDIATE, 16u8,
+            LDX_IMM, 255u8,
+            LDY_IMM, 16u8,
             INX,
             INY,
-            LDA_ABSOLUTE_X, PARAM_ADDRESS, 0,
-            STA_ABSOLUTE_Y, RETURN_ADDRESS, 0,
+            LDA_ABX, PARAM_ADDRESS, 0,
+            STA_ABY, RETURN_ADDRESS, 0,
             BNE, -10i8 as u8,
-            LDA_IMMEDIATE, 33u8,
-            STA_ABSOLUTE_Y, RETURN_ADDRESS, 0,
+            LDA_IMM, 33u8,
+            STA_ABY, RETURN_ADDRESS, 0,
             INY,
-            LDA_IMMEDIATE, 0u8,
-            STA_ABSOLUTE_Y, RETURN_ADDRESS, 0,
-            LDA_IMMEDIATE, 1u8,
-            STA_ABSOLUTE, HALT_ADDRESS, 0
+            LDA_IMM, 0u8,
+            STA_ABY, RETURN_ADDRESS, 0,
+            LDA_IMM, 1u8,
+            STA_ABS, HALT_ADDRESS, 0
         }
         u16::from(RETURN_ADDRESS) => {
             104u8, 101u8, 108u8, 108u8, 111u8, 32u8,
@@ -78,41 +78,41 @@ fn hello_world() {
 #[test]
 fn one_plus_two() {
     run!([1, 2] -> [3];
-        LDA_ABSOLUTE, PARAM_ADDRESS, 0,
+        LDA_ABS, PARAM_ADDRESS, 0,
         INX,
-        ADC_ABSOLUTE_X, PARAM_ADDRESS, 0,
-        STA_ABSOLUTE, RETURN_ADDRESS, 0,
-        LDA_IMMEDIATE, 1u8,
-        STA_ABSOLUTE, HALT_ADDRESS, 0
+        ADC_ABX, PARAM_ADDRESS, 0,
+        STA_ABS, RETURN_ADDRESS, 0,
+        LDA_IMM, 1u8,
+        STA_ABS, HALT_ADDRESS, 0
     );
 }
 
 #[test]
 fn seven_times_six() {
     run!([7, 6] -> [42];
-        LDA_IMMEDIATE, 0u8,
-        LDY_ABSOLUTE, PARAM_ADDRESS, 0,
+        LDA_IMM, 0u8,
+        LDY_ABS, PARAM_ADDRESS, 0,
         INX,
-        ADC_ABSOLUTE_X, PARAM_ADDRESS, 0,
+        ADC_ABX, PARAM_ADDRESS, 0,
         DEY,
         BNE, -6i8 as u8,
-        STA_ABSOLUTE, RETURN_ADDRESS, 0,
-        LDA_IMMEDIATE, 1u8,
-        STA_ABSOLUTE, HALT_ADDRESS, 0
+        STA_ABS, RETURN_ADDRESS, 0,
+        LDA_IMM, 1u8,
+        STA_ABS, HALT_ADDRESS, 0
     );
 }
 
 #[test]
 fn triangle_number() {
     run!([20] -> [210];
-        LDA_IMMEDIATE, 0u8,
-        LDX_ABSOLUTE, PARAM_ADDRESS, 0,
-        ADC_ABSOLUTE, PARAM_ADDRESS, 0,
-        DEC_ABSOLUTE, PARAM_ADDRESS, 0,
+        LDA_IMM, 0u8,
+        LDX_ABS, PARAM_ADDRESS, 0,
+        ADC_ABS, PARAM_ADDRESS, 0,
+        DEC_ABS, PARAM_ADDRESS, 0,
         BNE, -8i8 as u8,
-        STA_ABSOLUTE, RETURN_ADDRESS, 0,
-        LDA_IMMEDIATE, 1u8,
-        STA_ABSOLUTE, HALT_ADDRESS, 0
+        STA_ABS, RETURN_ADDRESS, 0,
+        LDA_IMM, 1u8,
+        STA_ABS, HALT_ADDRESS, 0
     );
 }
 
@@ -121,16 +121,16 @@ fn triangle_number_subroutine() {
     run!([20] -> [210];
         0 => {
             JSR, 0x34, 0x12,
-            LDA_IMMEDIATE, 1u8,
-            STA_ABSOLUTE, HALT_ADDRESS, 0
+            LDA_IMM, 1u8,
+            STA_ABS, HALT_ADDRESS, 0
         }
         0x1234 => {
-            LDA_IMMEDIATE, 0u8,
-            LDX_ABSOLUTE, PARAM_ADDRESS, 0,
-            ADC_ABSOLUTE, PARAM_ADDRESS, 0,
-            DEC_ABSOLUTE, PARAM_ADDRESS, 0,
+            LDA_IMM, 0u8,
+            LDX_ABS, PARAM_ADDRESS, 0,
+            ADC_ABS, PARAM_ADDRESS, 0,
+            DEC_ABS, PARAM_ADDRESS, 0,
             BNE, -8i8 as u8,
-            STA_ABSOLUTE, RETURN_ADDRESS, 0,
+            STA_ABS, RETURN_ADDRESS, 0,
             RTS
         }
     );
@@ -139,24 +139,24 @@ fn triangle_number_subroutine() {
 #[test]
 fn fibonacci() {
     run!([11] -> [89];
-        LDX_IMMEDIATE, 0x01u8,
-        STX_ZERO_PAGE, 0xefu8,
+        LDX_IMM, 0x01u8,
+        STX_ZPA, 0xefu8,
         SEC,
-        LDY_ABSOLUTE, PARAM_ADDRESS, 0,
+        LDY_ABS, PARAM_ADDRESS, 0,
         TYA,
-        SBC_IMMEDIATE, 0x03u8,
+        SBC_IMM, 0x03u8,
         TAY,
         CLC,
-        LDA_IMMEDIATE, 0x02u8,
-        STA_ZERO_PAGE, 0xeeu8,
-        LDX_ZERO_PAGE, 0xeeu8,
-        ADC_ZERO_PAGE, 0xefu8,
-        STA_ZERO_PAGE, 0xeeu8,
-        STX_ZERO_PAGE, 0xefu8,
+        LDA_IMM, 0x02u8,
+        STA_ZPA, 0xeeu8,
+        LDX_ZPA, 0xeeu8,
+        ADC_ZPA, 0xefu8,
+        STA_ZPA, 0xeeu8,
+        STX_ZPA, 0xefu8,
         DEY,
         BNE, -11i8 as u8,
-        STA_ABSOLUTE, RETURN_ADDRESS, 0,
-        LDA_IMMEDIATE, 1u8,
-        STA_ABSOLUTE, HALT_ADDRESS, 0
+        STA_ABS, RETURN_ADDRESS, 0,
+        LDA_IMM, 1u8,
+        STA_ABS, HALT_ADDRESS, 0
     );
 }

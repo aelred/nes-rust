@@ -39,13 +39,13 @@ mod tests {
             stack::{self},
             tests::run_instr,
         },
-        instructions::{JMP_ABSOLUTE, JMP_INDIRECT, JSR, RTS},
+        instructions::{JMP_ABS, JMP_IND, JSR, RTS},
         mem, Address,
     };
 
     #[test]
     fn instr_jmp_jumps_to_immediate_operand() {
-        let cpu = run_instr(mem!(200 => { JMP_ABSOLUTE, 100, 0 }), |cpu| {
+        let cpu = run_instr(mem!(200 => { JMP_ABS, 100, 0 }), |cpu| {
             cpu.program_counter = Address::new(200);
         });
 
@@ -56,7 +56,7 @@ mod tests {
     fn instr_jmp_jumps_to_indirect_operand() {
         let cpu = run_instr(
             mem!(
-                20 => { JMP_INDIRECT, 30, 0 }
+                20 => { JMP_IND, 30, 0 }
                 30 => { 10, 0 }
             ),
             |cpu| {

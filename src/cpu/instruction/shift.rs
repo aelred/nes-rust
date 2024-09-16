@@ -67,15 +67,13 @@ impl<M: Memory> CPU<M> {
 mod tests {
     use crate::{
         cpu::{tests::run_instr, Status},
-        instructions::{
-            ASL_ABSOLUTE, ASL_ACCUMULATOR, LSR_ACCUMULATOR, ROL_ACCUMULATOR, ROR_ACCUMULATOR,
-        },
+        instructions::{ASL_ABS, ASL_ACC, LSR_ACC, ROL_ACC, ROR_ACC},
         mem, Address,
     };
 
     #[test]
     fn instr_asl_shifts_left() {
-        let cpu = run_instr(mem!(ASL_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(ASL_ACC), |cpu| {
             cpu.accumulator = 0b100;
         });
 
@@ -85,7 +83,7 @@ mod tests {
 
     #[test]
     fn instr_asl_sets_carry_flag_on_overflow() {
-        let cpu = run_instr(mem!(ASL_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(ASL_ACC), |cpu| {
             cpu.accumulator = 0b1010_1010;
         });
 
@@ -97,7 +95,7 @@ mod tests {
     fn instr_asl_can_operate_on_memory() {
         let mut cpu = run_instr(
             mem!(
-                0 => { ASL_ABSOLUTE, 100, 0 }
+                0 => { ASL_ABS, 100, 0 }
                 100 => { 0b100 }
             ),
             |_| {},
@@ -108,7 +106,7 @@ mod tests {
 
     #[test]
     fn instr_lsr_shifts_right() {
-        let cpu = run_instr(mem!(LSR_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(LSR_ACC), |cpu| {
             cpu.accumulator = 0b100;
         });
 
@@ -118,7 +116,7 @@ mod tests {
 
     #[test]
     fn instr_lsr_sets_carry_flag_on_underflow() {
-        let cpu = run_instr(mem!(LSR_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(LSR_ACC), |cpu| {
             cpu.accumulator = 0b101_0101;
         });
 
@@ -128,7 +126,7 @@ mod tests {
 
     #[test]
     fn instr_rol_rotates_left_with_carry_flag() {
-        let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(ROL_ACC), |cpu| {
             cpu.status.remove(Status::CARRY);
             cpu.accumulator = 0b100;
         });
@@ -136,7 +134,7 @@ mod tests {
         assert_eq!(cpu.accumulator, 0b1000);
         assert!(!cpu.status.contains(Status::CARRY));
 
-        let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(ROL_ACC), |cpu| {
             cpu.status.insert(Status::CARRY);
             cpu.accumulator = 0b100;
         });
@@ -144,7 +142,7 @@ mod tests {
         assert_eq!(cpu.accumulator, 0b1001);
         assert!(!cpu.status.contains(Status::CARRY));
 
-        let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(ROL_ACC), |cpu| {
             cpu.status.remove(Status::CARRY);
             cpu.accumulator = 0b1000_0000;
         });
@@ -155,7 +153,7 @@ mod tests {
 
     #[test]
     fn instr_ror_rotates_left_with_carry_flag() {
-        let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(ROR_ACC), |cpu| {
             cpu.status.remove(Status::CARRY);
             cpu.accumulator = 0b100;
         });
@@ -163,7 +161,7 @@ mod tests {
         assert_eq!(cpu.accumulator, 0b10);
         assert!(!cpu.status.contains(Status::CARRY));
 
-        let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(ROR_ACC), |cpu| {
             cpu.status.insert(Status::CARRY);
             cpu.accumulator = 0b100;
         });
@@ -171,7 +169,7 @@ mod tests {
         assert_eq!(cpu.accumulator, 0b1000_0010);
         assert!(!cpu.status.contains(Status::CARRY));
 
-        let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(ROR_ACC), |cpu| {
             cpu.status.remove(Status::CARRY);
             cpu.accumulator = 0b1;
         });

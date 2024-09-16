@@ -71,7 +71,7 @@ impl<M: Memory> CPU<M> {
 mod tests {
     use crate::{
         cpu::{tests::run_instr, Status},
-        instructions::{DEC_ABSOLUTE, DEX, DEY, INC_ABSOLUTE, INX, INY},
+        instructions::{DEC_ABS, DEX, DEY, INC_ABS, INX, INY},
         mem, Address,
     };
 
@@ -79,7 +79,7 @@ mod tests {
     fn instr_inc_increments_operand() {
         let mut cpu = run_instr(
             mem!(
-                0 => { INC_ABSOLUTE, 100, 0 }
+                0 => { INC_ABS, 100, 0 }
                 100 => { 45 }
             ),
             |_| {},
@@ -92,7 +92,7 @@ mod tests {
     fn instr_inc_sets_zero_flag_based_on_result() {
         let mut cpu = run_instr(
             mem!(
-                0 => { INC_ABSOLUTE, 100, 0 }
+                0 => { INC_ABS, 100, 0 }
                 100 => { 45 }
             ),
             |_| {},
@@ -103,7 +103,7 @@ mod tests {
 
         let mut cpu = run_instr(
             mem!(
-                0 => { INC_ABSOLUTE, 100, 0 }
+                0 => { INC_ABS, 100, 0 }
                 100 => { -1i8 as u8 }
             ),
             |_| {},
@@ -117,7 +117,7 @@ mod tests {
     fn instr_inc_sets_negative_flag_based_on_result() {
         let mut cpu = run_instr(
             mem!(
-                0 => { INC_ABSOLUTE, 100, 0 }
+                0 => { INC_ABS, 100, 0 }
                 100 => { 45 }
             ),
             |_| {},
@@ -128,7 +128,7 @@ mod tests {
 
         let mut cpu = run_instr(
             mem!(
-                0 => { INC_ABSOLUTE, 100, 0 }
+                0 => { INC_ABS, 100, 0 }
                 100 => { -10i8 as u8 }
             ),
             |_| {},
@@ -160,7 +160,7 @@ mod tests {
     fn instr_dec_decrements_operand() {
         let mut cpu = run_instr(
             mem!(
-                0 => { DEC_ABSOLUTE, 100, 0 }
+                0 => { DEC_ABS, 100, 0 }
                 100 => { 45 }
             ),
             |_| {},
@@ -173,7 +173,7 @@ mod tests {
     fn instr_dec_sets_zero_flag_based_on_result() {
         let mut cpu = run_instr(
             mem!(
-                0 => { DEC_ABSOLUTE, 100, 0 }
+                0 => { DEC_ABS, 100, 0 }
                 100 => { 45 }
             ),
             |_| {},
@@ -184,7 +184,7 @@ mod tests {
 
         let mut cpu = run_instr(
             mem!(
-                0 => { DEC_ABSOLUTE, 100, 0 }
+                0 => { DEC_ABS, 100, 0 }
                 100 => { 1 }
             ),
             |_| {},
@@ -198,7 +198,7 @@ mod tests {
     fn instr_dec_sets_negative_flag_based_on_result() {
         let mut cpu = run_instr(
             mem!(
-                0 => { DEC_ABSOLUTE, 100, 0 }
+                0 => { DEC_ABS, 100, 0 }
                 100 => { 45 }
             ),
             |_| {},
@@ -209,7 +209,7 @@ mod tests {
 
         let mut cpu = run_instr(
             mem!(
-                0 => { DEC_ABSOLUTE, 100, 0 }
+                0 => { DEC_ABS, 100, 0 }
                 100 => { 0 }
             ),
             |_| {},

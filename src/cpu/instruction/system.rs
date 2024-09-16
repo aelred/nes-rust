@@ -41,7 +41,7 @@ mod tests {
     use super::*;
     use crate::{
         cpu::{stack, tests::run_instr, Status},
-        instructions::{BRK, LSR_ACCUMULATOR, RTI},
+        instructions::{BRK, LSR_ACC, RTI},
         mem, Address,
     };
 
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn instr_nop_increments_program_counter() {
-        let cpu = run_instr(mem!(20 => LSR_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(20 => LSR_ACC), |cpu| {
             cpu.program_counter = Address::new(20);
         });
 

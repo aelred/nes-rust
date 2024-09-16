@@ -55,36 +55,34 @@ impl<M: Memory> CPU<M> {
 mod tests {
     use crate::{
         cpu::tests::run_instr,
-        instructions::{
-            LDA_IMMEDIATE, LDX_IMMEDIATE, LDY_IMMEDIATE, STA_ABSOLUTE, STX_ABSOLUTE, STY_ABSOLUTE,
-        },
+        instructions::{LDA_IMM, LDX_IMM, LDY_IMM, STA_ABS, STX_ABS, STY_ABS},
         mem, Address,
     };
 
     #[test]
     fn instr_lda_loads_operand_into_accunmulator() {
-        let cpu = run_instr(mem!(LDA_IMMEDIATE, 5u8), |_| {});
+        let cpu = run_instr(mem!(LDA_IMM, 5u8), |_| {});
 
         assert_eq!(cpu.accumulator, 5);
     }
 
     #[test]
     fn instr_ldx_loads_operand_into_x_register() {
-        let cpu = run_instr(mem!(LDX_IMMEDIATE, 5u8), |_| {});
+        let cpu = run_instr(mem!(LDX_IMM, 5u8), |_| {});
 
         assert_eq!(cpu.x, 5);
     }
 
     #[test]
     fn instr_ldy_loads_operand_into_y_register() {
-        let cpu = run_instr(mem!(LDY_IMMEDIATE, 5u8), |_| {});
+        let cpu = run_instr(mem!(LDY_IMM, 5u8), |_| {});
 
         assert_eq!(cpu.y, 5);
     }
 
     #[test]
     fn instr_sta_stores_accumulator_in_memory() {
-        let mut cpu = run_instr(mem!(STA_ABSOLUTE, 0x32, 0), |cpu| {
+        let mut cpu = run_instr(mem!(STA_ABS, 0x32, 0), |cpu| {
             cpu.accumulator = 65;
         });
 
@@ -93,7 +91,7 @@ mod tests {
 
     #[test]
     fn instr_stx_stores_x_register_in_memory() {
-        let mut cpu = run_instr(mem!(STX_ABSOLUTE, 0x32, 0), |cpu| {
+        let mut cpu = run_instr(mem!(STX_ABS, 0x32, 0), |cpu| {
             cpu.x = 65;
         });
 
@@ -102,7 +100,7 @@ mod tests {
 
     #[test]
     fn instr_sty_stores_y_register_in_memory() {
-        let mut cpu = run_instr(mem!(STY_ABSOLUTE, 0x32, 0), |cpu| {
+        let mut cpu = run_instr(mem!(STY_ABS, 0x32, 0), |cpu| {
             cpu.y = 65;
         });
 

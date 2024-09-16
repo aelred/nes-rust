@@ -454,7 +454,7 @@ mod tests {
 
     #[test]
     fn zero_flag_is_not_set_when_accumulator_is_non_zero() {
-        let cpu = run_instr(mem!(ADC_IMMEDIATE, 1u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMM, 1u8), |cpu| {
             cpu.accumulator = 42;
         });
 
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn zero_flag_is_set_when_accumulator_is_zero() {
-        let cpu = run_instr(mem!(ADC_IMMEDIATE, 214u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMM, 214u8), |cpu| {
             cpu.accumulator = 42;
         });
 
@@ -474,7 +474,7 @@ mod tests {
 
     #[test]
     fn negative_flag_is_not_set_when_accumulator_is_positive() {
-        let cpu = run_instr(mem!(ADC_IMMEDIATE, 1u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMM, 1u8), |cpu| {
             cpu.accumulator = 42;
         });
 
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn negative_flag_is_set_when_accumulator_is_negative() {
-        let cpu = run_instr(mem!(ADC_IMMEDIATE, -1i8 as u8), |cpu| {
+        let cpu = run_instr(mem!(ADC_IMM, -1i8 as u8), |cpu| {
             cpu.accumulator = 0;
         });
 
@@ -494,7 +494,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_1_when_executing_1_byte_instr() {
-        let cpu = run_instr(mem!(100 => ASL_ACCUMULATOR), |cpu| {
+        let cpu = run_instr(mem!(100 => ASL_ACC), |cpu| {
             cpu.program_counter = Address::new(100)
         });
 
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_2_when_executing_2_byte_instr() {
-        let cpu = run_instr(mem!(100 => { ADC_IMMEDIATE, 0u8 }), |cpu| {
+        let cpu = run_instr(mem!(100 => { ADC_IMM, 0u8 }), |cpu| {
             cpu.program_counter = Address::new(100)
         });
 
@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn program_counter_is_incremented_by_3_when_executing_3_byte_instr() {
-        let cpu = run_instr(mem!(100 => { ASL_ABSOLUTE, 0, 0 }), |cpu| {
+        let cpu = run_instr(mem!(100 => { ASL_ABS, 0, 0 }), |cpu| {
             cpu.program_counter = Address::new(100)
         });
 
@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn instructions_can_wrap_on_program_counter_overflow() {
-        let cpu = run_instr(mem!(0xfffe => { JMP_ABSOLUTE, 0x34, 0x12 }), |cpu| {
+        let cpu = run_instr(mem!(0xfffe => { JMP_ABS, 0x34, 0x12 }), |cpu| {
             cpu.program_counter = Address::new(0xfffe);
         });
 
@@ -876,12 +876,12 @@ mod tests {
             RESET_VECTOR => { start.lower(), start.higher() }
             foo_addr => { foo_init }
             start.bytes() => {
-                CPX_ZERO_PAGE, 0x12,
+                CPX_ZPA, 0x12,
                 BNE, 9,
-                INC_ZERO_PAGE, foo_zero_addr,
+                INC_ZPA, foo_zero_addr,
                 BNE, (-8i8) as u8,
-                INC_ZERO_PAGE, 0x11,
-                JMP_ABSOLUTE, start.lower(), start.higher()
+                INC_ZPA, 0x11,
+                JMP_ABS, start.lower(), start.higher()
             }
         ));
 

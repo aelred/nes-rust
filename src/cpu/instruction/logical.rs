@@ -38,13 +38,13 @@ impl<M: Memory> CPU<M> {
 mod tests {
     use crate::{
         cpu::{tests::run_instr, Status},
-        instructions::{AND_IMMEDIATE, BIT_ABSOLUTE, EOR_IMMEDIATE, ORA_IMMEDIATE},
+        instructions::{AND_IMM, BIT_ABS, EOR_IMM, ORA_IMM},
         mem,
     };
 
     #[test]
     fn instr_and_performs_bitwise_and() {
-        let cpu = run_instr(mem!(AND_IMMEDIATE, 0b1100_u8), |cpu| {
+        let cpu = run_instr(mem!(AND_IMM, 0b1100_u8), |cpu| {
             cpu.accumulator = 0b1010;
         });
 
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn instr_eor_performs_bitwise_xor() {
-        let cpu = run_instr(mem!(EOR_IMMEDIATE, 0b1100_u8), |cpu| {
+        let cpu = run_instr(mem!(EOR_IMM, 0b1100_u8), |cpu| {
             cpu.accumulator = 0b1010;
         });
 
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn instr_ora_performs_bitwise_or() {
-        let cpu = run_instr(mem!(ORA_IMMEDIATE, 0b1100_u8), |cpu| {
+        let cpu = run_instr(mem!(ORA_IMM, 0b1100_u8), |cpu| {
             cpu.accumulator = 0b1010;
         });
 
@@ -73,7 +73,7 @@ mod tests {
     fn instr_bit_sets_zero_flag_when_bitwise_and_is_zero() {
         let cpu = run_instr(
             mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
+                0 => { BIT_ABS, 54, 0 }
                 54 => { 0b0000_1111 }
             ),
             |cpu| {
@@ -88,7 +88,7 @@ mod tests {
     fn instr_bit_clears_zero_flag_when_bitwise_and_is_not_zero() {
         let cpu = run_instr(
             mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
+                0 => { BIT_ABS, 54, 0 }
                 54 => { 0b0011_1111 }
             ),
             |cpu| {
@@ -103,7 +103,7 @@ mod tests {
     fn instr_bit_sets_overflow_bit_based_on_bit_6_of_operand() {
         let cpu = run_instr(
             mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
+                0 => { BIT_ABS, 54, 0 }
                 54 => { 0 }
             ),
             |_| {},
@@ -113,7 +113,7 @@ mod tests {
 
         let cpu = run_instr(
             mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
+                0 => { BIT_ABS, 54, 0 }
                 54 => { 0b0100_0000 }
             ),
             |_| {},
@@ -126,7 +126,7 @@ mod tests {
     fn instr_bit_sets_negative_bit_based_on_bit_7_of_operand() {
         let cpu = run_instr(
             mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
+                0 => { BIT_ABS, 54, 0 }
                 54 => { 0 }
             ),
             |_| {},
@@ -136,7 +136,7 @@ mod tests {
 
         let cpu = run_instr(
             mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
+                0 => { BIT_ABS, 54, 0 }
                 54 => { 0b1000_0000 }
             ),
             |_| {},

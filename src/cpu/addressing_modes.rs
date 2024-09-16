@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn accumulator_addressing_mode_fetches_accumulator_value() {
-        let mut cpu = cpu(mem! {LDA_IMMEDIATE, 76u8});
+        let mut cpu = cpu(mem! {LDA_IMM, 76u8});
         cpu.run_instruction();
         assert_eq!(cpu.read_reference(Reference::Accumulator, true), 76);
     }
