@@ -16,6 +16,7 @@ pub mod arithmetic;
 pub mod inc_dec;
 pub mod load_store;
 pub mod logical;
+pub mod shift;
 pub mod stack;
 pub mod transfer;
 

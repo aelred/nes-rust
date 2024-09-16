@@ -166,22 +166,10 @@ impl<M: Memory> CPU<M> {
             DEY => self.dey(),
 
             // Shifts
-            ASL(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.asl(reference);
-            }
-            LSR(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.lsr(reference);
-            }
-            ROL(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.rol(reference);
-            }
-            ROR(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.ror(reference);
-            }
+            ASL(addressing_mode) => drop(self.asl(addressing_mode)),
+            LSR(addressing_mode) => drop(self.lsr(addressing_mode)),
+            ROL(addressing_mode) => drop(self.rol(addressing_mode)),
+            ROR(addressing_mode) => drop(self.ror(addressing_mode)),
 
             // Jumps & Calls
             JMP(addressing_mode) => {
@@ -296,42 +284,22 @@ impl<M: Memory> CPU<M> {
                 self.sub_from_accumulator(value);
             }
             SLO(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                let value = self.asl(reference);
+                let value = self.asl(addressing_mode);
                 self.set_accumulator(self.accumulator | value);
             }
             RLA(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                let value = self.rol(reference);
+                let value = self.rol(addressing_mode);
                 self.set_accumulator(self.accumulator & value);
             }
             SRE(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                let value = self.lsr(reference);
+                let value = self.lsr(addressing_mode);
                 self.set_accumulator(self.accumulator ^ value);
             }
             RRA(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                let value = self.ror(reference);
+                let value = self.ror(addressing_mode);
                 self.add_to_accumulator(value);
             }
         }
-    }
-
-    fn asl(&mut self, reference: Reference) -> u8 {
-        self.shift(reference, 7, |val, _| val << 1)
-    }
-
-    fn lsr(&mut self, reference: Reference) -> u8 {
-        self.shift(reference, 0, |val, _| val >> 1)
-    }
-
-    fn rol(&mut self, reference: Reference) -> u8 {
-        self.shift(reference, 7, |val, carry| val << 1 | carry)
-    }
-
-    fn ror(&mut self, reference: Reference) -> u8 {
-        self.shift(reference, 0, |val, carry| val >> 1 | carry << 7)
     }
 
     fn sub_from_accumulator(&mut self, value: u8) {
@@ -374,19 +342,6 @@ impl<M: Memory> CPU<M> {
 
         self.set_accumulator(result);
         self.status.set(Status::CARRY, carry_out);
-    }
-
-    fn shift(&mut self, reference: Reference, carry_bit: u8, op: impl FnOnce(u8, u8) -> u8) -> u8 {
-        let carry = self.status.contains(Status::CARRY);
-
-        let old_value = self.read_reference(reference, false);
-        self.set_reference(reference, old_value, false); // Redundant write
-        let new_value = op(old_value, carry as u8);
-        let carry = old_value & (1 << carry_bit) != 0;
-
-        self.set_reference(reference, new_value, false);
-        self.status.set(Status::CARRY, carry);
-        new_value
     }
 
     fn increment(&mut self, reference: Reference) {
@@ -608,39 +563,6 @@ mod tests {
         let cpu = CPU::from_memory(&mut memory);
 
         assert_eq!(cpu.program_counter, Address::new(0x1234));
-    }
-
-    #[test]
-    fn instr_asl_shifts_left() {
-        let cpu = run_instr(mem!(ASL_ACCUMULATOR), |cpu| {
-            cpu.accumulator = 0b100;
-        });
-
-        assert_eq!(cpu.accumulator, 0b1000);
-        assert!(!cpu.status.contains(Status::CARRY));
-    }
-
-    #[test]
-    fn instr_asl_sets_carry_flag_on_overflow() {
-        let cpu = run_instr(mem!(ASL_ACCUMULATOR), |cpu| {
-            cpu.accumulator = 0b1010_1010;
-        });
-
-        assert_eq!(cpu.accumulator, 0b0101_0100);
-        assert!(cpu.status.contains(Status::CARRY));
-    }
-
-    #[test]
-    fn instr_asl_can_operate_on_memory() {
-        let mut cpu = run_instr(
-            mem!(
-                0 => { ASL_ABSOLUTE, 100, 0 }
-                100 => { 0b100 }
-            ),
-            |_| {},
-        );
-
-        assert_eq!(cpu.read(Address::new(100)), 0b1000);
     }
 
     #[test]
@@ -902,86 +824,12 @@ mod tests {
     }
 
     #[test]
-    fn instr_lsr_shifts_right() {
-        let cpu = run_instr(mem!(LSR_ACCUMULATOR), |cpu| {
-            cpu.accumulator = 0b100;
-        });
-
-        assert_eq!(cpu.accumulator, 0b10);
-        assert!(!cpu.status.contains(Status::CARRY));
-    }
-
-    #[test]
-    fn instr_lsr_sets_carry_flag_on_underflow() {
-        let cpu = run_instr(mem!(LSR_ACCUMULATOR), |cpu| {
-            cpu.accumulator = 0b101_0101;
-        });
-
-        assert_eq!(cpu.accumulator, 0b10_1010);
-        assert!(cpu.status.contains(Status::CARRY));
-    }
-
-    #[test]
     fn instr_nop_increments_program_counter() {
         let cpu = run_instr(mem!(20 => LSR_ACCUMULATOR), |cpu| {
             cpu.program_counter = Address::new(20);
         });
 
         assert_eq!(cpu.program_counter, Address::new(21));
-    }
-
-    #[test]
-    fn instr_rol_rotates_left_with_carry_flag() {
-        let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
-            cpu.status.remove(Status::CARRY);
-            cpu.accumulator = 0b100;
-        });
-
-        assert_eq!(cpu.accumulator, 0b1000);
-        assert!(!cpu.status.contains(Status::CARRY));
-
-        let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
-            cpu.status.insert(Status::CARRY);
-            cpu.accumulator = 0b100;
-        });
-
-        assert_eq!(cpu.accumulator, 0b1001);
-        assert!(!cpu.status.contains(Status::CARRY));
-
-        let cpu = run_instr(mem!(ROL_ACCUMULATOR), |cpu| {
-            cpu.status.remove(Status::CARRY);
-            cpu.accumulator = 0b1000_0000;
-        });
-
-        assert_eq!(cpu.accumulator, 0);
-        assert!(cpu.status.contains(Status::CARRY));
-    }
-
-    #[test]
-    fn instr_ror_rotates_left_with_carry_flag() {
-        let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
-            cpu.status.remove(Status::CARRY);
-            cpu.accumulator = 0b100;
-        });
-
-        assert_eq!(cpu.accumulator, 0b10);
-        assert!(!cpu.status.contains(Status::CARRY));
-
-        let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
-            cpu.status.insert(Status::CARRY);
-            cpu.accumulator = 0b100;
-        });
-
-        assert_eq!(cpu.accumulator, 0b1000_0010);
-        assert!(!cpu.status.contains(Status::CARRY));
-
-        let cpu = run_instr(mem!(ROR_ACCUMULATOR), |cpu| {
-            cpu.status.remove(Status::CARRY);
-            cpu.accumulator = 0b1;
-        });
-
-        assert_eq!(cpu.accumulator, 0);
-        assert!(cpu.status.contains(Status::CARRY));
     }
 
     #[test]
