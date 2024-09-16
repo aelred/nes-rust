@@ -8,44 +8,44 @@ use crate::{
 };
 
 impl<M: Memory> CPU<M> {
-    pub fn lda(&mut self, addressing_mode: FlexibleAddressingMode) {
+    pub(in crate::cpu) fn lda(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(value);
     }
 
-    pub fn ldx(&mut self, addressing_mode: LDXAddressingMode) {
+    pub(in crate::cpu) fn ldx(&mut self, addressing_mode: LDXAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_x(value);
     }
 
-    pub fn ldy(&mut self, addressing_mode: LDYAddressingMode) {
+    pub(in crate::cpu) fn ldy(&mut self, addressing_mode: LDYAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_y(value);
     }
 
-    pub fn sta(&mut self, addressing_mode: StoreAddressingMode) {
+    pub(in crate::cpu) fn sta(&mut self, addressing_mode: StoreAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.write_reference(reference, self.accumulator, true);
     }
 
-    pub fn stx(&mut self, addressing_mode: STXAddressingMode) {
+    pub(in crate::cpu) fn stx(&mut self, addressing_mode: STXAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.write_reference(reference, self.x, true);
     }
 
-    pub fn sty(&mut self, addressing_mode: STYAddressingMode) {
+    pub(in crate::cpu) fn sty(&mut self, addressing_mode: STYAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.write_reference(reference, self.y, true);
     }
 
     // Unofficial Opcodes
-    pub fn lax(&mut self, addressing_mode: LAXAddressingMode) {
+    pub(in crate::cpu) fn lax(&mut self, addressing_mode: LAXAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(value);
         self.set_x(value);
     }
 
-    pub fn sax(&mut self, addressing_mode: SAXAddressingMode) {
+    pub(in crate::cpu) fn sax(&mut self, addressing_mode: SAXAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.write_reference(reference, self.accumulator & self.x, true);
     }

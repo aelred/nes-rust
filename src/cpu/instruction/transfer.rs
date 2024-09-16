@@ -3,32 +3,32 @@
 use crate::{Memory, CPU};
 
 impl<M: Memory> CPU<M> {
-    pub fn tax(&mut self) {
+    pub(in crate::cpu) fn tax(&mut self) {
         self.ignore_argument();
         self.set_x(self.accumulator);
     }
 
-    pub fn tay(&mut self) {
+    pub(in crate::cpu) fn tay(&mut self) {
         self.ignore_argument();
         self.set_y(self.accumulator);
     }
 
-    pub fn txa(&mut self) {
+    pub(in crate::cpu) fn txa(&mut self) {
         self.ignore_argument();
         self.set_accumulator(self.x);
     }
 
-    pub fn tya(&mut self) {
+    pub(in crate::cpu) fn tya(&mut self) {
         self.ignore_argument();
         self.set_accumulator(self.y);
     }
 
-    pub fn tsx(&mut self) {
+    pub(in crate::cpu) fn tsx(&mut self) {
         self.ignore_argument();
         self.set_x(self.stack_pointer.0);
     }
 
-    pub fn txs(&mut self) {
+    pub(in crate::cpu) fn txs(&mut self) {
         self.ignore_argument();
         self.stack_pointer.0 = self.x;
     }

@@ -9,22 +9,22 @@ use crate::{
 };
 
 impl<M: Memory> CPU<M> {
-    pub fn and(&mut self, addressing_mode: FlexibleAddressingMode) {
+    pub(in crate::cpu) fn and(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(self.accumulator & value);
     }
 
-    pub fn eor(&mut self, addressing_mode: FlexibleAddressingMode) {
+    pub(in crate::cpu) fn eor(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(self.accumulator ^ value);
     }
 
-    pub fn ora(&mut self, addressing_mode: FlexibleAddressingMode) {
+    pub(in crate::cpu) fn ora(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(self.accumulator | value);
     }
 
-    pub fn bit(&mut self, addressing_mode: BITAddressingMode) {
+    pub(in crate::cpu) fn bit(&mut self, addressing_mode: BITAddressingMode) {
         let value = self.fetch(addressing_mode);
         let result = self.accumulator & value;
         self.status.set(Status::ZERO, result == 0);

@@ -9,45 +9,45 @@ use crate::{
 };
 
 impl<M: Memory> CPU<M> {
-    pub fn inc(&mut self, addressing_mode: IncDecAddressingMode) {
+    pub(in crate::cpu) fn inc(&mut self, addressing_mode: IncDecAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.increment(reference);
     }
 
-    pub fn inx(&mut self) {
+    pub(in crate::cpu) fn inx(&mut self) {
         self.ignore_argument();
         self.increment(Reference::X);
     }
 
-    pub fn iny(&mut self) {
+    pub(in crate::cpu) fn iny(&mut self) {
         self.ignore_argument();
         self.increment(Reference::Y);
     }
 
-    pub fn dec(&mut self, addressing_mode: IncDecAddressingMode) {
+    pub(in crate::cpu) fn dec(&mut self, addressing_mode: IncDecAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.decrement(reference);
     }
 
-    pub fn dex(&mut self) {
+    pub(in crate::cpu) fn dex(&mut self) {
         self.ignore_argument();
         self.decrement(Reference::X);
     }
 
-    pub fn dey(&mut self) {
+    pub(in crate::cpu) fn dey(&mut self) {
         self.ignore_argument();
         self.decrement(Reference::Y);
     }
 
     // Unofficial Opcodes
-    pub fn dcp(&mut self, addressing_mode: StoreAddressingMode) {
+    pub(in crate::cpu) fn dcp(&mut self, addressing_mode: StoreAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.decrement(reference);
         let value = self.read_reference(reference, false);
         self.compare(self.accumulator, value);
     }
 
-    pub fn isc(&mut self, addressing_mode: StoreAddressingMode) {
+    pub(in crate::cpu) fn isc(&mut self, addressing_mode: StoreAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.increment(reference);
         let value = self.read_reference(reference, false);

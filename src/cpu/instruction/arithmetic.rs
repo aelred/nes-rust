@@ -6,27 +6,27 @@ use crate::{
 };
 
 impl<M: Memory> CPU<M> {
-    pub fn adc(&mut self, addressing_mode: FlexibleAddressingMode) {
+    pub(in crate::cpu) fn adc(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.add_to_accumulator(value);
     }
 
-    pub fn sbc(&mut self, addressing_mode: FlexibleAddressingMode) {
+    pub(in crate::cpu) fn sbc(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.sub_from_accumulator(value);
     }
 
-    pub fn cmp(&mut self, addressing_mode: FlexibleAddressingMode) {
+    pub(in crate::cpu) fn cmp(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.compare(self.accumulator, value);
     }
 
-    pub fn cpx(&mut self, addressing_mode: CompareAddressingMode) {
+    pub(in crate::cpu) fn cpx(&mut self, addressing_mode: CompareAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.compare(self.x, value);
     }
 
-    pub fn cpy(&mut self, addressing_mode: CompareAddressingMode) {
+    pub(in crate::cpu) fn cpy(&mut self, addressing_mode: CompareAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.compare(self.y, value);
     }
