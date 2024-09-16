@@ -187,34 +187,13 @@ impl<M: Memory> CPU<M> {
             BVS => self.bvs(),
 
             // Status Flag Changes
-            CLC => {
-                self.ignore_argument();
-                self.status.remove(Status::CARRY)
-            }
-            CLD => {
-                self.ignore_argument();
-                self.status.remove(Status::DECIMAL)
-            }
-            CLI => {
-                self.ignore_argument();
-                self.status.remove(Status::INTERRUPT_DISABLE)
-            }
-            CLV => {
-                self.ignore_argument();
-                self.status.remove(Status::OVERFLOW)
-            }
-            SEC => {
-                self.ignore_argument();
-                self.status.insert(Status::CARRY)
-            }
-            SED => {
-                self.ignore_argument();
-                self.status.insert(Status::DECIMAL)
-            }
-            SEI => {
-                self.ignore_argument();
-                self.status.insert(Status::INTERRUPT_DISABLE)
-            }
+            CLC => self.clc(),
+            CLD => self.cld(),
+            CLI => self.cli(),
+            CLV => self.clv(),
+            SEC => self.sec(),
+            SED => self.sed(),
+            SEI => self.sei(),
 
             // System Functions
             BRK => {
@@ -532,75 +511,12 @@ mod tests {
     }
 
     #[test]
-    fn instr_clc_clears_carry_flag() {
-        let cpu = run_instr(mem!(CLC), |cpu| {
-            cpu.status.insert(Status::CARRY);
-        });
-
-        assert!(!cpu.status.contains(Status::CARRY));
-    }
-
-    #[test]
-    fn instr_cld_clears_decimal_flag() {
-        let cpu = run_instr(mem!(CLD), |cpu| {
-            cpu.status.insert(Status::DECIMAL);
-        });
-
-        assert!(!cpu.status.contains(Status::DECIMAL));
-    }
-
-    #[test]
-    fn instr_cli_clears_interrupt_disable_flag() {
-        let cpu = run_instr(mem!(CLI), |cpu| {
-            cpu.status.insert(Status::INTERRUPT_DISABLE);
-        });
-
-        assert!(!cpu.status.contains(Status::INTERRUPT_DISABLE));
-    }
-
-    #[test]
-    fn instr_clv_clears_overflow_flag() {
-        let cpu = run_instr(mem!(CLV), |cpu| {
-            cpu.status.insert(Status::OVERFLOW);
-        });
-
-        assert!(!cpu.status.contains(Status::OVERFLOW));
-    }
-
-    #[test]
     fn instr_nop_increments_program_counter() {
         let cpu = run_instr(mem!(20 => LSR_ACCUMULATOR), |cpu| {
             cpu.program_counter = Address::new(20);
         });
 
         assert_eq!(cpu.program_counter, Address::new(21));
-    }
-
-    #[test]
-    fn instr_sec_sets_carry_flag() {
-        let cpu = run_instr(mem!(SEC), |cpu| {
-            cpu.status.remove(Status::CARRY);
-        });
-
-        assert!(cpu.status.contains(Status::CARRY));
-    }
-
-    #[test]
-    fn instr_sed_sets_decimal_flag() {
-        let cpu = run_instr(mem!(SED), |cpu| {
-            cpu.status.remove(Status::DECIMAL);
-        });
-
-        assert!(cpu.status.contains(Status::DECIMAL));
-    }
-
-    #[test]
-    fn instr_sei_sets_interrupt_disable_flag() {
-        let cpu = run_instr(mem!(SEI), |cpu| {
-            cpu.status.remove(Status::INTERRUPT_DISABLE);
-        });
-
-        assert!(cpu.status.contains(Status::INTERRUPT_DISABLE));
     }
 
     #[test]
