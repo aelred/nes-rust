@@ -1,7 +1,10 @@
 //! Increments & Decrements
 
 use crate::{
-    cpu::{addressing_modes::IncDecAddressingMode, Reference},
+    cpu::{
+        addressing_modes::{IncDecAddressingMode, StoreAddressingMode},
+        Reference,
+    },
     Memory, CPU,
 };
 
@@ -34,6 +37,33 @@ impl<M: Memory> CPU<M> {
     pub fn dey(&mut self) {
         self.ignore_argument();
         self.decrement(Reference::Y);
+    }
+
+    // Unofficial Opcodes
+    pub fn dcp(&mut self, addressing_mode: StoreAddressingMode) {
+        let reference = self.fetch_ref(addressing_mode);
+        self.decrement(reference);
+        let value = self.read_reference(reference, false);
+        self.compare(self.accumulator, value);
+    }
+
+    pub fn isc(&mut self, addressing_mode: StoreAddressingMode) {
+        let reference = self.fetch_ref(addressing_mode);
+        self.increment(reference);
+        let value = self.read_reference(reference, false);
+        self.sub_from_accumulator(value);
+    }
+
+    fn increment(&mut self, reference: Reference) {
+        let value = self.read_reference(reference, false);
+        self.set_reference(reference, value, false); // redundant write
+        self.set_reference(reference, value.wrapping_add(1), false);
+    }
+
+    fn decrement(&mut self, reference: Reference) {
+        let value = self.read_reference(reference, false);
+        self.set_reference(reference, value, false); // redundant write
+        self.set_reference(reference, value.wrapping_sub(1), false);
     }
 }
 

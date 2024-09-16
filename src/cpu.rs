@@ -200,49 +200,16 @@ impl<M: Memory> CPU<M> {
             RTI => self.rti(),
 
             // Unofficial Opcodes
-            IGN(addressing_mode) => {
-                self.fetch_ref(addressing_mode);
-            }
-            SKB => {
-                self.incr_program_counter();
-            }
-            LAX(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_accumulator(value);
-                self.set_x(value);
-            }
-            SAX(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.write_reference(reference, self.accumulator & self.x, true);
-            }
-            DCP(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.decrement(reference);
-                let value = self.read_reference(reference, false);
-                self.compare(self.accumulator, value);
-            }
-            ISC(addressing_mode) => {
-                let reference = self.fetch_ref(addressing_mode);
-                self.increment(reference);
-                let value = self.read_reference(reference, false);
-                self.sub_from_accumulator(value);
-            }
-            SLO(addressing_mode) => {
-                let value = self.asl(addressing_mode);
-                self.set_accumulator(self.accumulator | value);
-            }
-            RLA(addressing_mode) => {
-                let value = self.rol(addressing_mode);
-                self.set_accumulator(self.accumulator & value);
-            }
-            SRE(addressing_mode) => {
-                let value = self.lsr(addressing_mode);
-                self.set_accumulator(self.accumulator ^ value);
-            }
-            RRA(addressing_mode) => {
-                let value = self.ror(addressing_mode);
-                self.add_to_accumulator(value);
-            }
+            IGN(addressing_mode) => self.ign(addressing_mode),
+            SKB => self.skb(),
+            LAX(addressing_mode) => self.lax(addressing_mode),
+            SAX(addressing_mode) => self.sax(addressing_mode),
+            DCP(addressing_mode) => self.dcp(addressing_mode),
+            ISC(addressing_mode) => self.isc(addressing_mode),
+            SLO(addressing_mode) => self.slo(addressing_mode),
+            RLA(addressing_mode) => self.rla(addressing_mode),
+            SRE(addressing_mode) => self.sre(addressing_mode),
+            RRA(addressing_mode) => self.rra(addressing_mode),
         }
     }
 
@@ -286,18 +253,6 @@ impl<M: Memory> CPU<M> {
 
         self.set_accumulator(result);
         self.status.set(Status::CARRY, carry_out);
-    }
-
-    fn increment(&mut self, reference: Reference) {
-        let value = self.read_reference(reference, false);
-        self.set_reference(reference, value, false); // redundant write
-        self.set_reference(reference, value.wrapping_add(1), false);
-    }
-
-    fn decrement(&mut self, reference: Reference) {
-        let value = self.read_reference(reference, false);
-        self.set_reference(reference, value, false); // redundant write
-        self.set_reference(reference, value.wrapping_sub(1), false);
     }
 
     fn compare(&mut self, register: u8, value: u8) {

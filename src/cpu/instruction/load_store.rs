@@ -1,8 +1,8 @@
 //! Load/Store Operations
 use crate::{
     cpu::addressing_modes::{
-        FlexibleAddressingMode, LDXAddressingMode, LDYAddressingMode, STXAddressingMode,
-        STYAddressingMode, StoreAddressingMode,
+        FlexibleAddressingMode, LAXAddressingMode, LDXAddressingMode, LDYAddressingMode,
+        SAXAddressingMode, STXAddressingMode, STYAddressingMode, StoreAddressingMode,
     },
     Memory, CPU,
 };
@@ -36,6 +36,18 @@ impl<M: Memory> CPU<M> {
     pub fn sty(&mut self, addressing_mode: STYAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.write_reference(reference, self.y, true);
+    }
+
+    // Unofficial Opcodes
+    pub fn lax(&mut self, addressing_mode: LAXAddressingMode) {
+        let value = self.fetch(addressing_mode);
+        self.set_accumulator(value);
+        self.set_x(value);
+    }
+
+    pub fn sax(&mut self, addressing_mode: SAXAddressingMode) {
+        let reference = self.fetch_ref(addressing_mode);
+        self.write_reference(reference, self.accumulator & self.x, true);
     }
 }
 

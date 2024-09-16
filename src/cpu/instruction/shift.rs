@@ -1,7 +1,7 @@
 //! Shifts
 
 use crate::{
-    cpu::{ReferenceAddressingMode, Status},
+    cpu::{addressing_modes::StoreAddressingMode, ReferenceAddressingMode, Status},
     Memory, CPU,
 };
 
@@ -20,6 +20,27 @@ impl<M: Memory> CPU<M> {
 
     pub(in crate::cpu) fn ror(&mut self, addressing_mode: impl ReferenceAddressingMode) -> u8 {
         self.shift(addressing_mode, 0, |val, carry| val >> 1 | carry << 7)
+    }
+
+    // Unofficial Opcodes
+    pub(in crate::cpu) fn slo(&mut self, addressing_mode: StoreAddressingMode) {
+        let value = self.asl(addressing_mode);
+        self.set_accumulator(self.accumulator | value);
+    }
+
+    pub(in crate::cpu) fn rla(&mut self, addressing_mode: StoreAddressingMode) {
+        let value = self.rol(addressing_mode);
+        self.set_accumulator(self.accumulator & value);
+    }
+
+    pub(in crate::cpu) fn sre(&mut self, addressing_mode: StoreAddressingMode) {
+        let value = self.lsr(addressing_mode);
+        self.set_accumulator(self.accumulator ^ value);
+    }
+
+    pub(in crate::cpu) fn rra(&mut self, addressing_mode: StoreAddressingMode) {
+        let value = self.ror(addressing_mode);
+        self.add_to_accumulator(value);
     }
 
     fn shift(

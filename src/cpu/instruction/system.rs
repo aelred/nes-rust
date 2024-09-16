@@ -1,6 +1,9 @@
 //! System Functions
 
-use crate::{cpu::Status, Address, Memory, CPU};
+use crate::{
+    cpu::{addressing_modes::IncDecAddressingMode, Status},
+    Address, Memory, CPU,
+};
 
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
@@ -21,6 +24,15 @@ impl<M: Memory> CPU<M> {
         let lower = self.pull_and_increment_stack();
         let higher = self.pull_stack();
         self.program_counter = Address::from_bytes(higher, lower);
+    }
+
+    // Unofficial Opcodes
+    pub(in crate::cpu) fn ign(&mut self, addressing_mode: IncDecAddressingMode) {
+        self.fetch_ref(addressing_mode);
+    }
+
+    pub(in crate::cpu) fn skb(&mut self) {
+        self.incr_program_counter();
     }
 }
 
