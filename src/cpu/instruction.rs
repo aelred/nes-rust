@@ -13,6 +13,7 @@ use super::addressing_modes::ShiftAddressingMode;
 use super::addressing_modes::StoreAddressingMode;
 
 pub mod arithmetic;
+pub mod branch;
 pub mod inc_dec;
 pub mod jump;
 pub mod load_store;
