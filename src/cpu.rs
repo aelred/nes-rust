@@ -145,26 +145,10 @@ impl<M: Memory> CPU<M> {
             PHP => self.php(),
 
             // Logical
-            AND(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_accumulator(self.accumulator & value);
-            }
-            EOR(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_accumulator(self.accumulator ^ value);
-            }
-            ORA(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                self.set_accumulator(self.accumulator | value);
-            }
-            BIT(addressing_mode) => {
-                let value = self.fetch(addressing_mode);
-                let result = self.accumulator & value;
-                self.status.set(Status::ZERO, result == 0);
-                self.status.set(Status::OVERFLOW, value & (1 << 6) != 0);
-                self.status
-                    .set(Status::NEGATIVE, (value as i8).is_negative());
-            }
+            AND(addressing_mode) => self.and(addressing_mode),
+            EOR(addressing_mode) => self.eor(addressing_mode),
+            ORA(addressing_mode) => self.ora(addressing_mode),
+            BIT(addressing_mode) => self.bit(addressing_mode),
 
             // Arithmetic
             ADC(addressing_mode) => {
@@ -693,15 +677,6 @@ mod tests {
     }
 
     #[test]
-    fn instr_and_performs_bitwise_and() {
-        let cpu = run_instr(mem!(AND_IMMEDIATE, 0b1100_u8), |cpu| {
-            cpu.accumulator = 0b1010;
-        });
-
-        assert_eq!(cpu.accumulator, 0b1000);
-    }
-
-    #[test]
     fn instr_asl_shifts_left() {
         let cpu = run_instr(mem!(ASL_ACCUMULATOR), |cpu| {
             cpu.accumulator = 0b100;
@@ -795,82 +770,6 @@ mod tests {
 
         // 2 steps ahead because PC also automatically increments
         assert_eq!(cpu.program_counter, Address::new(82));
-    }
-
-    #[test]
-    fn instr_bit_sets_zero_flag_when_bitwise_and_is_zero() {
-        let cpu = run_instr(
-            mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
-                54 => { 0b0000_1111 }
-            ),
-            |cpu| {
-                cpu.accumulator = 0b1111_0000u8;
-            },
-        );
-
-        assert!(cpu.status.contains(Status::ZERO));
-    }
-
-    #[test]
-    fn instr_bit_clears_zero_flag_when_bitwise_and_is_not_zero() {
-        let cpu = run_instr(
-            mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
-                54 => { 0b0011_1111 }
-            ),
-            |cpu| {
-                cpu.accumulator = 0b1111_1100u8;
-            },
-        );
-
-        assert!(!cpu.status.contains(Status::ZERO));
-    }
-
-    #[test]
-    fn instr_bit_sets_overflow_bit_based_on_bit_6_of_operand() {
-        let cpu = run_instr(
-            mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
-                54 => { 0 }
-            ),
-            |_| {},
-        );
-
-        assert!(!cpu.status.contains(Status::OVERFLOW));
-
-        let cpu = run_instr(
-            mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
-                54 => { 0b0100_0000 }
-            ),
-            |_| {},
-        );
-
-        assert!(cpu.status.contains(Status::OVERFLOW));
-    }
-
-    #[test]
-    fn instr_bit_sets_negative_bit_based_on_bit_7_of_operand() {
-        let cpu = run_instr(
-            mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
-                54 => { 0 }
-            ),
-            |_| {},
-        );
-
-        assert!(!cpu.status.contains(Status::NEGATIVE));
-
-        let cpu = run_instr(
-            mem!(
-                0 => { BIT_ABSOLUTE, 54, 0 }
-                54 => { 0b1000_0000 }
-            ),
-            |_| {},
-        );
-
-        assert!(cpu.status.contains(Status::NEGATIVE));
     }
 
     #[test]
@@ -1281,15 +1180,6 @@ mod tests {
     }
 
     #[test]
-    fn instr_eor_performs_bitwise_xor() {
-        let cpu = run_instr(mem!(EOR_IMMEDIATE, 0b1100_u8), |cpu| {
-            cpu.accumulator = 0b1010;
-        });
-
-        assert_eq!(cpu.accumulator, 0b0110);
-    }
-
-    #[test]
     fn instr_inc_increments_operand() {
         let mut cpu = run_instr(
             mem!(
@@ -1451,15 +1341,6 @@ mod tests {
         });
 
         assert_eq!(cpu.program_counter, Address::new(21));
-    }
-
-    #[test]
-    fn instr_ora_performs_bitwise_or() {
-        let cpu = run_instr(mem!(ORA_IMMEDIATE, 0b1100_u8), |cpu| {
-            cpu.accumulator = 0b1010;
-        });
-
-        assert_eq!(cpu.accumulator, 0b1110);
     }
 
     #[test]
