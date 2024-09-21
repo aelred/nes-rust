@@ -23,6 +23,8 @@ mod status;
 const BACKGROUND_PALETTES: Address = Address::new(0x3f00);
 const SPRITE_PALETTES: Address = Address::new(0x3f10);
 
+const ACTIVE_SPRITES: usize = 8;
+
 pub struct PPU<M = NESPPUMemory> {
     memory: M,
     read_buffer: u8,
@@ -31,7 +33,7 @@ pub struct PPU<M = NESPPUMemory> {
     cycle_count: u16,
     tile_pattern: ShiftRegister,
     palette_select: ShiftRegister,
-    active_sprites: [Sprite; 8],
+    active_sprites: [Sprite; ACTIVE_SPRITES],
     active_sprites_has_zero: bool,
     control: Control,
     status: Status,
@@ -57,7 +59,7 @@ impl<M: Memory> PPU<M> {
             cycle_count: 0,
             tile_pattern: ShiftRegister::default(),
             palette_select: ShiftRegister::default(),
-            active_sprites: [Sprite::default(); 8],
+            active_sprites: [Sprite::default(); ACTIVE_SPRITES],
             active_sprites_has_zero: false,
             control: Control::default(),
             mask: Mask::default(),
@@ -135,7 +137,7 @@ impl<M: Memory> PPU<M> {
             scanline >= y && scanline < y + 8
         });
 
-        self.active_sprites = [Sprite::default(); 8];
+        self.active_sprites = [Sprite::default(); ACTIVE_SPRITES];
         self.active_sprites_has_zero = false;
 
         for (dest, (i, src)) in self.active_sprites.iter_mut().zip(sprites_on_scanline) {
