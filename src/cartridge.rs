@@ -25,7 +25,7 @@ impl Cartridge {
             _ => unimplemented!("Unsupported mapper {:?}", mapper),
         };
 
-        let prg_rom_len = prg_rom.len() as u16;
+        let prg_rom_len: u16 = prg_rom.len().try_into().unwrap_or(u16::MAX);
 
         let prg = PRG {
             rom: prg_rom,
