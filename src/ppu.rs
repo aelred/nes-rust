@@ -314,6 +314,8 @@ impl<M: Memory> PPU<M> {
 
         let color = if in_bounds { self.next_color() } else { None };
 
+        let vblank = self.scanline >= 240;
+
         if self.cycle_count < 340 {
             self.cycle_count += 1;
         } else {
@@ -325,7 +327,11 @@ impl<M: Memory> PPU<M> {
             }
         };
 
-        PPUOutput { color, interrupt }
+        PPUOutput {
+            color,
+            interrupt,
+            vblank,
+        }
     }
 }
 
@@ -354,6 +360,8 @@ impl<M: Debug> Debug for PPU<M> {
 pub struct PPUOutput {
     pub color: Option<Color>,
     pub interrupt: bool,
+    /// vblank status sent to display, without quirks of the real PPU vblank
+    pub vblank: bool,
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]

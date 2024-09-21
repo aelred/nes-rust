@@ -17,6 +17,8 @@ pub use crate::memory::Memory;
 pub use crate::ppu::Color;
 use crate::ppu::NESPPUMemory;
 use crate::ppu::PPU;
+pub use crate::runtime::ActiveRuntime;
+pub use crate::runtime::Runtime;
 pub use crate::serialize::SerializeByte;
 
 mod address;
@@ -27,13 +29,22 @@ mod input;
 mod mapper;
 mod memory;
 mod ppu;
+mod runtime;
 mod serialize;
 
 pub const WIDTH: u16 = 256;
 pub const HEIGHT: u16 = 240;
 
+#[cfg_attr(feature = "web", wasm_bindgen::prelude::wasm_bindgen(start))]
+pub fn run() {
+    if let Err(e) = ActiveRuntime::run() {
+        log::error!("Error: {}", e);
+    }
+}
+
 pub trait NESDisplay {
     fn draw_pixel(&mut self, color: Color);
+    fn enter_vblank(&mut self);
 }
 
 #[derive(Debug)]
@@ -41,27 +52,34 @@ pub struct NoDisplay;
 
 impl NESDisplay for NoDisplay {
     fn draw_pixel(&mut self, _: Color) {}
+    fn enter_vblank(&mut self) {}
 }
 
 pub struct BufferDisplay {
-    buffer: [u8; WIDTH as usize * HEIGHT as usize * 3],
+    buffer: Box<[u8; WIDTH as usize * HEIGHT as usize * 4]>,
     x: usize,
     y: usize,
+    vblank: bool,
 }
 
 impl Default for BufferDisplay {
     fn default() -> Self {
         BufferDisplay {
-            buffer: [0; WIDTH as usize * HEIGHT as usize * 3],
+            buffer: Box::new([0; WIDTH as usize * HEIGHT as usize * 4]),
             x: usize::from(WIDTH) - 8,
             y: usize::from(HEIGHT) - 1,
+            vblank: false,
         }
     }
 }
 
 impl BufferDisplay {
     pub fn buffer(&self) -> &[u8] {
-        &self.buffer
+        self.buffer.as_slice()
+    }
+
+    pub fn vblank(&self) -> bool {
+        self.vblank
     }
 }
 
@@ -73,23 +91,32 @@ impl Debug for BufferDisplay {
 
 impl NESDisplay for BufferDisplay {
     fn draw_pixel(&mut self, color: Color) {
-        let offset = (self.y * WIDTH as usize + self.x) * 3;
-        if offset + 2 < self.buffer.len() {
+        // if self.vblank {
+        //     log::debug!("Exit vblank");
+        // }
+        self.vblank = false;
+
+        let offset = (self.y * WIDTH as usize + self.x) * 4;
+        if offset + 3 < self.buffer.len() {
             let (r, g, b) = color.to_rgb();
             self.buffer[offset] = b;
             self.buffer[offset + 1] = g;
             self.buffer[offset + 2] = r;
+            self.buffer[offset + 3] = 0xFF;
         }
 
         self.x += 1;
-
         if self.x == usize::from(WIDTH) {
             self.x = 0;
             self.y += 1;
+            if self.y == usize::from(HEIGHT) {
+                self.y = 0;
+            }
         }
-        if self.y == usize::from(HEIGHT) {
-            self.y = 0;
-        }
+    }
+
+    fn enter_vblank(&mut self) {
+        self.vblank = true;
     }
 }
 
@@ -157,6 +184,10 @@ impl<D: NESDisplay> NES<D> {
 
         if let Some(color) = output.color {
             self.display.draw_pixel(color);
+        }
+
+        if output.vblank {
+            self.display.enter_vblank();
         }
     }
 }

@@ -3,6 +3,7 @@ use std::io::Cursor;
 
 use image::ColorType;
 
+use image::EncodableLayout;
 use nes_rust::INes;
 use nes_rust::NES;
 use nes_rust::{Address, BufferDisplay, HEIGHT, WIDTH};
@@ -226,7 +227,7 @@ fn get_result(success_check: Success, nes: &mut NES<BufferDisplay>) -> Result<()
         Success::Never => Err("Always fails".to_owned()),
         Success::Screen(bytes) => {
             let success_screen = image::load_from_memory(bytes).unwrap();
-            if success_screen.as_bytes() == nes.display().buffer() {
+            if success_screen.into_rgba8().as_bytes() == nes.display().buffer() {
                 Ok(())
             } else {
                 Err("Screen doesn't match success".to_owned())
@@ -262,7 +263,14 @@ fn clear_nes_test_result_image(name: &str) {
 fn save_nes_test_result_image(name: &str, nes: &NES<BufferDisplay>) -> String {
     let fname = nes_test_result_image_name(name);
     let buffer = nes.display().buffer();
-    image::save_buffer(&fname, buffer, WIDTH.into(), HEIGHT.into(), ColorType::Rgb8).unwrap();
+    image::save_buffer(
+        &fname,
+        buffer,
+        WIDTH.into(),
+        HEIGHT.into(),
+        ColorType::Rgba8,
+    )
+    .unwrap();
     fname
 }
 

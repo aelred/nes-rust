@@ -4,3 +4,6 @@
 .idea/
 roms
 test_results
+web/pkg
+package-lock.json
+node_modules
