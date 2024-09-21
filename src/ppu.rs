@@ -490,7 +490,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
 
     fn write_address(&mut self, byte: u8) {
         if self.rendering() {
-            warn!("Attempt to write address to PPU during rendering");
+            // warn!("Attempt to write address to PPU during rendering");
         }
         if self.write_lower {
             self.temporary_address &= 0b1111_1111_0000_0000;
@@ -523,7 +523,7 @@ impl<M: Memory> PPURegisters for PPU<M> {
 
     fn write_data(&mut self, byte: u8) {
         if cfg!(debug_assertions) && self.rendering() {
-            warn!("Attempt to write to PPU during rendering");
+            // warn!("Attempt to write to PPU during rendering");
         }
         self.memory.write(self.address(), byte);
         self.increment_address();
