@@ -197,6 +197,7 @@ impl<M: Memory> PPU<M> {
         let scanline = self.scanline - 1;
 
         let sprites = self.active_sprites;
+        let table = self.control.sprite_pattern_table_address();
 
         for (i, sprite) in sprites.iter().enumerate() {
             let x = u16::from(sprite.x);
@@ -206,25 +207,14 @@ impl<M: Memory> PPU<M> {
                 continue;
             }
 
-            let x_in_sprite = (cycle_count - x - 8) as u8;
-            let mut y_in_sprite = (scanline - u16::from(sprite.y)) as u8;
+            let x_in_sprite = attr.hor_flip((cycle_count - x - 8) as u8);
+            let y_in_sprite = attr.ver_flip((scanline - u16::from(sprite.y)) as u8);
 
-            if attr.contains(SpriteAttributes::VERTICAL_FLIP) {
-                y_in_sprite = 7 - y_in_sprite;
-            }
-
-            let table = self.control.sprite_pattern_table_address();
             let index = sprite.tile_index;
             let (pattern0, pattern1) = self.read_pattern_row(table, index, y_in_sprite);
 
-            let shift = if attr.contains(SpriteAttributes::HORIZONTAL_FLIP) {
-                x_in_sprite
-            } else {
-                7 - x_in_sprite
-            };
-
-            let bit0 = (pattern0 >> shift) & 0b1;
-            let bit1 = (pattern1 >> shift) & 0b1;
+            let bit0 = (pattern0 >> x_in_sprite) & 0b1;
+            let bit1 = (pattern1 >> x_in_sprite) & 0b1;
 
             let lower_index = (bit1 << 1) | bit0;
 
@@ -420,6 +410,18 @@ bitflags! {
         const HORIZONTAL_FLIP = 0b0100_0000;
         const PRIORITY        = 0b0010_0000;
         const PALETTE         = 0b0000_0011;
+    }
+}
+
+impl SpriteAttributes {
+    /// Bit-twiddling to avoid a conditional, same as `x = if hor_flip { x } else { 7 - x }`
+    fn hor_flip(self, x: u8) -> u8 {
+        x ^ ((((self & Self::HORIZONTAL_FLIP) ^ Self::HORIZONTAL_FLIP).bits() >> 6) * 0b0000_0111)
+    }
+
+    /// Bit-twiddling to avoid a conditional, same as `y = if ver_flip { 7 - y } else { y }`
+    fn ver_flip(self, y: u8) -> u8 {
+        y ^ ((self.bits() >> 7) * 0b0000_0111)
     }
 }
 
@@ -1128,5 +1130,23 @@ mod tests {
 
         assert_eq!(bit0, 0b0001_0000);
         assert_eq!(bit1, 0b0000_1000);
+    }
+
+    #[test]
+    fn sprite_flips_coordinates() {
+        let empty = SpriteAttributes::empty();
+        let all = SpriteAttributes::all();
+        let hor = SpriteAttributes::HORIZONTAL_FLIP;
+        let ver = SpriteAttributes::VERTICAL_FLIP;
+        for value in 0..8 {
+            assert_eq!(empty.hor_flip(value), 7 - value);
+            assert_eq!(empty.ver_flip(value), value);
+            assert_eq!((all - hor).hor_flip(value), 7 - value);
+            assert_eq!((all - ver).ver_flip(value), value);
+            assert_eq!(hor.hor_flip(value), value);
+            assert_eq!(ver.ver_flip(value), 7 - value);
+            assert_eq!(all.hor_flip(value), value);
+            assert_eq!(all.ver_flip(value), 7 - value);
+        }
     }
 }
