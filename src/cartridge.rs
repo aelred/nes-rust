@@ -263,7 +263,7 @@ mod tests {
     #[should_panic]
     fn nrom_cartridge_cannot_write_to_read_only_memory() {
         let mut prg = nrom_cartridge().prg;
-        prg.write(Address::new(0x9000), 10);
+        prg.write(Address::new(0x5000), 10);
     }
 
     fn nrom_cartridge() -> Cartridge {
