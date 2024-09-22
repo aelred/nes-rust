@@ -99,9 +99,9 @@ impl NESDisplay for BufferDisplay {
         let offset = (self.y * WIDTH as usize + self.x) * 4;
         if offset + 3 < self.buffer.len() {
             let (r, g, b) = color.to_rgb();
-            self.buffer[offset] = b;
+            self.buffer[offset] = r;
             self.buffer[offset + 1] = g;
-            self.buffer[offset + 2] = r;
+            self.buffer[offset + 2] = b;
             self.buffer[offset + 3] = 0xFF;
         }
 
