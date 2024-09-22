@@ -124,16 +124,22 @@ impl Runtime for Web {
         let f = Rc::new(RefCell::new(None));
         let g = f.clone();
 
-        let mut timestamp_last_frame_ms = 0.0;
+        let mut timestamp_start_ms = 0.0;
+        let mut num_frames: u64 = 0;
 
         let nes = base_nes.clone();
         *g.borrow_mut() = Some(closure(move |timestamp_ms: f64| {
             request_animation_frame(f.borrow().as_ref().unwrap())?;
 
-            if timestamp_ms - timestamp_last_frame_ms < MS_PER_FRAME {
+            if timestamp_start_ms == 0.0 {
+                timestamp_start_ms = timestamp_ms;
+            }
+
+            let expected_frames = ((timestamp_ms - timestamp_start_ms) / MS_PER_FRAME) as u64;
+            let needed_frames = expected_frames - num_frames;
+            if needed_frames == 0 {
                 return Ok(());
             }
-            timestamp_last_frame_ms = timestamp_ms;
 
             let mut nes = nes.borrow_mut();
             let nes = match &mut *nes {
@@ -141,13 +147,16 @@ impl Runtime for Web {
                 None => return Ok(()),
             };
 
-            // Run NES until frame starts
-            while nes.display().vblank() {
-                nes.tick();
-            }
-            // Run NES until frame ends
-            while !nes.display().vblank() {
-                nes.tick();
+            for _ in 0..needed_frames {
+                // Run NES until frame starts
+                while nes.display().vblank() {
+                    nes.tick();
+                }
+                // Run NES until frame ends
+                while !nes.display().vblank() {
+                    nes.tick();
+                }
+                num_frames += 1;
             }
 
             let image_data = ImageData::new_with_u8_clamped_array_and_sh(
