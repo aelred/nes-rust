@@ -144,7 +144,8 @@ impl Runtime for Web {
 
             let expected_frames =
                 ((timestamp_ms - timestamp_start_ms) / FRAME_DURATION.as_millis() as f64) as u64;
-            let needed_frames = expected_frames - num_frames;
+
+            let needed_frames = (expected_frames - num_frames).min(3);
             if needed_frames == 0 {
                 return Ok(());
             }
@@ -168,8 +169,8 @@ impl Runtime for Web {
                 while !nes.display().vblank() {
                     nes.tick();
                 }
-                num_frames += 1;
             }
+            num_frames = expected_frames;
 
             let image_data = ImageData::new_with_u8_clamped_array_and_sh(
                 Clamped(nes.display().buffer()),
