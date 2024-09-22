@@ -3,9 +3,20 @@
 <head>
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
     <style>
+        @media (pointer:fine) {
+            .mobile {
+                display: none;
+            }
+        }
+
+        .mobile {
+            font-size: xx-large;
+        }
+
         body {
             background-color: #0d0c0c;
-            overflow: hidden
+            overflow: hidden;
+            margin: 5em;
         }
 
         #canvas {
@@ -43,6 +54,7 @@
 
 <body>
     <div>
+        <p class="mobile">Sorry, the NES emulator doesn't support mobile!</p>
         <canvas id="canvas" width="256" height="240">
         </canvas>
         <p>
