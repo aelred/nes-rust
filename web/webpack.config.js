@@ -16,7 +16,7 @@ export default {
         new WasmPackPlugin({
             crateDirectory: resolve(__dirname, '..'),
             outDir: resolve(__dirname, 'pkg'),
-            // forceMode: 'production',
+            forceMode: 'production',
             extraArgs: '--no-default-features --features=web',
         }),
     ],
