@@ -34,6 +34,12 @@ web-sys = { version = "0.3.70", optional = true, features = [
     'Element',
     'HtmlCanvasElement',
     'Window',
+    # Features required for reading drag+dropped ROMs
+    'DragEvent',
+    'DataTransfer',
+    'DataTransferItem',
+    'DataTransferItemList',
+    'File',
 ] }
 console_log = { version = "1.0.0", optional = true }
 
