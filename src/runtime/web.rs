@@ -1,14 +1,19 @@
 #![allow(dead_code)] // Might be disabled by features
 use crate::{runtime::Runtime, BufferDisplay, Buttons, INes, HEIGHT, NES, WIDTH};
 use anyhow::{anyhow, Context};
-use std::{cell::RefCell, error::Error, rc::Rc};
+use std::{
+    cell::RefCell,
+    error::Error,
+    io::{Cursor, Read},
+    rc::Rc,
+};
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*, Clamped};
 use web_sys::{
     js_sys::{ArrayBuffer, Uint8Array},
     CanvasRenderingContext2d, DragEvent, HtmlCanvasElement, ImageData, KeyboardEvent, Window,
 };
+use zip::ZipArchive;
 
-const ROM: &[u8] = include_bytes!("../../roms/AlwasAwakening_demo.nes");
 const MS_PER_FRAME: f64 = 1000.0 / 60.0;
 
 pub struct Web;
@@ -18,26 +23,33 @@ impl Runtime for Web {
         console_log::init_with_level(log::Level::Debug)
             .map_err(|_| anyhow!("Failed to initialize logger"))?;
 
-        let ines = INes::read(ROM)?;
-        let cartridge = ines.into_cartridge();
-        let display = BufferDisplay::default();
-        let nes = Rc::new(RefCell::new(NES::new(cartridge, display)));
+        let base_nes = Rc::new(RefCell::new(Option::<NES<BufferDisplay>>::None));
 
-        let nesdown = nes.clone();
+        let nes = base_nes.clone();
         add_event_listener("keydown", move |event: KeyboardEvent| {
+            let mut nes = nes.borrow_mut();
+            let nes = match &mut *nes {
+                Some(nes) => nes,
+                None => return Ok(()),
+            };
             let button = keycode_binding(&event.code());
-            nesdown.borrow_mut().controller().press(button);
+            nes.controller().press(button);
             Ok(())
         })?;
 
-        let nesup = nes.clone();
+        let nes = base_nes.clone();
         add_event_listener("keyup", move |event: KeyboardEvent| {
+            let mut nes = nes.borrow_mut();
+            let nes = match &mut *nes {
+                Some(nes) => nes,
+                None => return Ok(()),
+            };
             let button = keycode_binding(&event.code());
-            nesup.borrow_mut().controller().release(button);
+            nes.controller().release(button);
             Ok(())
         })?;
 
-        let nesdrop = nes.clone();
+        let nes = base_nes.clone();
         add_event_listener("drop", move |event: DragEvent| {
             event.prevent_default();
             let items = event.data_transfer().context("No data transfered")?.items();
@@ -48,7 +60,8 @@ impl Runtime for Web {
                     .get_as_file()
                     .map_err(|_| anyhow!("Failed to get file"))?
                 {
-                    let nesread = nesdrop.clone();
+                    let filename = file.name();
+                    let nes = nes.clone();
 
                     let success = closure(move |array_buffer: JsValue| {
                         let array_buffer = array_buffer
@@ -56,15 +69,35 @@ impl Runtime for Web {
                             .map_err(|_| anyhow!("Failed to convert to ArrayBuffer"))?;
 
                         let array = Uint8Array::new(&array_buffer);
-                        let mut rom = vec![0; array.length() as usize];
-                        array.copy_to(&mut rom);
+                        let mut data = vec![0; array.length() as usize];
+                        array.copy_to(&mut data);
+
+                        let mut rom: Option<Vec<u8>> = None;
+
+                        if filename.ends_with(".zip") {
+                            let mut zip = ZipArchive::new(Cursor::new(data))?;
+
+                            for index in 0..zip.len() {
+                                let mut file = zip.by_index(index)?;
+                                if file.name().ends_with(".nes") {
+                                    let mut rom_data = vec![0; file.size() as usize];
+                                    file.read_exact(&mut rom_data)?;
+                                    rom = Some(rom_data);
+                                    break;
+                                }
+                            }
+                        } else {
+                            rom = Some(data);
+                        }
+
+                        let rom = rom.ok_or_else(|| anyhow!("No .nes file found"))?;
 
                         let ines = INes::read(&mut rom.as_slice())?;
                         let cartridge = ines.into_cartridge();
                         let display = BufferDisplay::default();
                         let nes_new = NES::new(cartridge, display);
 
-                        nesread.replace(nes_new);
+                        nes.replace(Some(nes_new));
                         Ok(())
                     });
                     let failure = closure(move |_| {
@@ -93,17 +126,22 @@ impl Runtime for Web {
 
         let mut timestamp_last_frame_ms = 0.0;
 
-        *g.borrow_mut() = Some(Closure::new(move |timestamp_ms: f64| {
-            request_animation_frame(f.borrow().as_ref().unwrap())
-                .expect("failed to request animation frame");
+        let nes = base_nes.clone();
+        *g.borrow_mut() = Some(closure(move |timestamp_ms: f64| {
+            request_animation_frame(f.borrow().as_ref().unwrap())?;
 
             if timestamp_ms - timestamp_last_frame_ms < MS_PER_FRAME {
-                return;
+                return Ok(());
             }
             timestamp_last_frame_ms = timestamp_ms;
 
-            // Run NES until frame starts
             let mut nes = nes.borrow_mut();
+            let nes = match &mut *nes {
+                Some(nes) => nes,
+                None => return Ok(()),
+            };
+
+            // Run NES until frame starts
             while nes.display().vblank() {
                 nes.tick();
             }
@@ -117,10 +155,11 @@ impl Runtime for Web {
                 WIDTH as u32,
                 HEIGHT as u32,
             )
-            .expect("failed to create image data");
+            .map_err(|_| anyhow!("Failed to create image data"))?;
             context
                 .put_image_data(&image_data, 0.0, 0.0)
-                .expect("failed to put image data");
+                .map_err(|_| anyhow!("Failed to put image data"))?;
+            Ok(())
         }));
 
         request_animation_frame(g.borrow().as_ref().unwrap())?;
