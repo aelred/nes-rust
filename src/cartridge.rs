@@ -53,6 +53,10 @@ pub struct PRG {
 }
 
 impl PRG {
+    pub fn ram(&mut self) -> &mut [u8] {
+        &mut self.ram
+    }
+
     fn read_bank(&self, bank: u8, address: Address) -> u8 {
         let window = self.rom_window as usize;
         self.rom[bank as usize * window + (address.index() % window)]

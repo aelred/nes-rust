@@ -1,16 +1,19 @@
 #![allow(dead_code)] // Might be disabled by features
 use crate::{runtime::Runtime, BufferDisplay, Buttons, INes, HEIGHT, NES, WIDTH};
 use anyhow::{anyhow, Context};
+use base64::{prelude::BASE64_STANDARD, Engine};
 use std::{
     cell::RefCell,
     error::Error,
+    hash::{DefaultHasher, Hash, Hasher},
     io::{Cursor, Read},
     rc::Rc,
 };
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*, Clamped};
 use web_sys::{
     js_sys::{ArrayBuffer, Uint8Array},
-    CanvasRenderingContext2d, DragEvent, HtmlCanvasElement, ImageData, KeyboardEvent, Window,
+    CanvasRenderingContext2d, DragEvent, HtmlCanvasElement, ImageData, KeyboardEvent, Storage,
+    Window,
 };
 use zip::ZipArchive;
 
@@ -25,13 +28,18 @@ impl Runtime for Web {
     }
 
     fn run() -> Result<(), Box<dyn Error>> {
-        let base_nes = Rc::new(RefCell::new(Option::<NES<BufferDisplay>>::None));
+        let base_ctx = Rc::new(RefCell::new(Option::<NesContext>::None));
 
-        let nes = base_nes.clone();
+        if let Some(rom) = load_rom()? {
+            let new_ctx = set_rom(&rom)?;
+            base_ctx.borrow_mut().replace(new_ctx);
+        }
+
+        let ctx = base_ctx.clone();
         add_event_listener("keydown", move |event: KeyboardEvent| {
-            let mut nes = nes.borrow_mut();
-            let nes = match &mut *nes {
-                Some(nes) => nes,
+            let mut ctx = ctx.borrow_mut();
+            let nes = match &mut *ctx {
+                Some(ctx) => &mut ctx.nes,
                 None => return Ok(()),
             };
             let button = keycode_binding(&event.code());
@@ -39,11 +47,11 @@ impl Runtime for Web {
             Ok(())
         })?;
 
-        let nes = base_nes.clone();
+        let ctx = base_ctx.clone();
         add_event_listener("keyup", move |event: KeyboardEvent| {
-            let mut nes = nes.borrow_mut();
-            let nes = match &mut *nes {
-                Some(nes) => nes,
+            let mut ctx = ctx.borrow_mut();
+            let nes = match &mut *ctx {
+                Some(ctx) => &mut ctx.nes,
                 None => return Ok(()),
             };
             let button = keycode_binding(&event.code());
@@ -51,7 +59,7 @@ impl Runtime for Web {
             Ok(())
         })?;
 
-        let nes = base_nes.clone();
+        let ctx = base_ctx.clone();
         add_event_listener("drop", move |event: DragEvent| {
             event.prevent_default();
             let items = event.data_transfer().context("No data transfered")?.items();
@@ -63,7 +71,7 @@ impl Runtime for Web {
                     .map_err(|_| anyhow!("Failed to get file"))?
                 {
                     let filename = file.name();
-                    let nes = nes.clone();
+                    let ctx = ctx.clone();
 
                     let success = closure(move |array_buffer: JsValue| {
                         let array_buffer = array_buffer
@@ -94,12 +102,9 @@ impl Runtime for Web {
 
                         let rom = rom.ok_or_else(|| anyhow!("No .nes file found"))?;
 
-                        let ines = INes::read(&mut rom.as_slice())?;
-                        let cartridge = ines.into_cartridge();
-                        let display = BufferDisplay::default();
-                        let nes_new = NES::new(cartridge, display);
-
-                        nes.replace(Some(nes_new));
+                        let new_ctx = set_rom(&rom)?;
+                        ctx.replace(Some(new_ctx));
+                        save_rom(&rom)?;
                         Ok(())
                     });
                     let failure = closure(move |_| {
@@ -129,7 +134,7 @@ impl Runtime for Web {
         let mut timestamp_start_ms = 0.0;
         let mut num_frames: u64 = 0;
 
-        let nes = base_nes.clone();
+        let ctx = base_ctx.clone();
         *g.borrow_mut() = Some(closure(move |timestamp_ms: f64| {
             request_animation_frame(f.borrow().as_ref().unwrap())?;
 
@@ -144,11 +149,15 @@ impl Runtime for Web {
                 return Ok(());
             }
 
-            let mut nes = nes.borrow_mut();
-            let nes = match &mut *nes {
-                Some(nes) => nes,
+            let mut ctx = ctx.borrow_mut();
+            let ctx = match &mut *ctx {
+                Some(ctx) => ctx,
                 None => return Ok(()),
             };
+            let nes = &mut ctx.nes;
+
+            // Save state every frame, inefficient but it doesn't seem to matter
+            save_state(ctx.rom_hash, nes)?;
 
             for _ in 0..needed_frames {
                 // Run NES until frame starts
@@ -178,6 +187,11 @@ impl Runtime for Web {
 
         Ok(())
     }
+}
+
+struct NesContext {
+    nes: NES<BufferDisplay>,
+    rom_hash: u64,
 }
 
 fn keycode_binding(keycode: &str) -> Buttons {
@@ -242,4 +256,78 @@ fn closure<T: FromWasmAbi + 'static>(
             log::error!("Error: {}", err);
         }
     })
+}
+
+fn set_rom(rom: &[u8]) -> Result<NesContext, Box<dyn Error>> {
+    let ines = INes::read(rom)?;
+    let cartridge = ines.into_cartridge();
+    let display = BufferDisplay::default();
+
+    let mut rom_hasher = DefaultHasher::new();
+    rom.hash(&mut rom_hasher);
+    let rom_hash = rom_hasher.finish();
+
+    let mut nes = NES::new(cartridge, display);
+    load_state(rom_hash, &mut nes)?;
+
+    Ok(NesContext { nes, rom_hash })
+}
+
+fn save_state<D>(rom_hash: u64, nes: &mut NES<D>) -> Result<(), Box<dyn Error>> {
+    let ram = nes.cpu.memory().prg().ram();
+
+    let key = state_key(rom_hash);
+    let value = BASE64_STANDARD.encode(ram);
+    local_storage()?
+        .set_item(&key, &value)
+        .map_err(|_| anyhow!("Failed to save state to local storage"))?;
+    Ok(())
+}
+
+fn load_state<D>(rom_hash: u64, nes: &mut NES<D>) -> Result<(), Box<dyn Error>> {
+    let key = state_key(rom_hash);
+    let value = match local_storage()?
+        .get_item(&key)
+        .map_err(|_| anyhow!("Failed to get state from local storage"))?
+    {
+        Some(value) => value,
+        None => return Ok(()), // No state saved
+    };
+
+    let ram = BASE64_STANDARD.decode(value)?;
+    nes.cpu.memory().prg().ram().copy_from_slice(&ram);
+    Ok(())
+}
+
+const ROM_KEY: &str = "nes-rom";
+
+fn save_rom(rom: &[u8]) -> Result<(), Box<dyn Error>> {
+    let value = BASE64_STANDARD.encode(rom);
+    local_storage()?
+        .set_item(ROM_KEY, &value)
+        .map_err(|_| anyhow!("Failed to save ROM"))?;
+    Ok(())
+}
+
+fn load_rom() -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    let value = match local_storage()?
+        .get_item(ROM_KEY)
+        .map_err(|_| anyhow!("Failed to read ROM"))?
+    {
+        Some(value) => value,
+        None => return Ok(None),
+    };
+    Ok(Some(BASE64_STANDARD.decode(value)?))
+}
+
+fn local_storage() -> Result<Storage, Box<dyn Error>> {
+    Ok(window()?
+        .local_storage()
+        .map_err(|_| anyhow!("Failed to get local storage"))?
+        .context("Failed to get local storage")?)
+}
+
+fn state_key(rom_hash: u64) -> String {
+    let hash_base64 = BASE64_STANDARD.encode(rom_hash.to_le_bytes());
+    format!("nes-state-{}", hash_base64)
 }

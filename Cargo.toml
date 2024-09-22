@@ -10,7 +10,13 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["sdl", "web"]
 sdl = ["dep:sdl2", "dep:env_logger"]
-web = ["dep:wasm-bindgen", "dep:web-sys", "dep:zip", "dep:console_log"]
+web = [
+    "dep:wasm-bindgen",
+    "dep:web-sys",
+    "dep:zip",
+    "dep:base64",
+    "dep:console_log",
+]
 
 [dependencies]
 log = "0.4.22"
@@ -40,10 +46,13 @@ web-sys = { version = "0.3.70", optional = true, features = [
     'DataTransferItem',
     'DataTransferItemList',
     'File',
+    # Feature required for saving the game
+    'Storage',
 ] }
 zip = { version = "2.2.0", optional = true, default-features = false, features = [
     "deflate",
 ] }
+base64 = { version = "0.22.1", optional = true }
 console_log = { version = "1.0.0", optional = true }
 
 [dev-dependencies]

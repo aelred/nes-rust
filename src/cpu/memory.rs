@@ -50,6 +50,10 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> NESCPUMemory<PRG, PPU, IN> {
         &mut self.input
     }
 
+    pub fn prg(&mut self) -> &mut PRG {
+        &mut self.prg
+    }
+
     fn write_oam_data(&mut self, page: u8) {
         let address = Address::from_bytes(page, 0);
 
