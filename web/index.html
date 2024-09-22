@@ -5,6 +5,7 @@
     <style>
         body {
             background-color: #0d0c0c;
+            overflow: hidden
         }
 
         #canvas {
@@ -14,7 +15,8 @@
             margin-right: auto;
             display: block;
             width: 100%;
-            height: 90%;
+            /* Allow space for text under */
+            height: calc(100vh - 150px);
             object-fit: contain;
             image-rendering: pixelated;
         }
@@ -40,20 +42,25 @@
 </head>
 
 <body>
-    <canvas id="canvas" width="256" height="240">
-    </canvas>
-    <p>
-        Drag and drop a ROM to the window to play it. Try the <a
-            href="https://eldenpixels.itch.io/alwas-awakening-the-8-bit-edition#:~:text=944%20kB-,Download%20demo,-Download">Alwa's
-            Awakening demo!</a> No need to unzip.
-    </p>
-    <p>
-        <span class=key>Z</span> = <span class=button>A</span>,&nbsp;
-        <span class=key>X</span> = <span class=button>B</span>,&nbsp;
-        <span class=key>Arrows</span> = <span class=button>D-Pad</span>,&nbsp;
-        <span class=key>Enter</span> = <span class=button> Start</span>,&nbsp;
-        <span class=key>Shift</span> = <span class=button>Select</span>
-    </p>
+    <div>
+        <canvas id="canvas" width="256" height="240">
+        </canvas>
+        <p>
+            Drag and drop a ROM to the window to play it. Try the <a
+                href="https://eldenpixels.itch.io/alwas-awakening-the-8-bit-edition#:~:text=944%20kB-,Download%20demo,-Download">Alwa's
+                Awakening demo</a>! No need to unzip.
+        </p>
+        <p>
+            <span class=key>Z</span> = <span class=button>A</span>,&nbsp;
+            <span class=key>X</span> = <span class=button>B</span>,&nbsp;
+            <span class=key>Arrows</span> = <span class=button>D-Pad</span>,&nbsp;
+            <span class=key>Enter</span> = <span class=button> Start</span>,&nbsp;
+            <span class=key>Shift</span> = <span class=button>Select</span>
+        </p>
+        <p>
+            <a href="https://github.com/aelred/nes-rust">GitHub</a>
+        </p>
+    </div>
 </body>
 
 </html>
