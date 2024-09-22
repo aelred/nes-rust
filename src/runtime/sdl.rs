@@ -16,18 +16,22 @@ use crate::NES;
 use crate::{Buttons, Color, HEIGHT, WIDTH};
 
 use super::Runtime;
+use super::FRAME_DURATION;
 
 const SCALE: u16 = 3;
 
 pub struct Sdl;
 
 impl Runtime for Sdl {
-    fn run() -> Result<(), Box<dyn Error>> {
+    fn init_log(level: log::Level) -> Result<(), Box<dyn Error>> {
         env_logger::builder()
             .target(env_logger::Target::Stdout)
-            .filter_level(log::LevelFilter::Info)
+            .filter_level(level.to_level_filter())
             .init();
+        Ok(())
+    }
 
+    fn run() -> Result<(), Box<dyn Error>> {
         let sdl_context = sdl2::init()?;
         let video_subsystem = sdl_context.video()?;
         let mut event_pump = sdl_context.event_pump()?;
@@ -118,9 +122,6 @@ fn keycode_binding(keycode: Keycode) -> Buttons {
         _ => Buttons::empty(),
     }
 }
-
-const FPS: u64 = 60;
-const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / FPS);
 
 struct SDLDisplay<'r> {
     canvas: WindowCanvas,

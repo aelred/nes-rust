@@ -37,9 +37,14 @@ pub const HEIGHT: u16 = 240;
 
 #[cfg_attr(feature = "web", wasm_bindgen::prelude::wasm_bindgen(start))]
 pub fn run() {
-    if let Err(e) = ActiveRuntime::run() {
+    if let Err(e) = run_inner() {
         log::error!("Error: {}", e);
     }
+}
+
+fn run_inner() -> Result<(), Box<dyn std::error::Error>> {
+    ActiveRuntime::init_log(log::Level::Info)?;
+    ActiveRuntime::run()
 }
 
 pub trait NESDisplay {

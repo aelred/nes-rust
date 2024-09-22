@@ -14,15 +14,17 @@ use web_sys::{
 };
 use zip::ZipArchive;
 
-const MS_PER_FRAME: f64 = 1000.0 / 60.0;
+use super::FRAME_DURATION;
 
 pub struct Web;
 
 impl Runtime for Web {
-    fn run() -> Result<(), Box<dyn Error>> {
-        console_log::init_with_level(log::Level::Debug)
-            .map_err(|_| anyhow!("Failed to initialize logger"))?;
+    fn init_log(level: log::Level) -> Result<(), Box<dyn Error>> {
+        console_log::init_with_level(level).map_err(|_| anyhow!("Failed to initialize logger"))?;
+        Ok(())
+    }
 
+    fn run() -> Result<(), Box<dyn Error>> {
         let base_nes = Rc::new(RefCell::new(Option::<NES<BufferDisplay>>::None));
 
         let nes = base_nes.clone();
@@ -135,7 +137,8 @@ impl Runtime for Web {
                 timestamp_start_ms = timestamp_ms;
             }
 
-            let expected_frames = ((timestamp_ms - timestamp_start_ms) / MS_PER_FRAME) as u64;
+            let expected_frames =
+                ((timestamp_ms - timestamp_start_ms) / FRAME_DURATION.as_millis() as f64) as u64;
             let needed_frames = expected_frames - num_frames;
             if needed_frames == 0 {
                 return Ok(());
