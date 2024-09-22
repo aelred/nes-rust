@@ -16,20 +16,19 @@
         body {
             background-color: #0d0c0c;
             overflow: hidden;
-            margin: 5em;
+            margin: 2em;
+        }
+
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
 
         #canvas {
-            padding-left: 0;
-            padding-right: 0;
-            margin-left: auto;
-            margin-right: auto;
-            display: block;
-            width: 100%;
-            /* Allow space for text under */
-            height: calc(100vh - 150px);
             object-fit: contain;
             image-rendering: pixelated;
+            overflow: auto;
         }
 
         p {
@@ -53,7 +52,7 @@
 </head>
 
 <body>
-    <div>
+    <div id="container">
         <p class="mobile">Sorry, the NES emulator doesn't support mobile!</p>
         <canvas id="canvas" width="256" height="240">
         </canvas>
