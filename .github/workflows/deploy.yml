@@ -24,6 +24,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
       - uses: extractions/setup-just@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21
       - name: Build
         run: just build-web
       - name: Upload artifact
