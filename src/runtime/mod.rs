@@ -19,3 +19,5 @@ pub trait Runtime {
 
 const FPS: u64 = 60;
 const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / FPS);
+const NES_AUDIO_FREQ: f64 = 894886.5;
+const TARGET_AUDIO_FREQ: i32 = 44100;

@@ -1,9 +1,14 @@
 use std::error::Error;
 use std::fs::File;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
 use log::info;
+use sdl2::audio::AudioCallback;
+use sdl2::audio::AudioDevice;
+use sdl2::audio::AudioSpecDesired;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::WindowCanvas;
@@ -12,11 +17,14 @@ use sdl2::video::WindowContext;
 
 use crate::INes;
 use crate::NESDisplay;
+use crate::NESSpeaker;
 use crate::NES;
 use crate::{Buttons, Color, HEIGHT, WIDTH};
 
 use super::Runtime;
 use super::FRAME_DURATION;
+use super::NES_AUDIO_FREQ;
+use super::TARGET_AUDIO_FREQ;
 
 const SCALE: u16 = 3;
 
@@ -63,6 +71,7 @@ impl Runtime for Sdl {
 
         let texture_creator = canvas.texture_creator();
         let display = SDLDisplay::new(&texture_creator, canvas);
+        let speaker = SDLSpeaker::new(&sdl_context)?;
 
         let args: Vec<String> = std::env::args().collect();
 
@@ -77,7 +86,7 @@ impl Runtime for Sdl {
 
         let cartridge = ines.into_cartridge();
 
-        let mut nes = NES::new(cartridge, display);
+        let mut nes = NES::new(cartridge, display, speaker);
 
         loop {
             // Arbitrary number of ticks so we don't poll events too much
@@ -179,23 +188,119 @@ impl<'r> NESDisplay for SDLDisplay<'r> {
             self.canvas.copy(&self.texture, None, None).unwrap();
             self.canvas.present();
 
-            let elapsed = self.start_of_frame.elapsed();
-            let time_to_sleep = FRAME_DURATION.checked_sub(elapsed).unwrap_or_default();
-            std::thread::sleep(time_to_sleep);
-
-            self.start_of_frame = Instant::now();
+            let now = Instant::now();
+            let elapsed = now.duration_since(self.start_of_frame);
+            if let Some(time_to_sleep) = FRAME_DURATION.checked_sub(elapsed) {
+                std::thread::sleep(time_to_sleep);
+                self.start_of_frame = now + time_to_sleep;
+            } else {
+                // We're running behind, sleep less next time
+                self.start_of_frame = now - (elapsed - FRAME_DURATION);
+            }
 
             self.frames_since_last_fps_log += 1;
 
-            let elapsed_since_last_fps_log = self.last_fps_log.elapsed();
+            let now = Instant::now();
+            let elapsed_since_last_fps_log = now.duration_since(self.last_fps_log);
             if elapsed_since_last_fps_log > Duration::from_secs(5) {
-                let fps = self.frames_since_last_fps_log / elapsed_since_last_fps_log.as_secs();
+                let fps = self.frames_since_last_fps_log as f64
+                    / elapsed_since_last_fps_log.as_secs_f64();
                 info!("FPS: {}", fps);
-                self.last_fps_log = Instant::now();
+                self.last_fps_log = now;
                 self.frames_since_last_fps_log = 0;
             }
         }
     }
 
     fn enter_vblank(&mut self) {}
+}
+
+struct SDLSpeaker {
+    _device: AudioDevice<MyAudioCallback>,
+    buffer: AudioBuffer,
+    next_sample: f64,
+}
+
+impl SDLSpeaker {
+    fn new(sdl_context: &sdl2::Sdl) -> Result<Self, String> {
+        let audio_subsystem = sdl_context.audio()?;
+
+        let desired_spec = AudioSpecDesired {
+            freq: Some(TARGET_AUDIO_FREQ),
+            channels: Some(1),
+            samples: None,
+        };
+
+        let double_buffer = Arc::new(Mutex::new(Vec::new()));
+
+        let device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
+            let double_buffer = double_buffer.clone();
+            double_buffer
+                .lock()
+                .unwrap()
+                .resize(spec.samples as usize, 0);
+            MyAudioCallback(double_buffer)
+        })?;
+        device.resume();
+
+        let sample_size = device.spec().samples;
+        log::info!("Audio sample size: {}", sample_size);
+
+        let buffer = AudioBuffer::new(sample_size as usize, double_buffer);
+
+        Ok(Self {
+            _device: device,
+            buffer,
+            next_sample: 0.0,
+        })
+    }
+}
+
+impl NESSpeaker for SDLSpeaker {
+    fn emit(&mut self, value: u8) {
+        // Naive downsampling
+        if self.next_sample <= 0.0 {
+            self.buffer.push(value);
+            self.next_sample += NES_AUDIO_FREQ / TARGET_AUDIO_FREQ as f64;
+        }
+        self.next_sample -= 1.0;
+    }
+}
+
+struct AudioBuffer {
+    size: usize,
+    buffer: Vec<u8>,
+    double_buffer: Arc<Mutex<Vec<u8>>>,
+}
+
+impl AudioBuffer {
+    fn new(size: usize, double_buffer: Arc<Mutex<Vec<u8>>>) -> Self {
+        let buffer = Vec::with_capacity(size);
+        Self {
+            size,
+            buffer,
+            double_buffer,
+        }
+    }
+
+    fn push(&mut self, value: u8) {
+        self.buffer.push(value);
+        if self.buffer.len() == self.size {
+            let mut double_buffer = self.double_buffer.lock().unwrap();
+            double_buffer.copy_from_slice(&self.buffer);
+            self.buffer.clear();
+        }
+    }
+}
+
+struct MyAudioCallback(Arc<Mutex<Vec<u8>>>);
+
+impl AudioCallback for MyAudioCallback {
+    type Channel = u8;
+
+    fn callback(&mut self, out: &mut [u8]) {
+        let buffer = self.0.lock().unwrap();
+        debug_assert_eq!(buffer.len(), out.len());
+        out.copy_from_slice(&buffer);
+    }
 }

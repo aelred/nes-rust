@@ -2,6 +2,8 @@
 
 use std::fmt::{Debug, Formatter};
 
+use apu::APU;
+
 pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
 pub use crate::cpu::instructions;
@@ -22,6 +24,7 @@ pub use crate::runtime::Runtime;
 pub use crate::serialize::SerializeByte;
 
 mod address;
+mod apu;
 mod cartridge;
 mod cpu;
 mod i_nes;
@@ -52,10 +55,7 @@ pub trait NESDisplay {
     fn enter_vblank(&mut self);
 }
 
-#[derive(Debug)]
-pub struct NoDisplay;
-
-impl NESDisplay for NoDisplay {
+impl NESDisplay for () {
     fn draw_pixel(&mut self, _: Color) {}
     fn enter_vblank(&mut self) {}
 }
@@ -125,22 +125,40 @@ impl NESDisplay for BufferDisplay {
     }
 }
 
-#[derive(Debug)]
-pub struct NES<D> {
-    cpu: CPU,
-    display: D,
+pub trait NESSpeaker {
+    fn emit(&mut self, wave: u8);
 }
 
-impl<D: NESDisplay> NES<D> {
-    pub fn new(cartridge: Cartridge, display: D) -> Self {
+impl NESSpeaker for () {
+    fn emit(&mut self, _wave: u8) {}
+}
+
+#[derive(Debug)]
+pub struct NES<D, S> {
+    cpu: CPU,
+    display: D,
+    speaker: S,
+    // 2 CPU cycles = 1 APU cycle, so sometimes they don't perfectly line up and we need to keep track of the lag.
+    // e.g. if a CPU instruction takes 3 cycles, the APU will tick once but we have to remember to tick again after 1 CPU cycle next time.
+    apu_lag: u8,
+}
+
+impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
+    pub fn new(cartridge: Cartridge, display: D, speaker: S) -> Self {
         let ppu_memory = NESPPUMemory::new(cartridge.chr);
         let ppu = PPU::with_memory(ppu_memory);
         let controller = Controller::default();
+        let apu = APU::default();
 
-        let cpu_memory = NESCPUMemory::new(cartridge.prg, ppu, controller);
+        let cpu_memory = NESCPUMemory::new(cartridge.prg, ppu, apu, controller);
         let cpu = CPU::from_memory(cpu_memory);
 
-        NES { cpu, display }
+        NES {
+            cpu,
+            display,
+            speaker,
+            apu_lag: 0,
+        }
     }
 
     pub fn display(&self) -> &D {
@@ -164,16 +182,18 @@ impl<D: NESDisplay> NES<D> {
     }
 
     pub fn tick(&mut self) {
-        let cpu_cycles = self.tick_cpu();
+        let cpu_cycles = self.cpu.run_instruction();
 
         // There are 3 PPU cycles to 1 CPU cycle
         for _ in 0..3 * cpu_cycles {
             self.tick_ppu();
         }
-    }
 
-    fn tick_cpu(&mut self) -> u8 {
-        self.cpu.run_instruction()
+        let apu_cycles = (cpu_cycles + self.apu_lag) / 2;
+        for _ in 0..apu_cycles {
+            self.tick_apu();
+        }
+        self.apu_lag = (cpu_cycles + self.apu_lag) % 2;
     }
 
     fn ppu(&mut self) -> &mut PPU {
@@ -194,6 +214,12 @@ impl<D: NESDisplay> NES<D> {
         if output.vblank {
             self.display.enter_vblank();
         }
+    }
+
+    fn tick_apu(&mut self) {
+        let apu = self.cpu.memory().apu();
+        let wave = apu.tick();
+        self.speaker.emit(wave);
     }
 }
 

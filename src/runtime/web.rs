@@ -191,7 +191,7 @@ impl Runtime for Web {
 }
 
 struct NesContext {
-    nes: NES<BufferDisplay>,
+    nes: NES<BufferDisplay, ()>,
     rom_hash: u64,
 }
 
@@ -268,13 +268,13 @@ fn set_rom(rom: &[u8]) -> Result<NesContext, Box<dyn Error>> {
     rom.hash(&mut rom_hasher);
     let rom_hash = rom_hasher.finish();
 
-    let mut nes = NES::new(cartridge, display);
+    let mut nes = NES::new(cartridge, display, ());
     load_state(rom_hash, &mut nes)?;
 
     Ok(NesContext { nes, rom_hash })
 }
 
-fn save_state<D>(rom_hash: u64, nes: &mut NES<D>) -> Result<(), Box<dyn Error>> {
+fn save_state<D, S>(rom_hash: u64, nes: &mut NES<D, S>) -> Result<(), Box<dyn Error>> {
     let ram = nes.cpu.memory().prg().ram();
 
     let key = state_key(rom_hash);
@@ -285,7 +285,7 @@ fn save_state<D>(rom_hash: u64, nes: &mut NES<D>) -> Result<(), Box<dyn Error>> 
     Ok(())
 }
 
-fn load_state<D>(rom_hash: u64, nes: &mut NES<D>) -> Result<(), Box<dyn Error>> {
+fn load_state<D, S>(rom_hash: u64, nes: &mut NES<D, S>) -> Result<(), Box<dyn Error>> {
     let key = state_key(rom_hash);
     let value = match local_storage()?
         .get_item(&key)

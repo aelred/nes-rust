@@ -176,7 +176,7 @@ fn external_test(
     let ines = INes::read(cursor).unwrap();
     let cartridge = ines.into_cartridge();
 
-    let mut nes = NES::new(cartridge, BufferDisplay::default());
+    let mut nes = NES::new(cartridge, BufferDisplay::default(), ());
 
     match setup {
         Setup::Default => {}
@@ -222,7 +222,7 @@ fn external_test(
     );
 }
 
-fn get_result(success_check: Success, nes: &mut NES<BufferDisplay>) -> Result<(), String> {
+fn get_result(success_check: Success, nes: &mut NES<BufferDisplay, ()>) -> Result<(), String> {
     match success_check {
         Success::Never => Err("Always fails".to_owned()),
         Success::Screen(bytes) => {
@@ -260,7 +260,7 @@ fn clear_nes_test_result_image(name: &str) {
     let _ = fs::remove_file(&fname);
 }
 
-fn save_nes_test_result_image(name: &str, nes: &NES<BufferDisplay>) -> String {
+fn save_nes_test_result_image(name: &str, nes: &NES<BufferDisplay, ()>) -> String {
     let fname = nes_test_result_image_name(name);
     let buffer = nes.display().buffer();
     image::save_buffer(

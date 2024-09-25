@@ -3,6 +3,7 @@ use std::fmt::{Debug, Formatter};
 
 use log::trace;
 
+use crate::apu::APU;
 use crate::input::{Controller, Input};
 use crate::ppu::{self, PPURegisters};
 use crate::ArrayMemory;
@@ -19,24 +20,46 @@ const PPU_SCROLL: Address = Address::new(0x2005);
 const PPU_ADDRESS: Address = Address::new(0x2006);
 const PPU_DATA: Address = Address::new(0x2007);
 const APU_SPACE: Address = Address::new(0x4000);
+const APU_PULSE_1_FLAGS: Address = Address::new(0x4000);
+const APU_PULSE_1_SWEEP: Address = Address::new(0x4001);
+const APU_PULSE_1_TIMER: Address = Address::new(0x4002);
+const APU_PULSE_1_LENGTH: Address = Address::new(0x4003);
+const APU_PULSE_2_FLAGS: Address = Address::new(0x4004);
+const APU_PULSE_2_SWEEP: Address = Address::new(0x4005);
+const APU_PULSE_2_TIMER: Address = Address::new(0x4006);
+const APU_PULSE_2_LENGTH: Address = Address::new(0x4007);
+const APU_TRIANGLE_FLAGS: Address = Address::new(0x4008);
+const APU_TRIANGLE_TIMER: Address = Address::new(0x400a);
+const APU_TRIANGLE_LENGTH: Address = Address::new(0x400b);
+const APU_NOISE_FLAGS: Address = Address::new(0x400c);
+const APU_NOISE_PERIOD: Address = Address::new(0x400e);
+const APU_NOISE_LENGTH: Address = Address::new(0x400f);
+const APU_DMC_FLAGS: Address = Address::new(0x4010);
+const APU_DMC_DIRECT_LOAD: Address = Address::new(0x4011);
+const APU_DMC_SAMPLE_ADDRESS: Address = Address::new(0x4012);
+const APU_DMC_SAMPLE_LENGTH: Address = Address::new(0x4013);
 const OAM_DMA: Address = Address::new(0x4014);
+const APU_STATUS: Address = Address::new(0x4015);
 const JOY1_ADDRESS: Address = Address::new(0x4016);
+const APU_FRAME_COUNTER: Address = Address::new(0x4017);
 const PRG_SPACE: Address = Address::new(0x4020);
 
 pub struct NESCPUMemory<PRG = cartridge::PRG, PPU = ppu::PPU, IN = Controller> {
     internal_ram: [u8; 0x800],
     prg: PRG,
     ppu_registers: PPU,
+    apu: APU,
     input: IN,
     the_rest: ArrayMemory, // TODO
 }
 
 impl<PRG: Memory, PPU: PPURegisters, IN: Input> NESCPUMemory<PRG, PPU, IN> {
-    pub fn new(prg: PRG, ppu_registers: PPU, input: IN) -> Self {
+    pub fn new(prg: PRG, ppu_registers: PPU, apu: APU, input: IN) -> Self {
         NESCPUMemory {
             internal_ram: [0; 0x800],
             prg,
             ppu_registers,
+            apu,
             input,
             the_rest: ArrayMemory::default(),
         }
@@ -44,6 +67,10 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> NESCPUMemory<PRG, PPU, IN> {
 
     pub fn ppu_registers(&mut self) -> &mut PPU {
         &mut self.ppu_registers
+    }
+
+    pub fn apu(&mut self) -> &mut APU {
+        &mut self.apu
     }
 
     pub fn input(&mut self) -> &mut IN {
@@ -84,6 +111,8 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
             self.prg.read(address)
         } else if address == JOY1_ADDRESS {
             self.input.read()
+        } else if address == APU_STATUS {
+            self.apu.read_status()
         } else if address >= APU_SPACE {
             self.the_rest.read(address) // TODO
         } else if address >= PPU_SPACE {
@@ -108,7 +137,17 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
         } else if address == JOY1_ADDRESS {
             self.input.write(byte);
         } else if address >= APU_SPACE {
-            self.the_rest.write(address, byte) // TODO
+            match address {
+                APU_PULSE_1_FLAGS => self.apu.write_pulse_1_flags(byte),
+                APU_PULSE_1_TIMER => self.apu.write_pulse_1_timer(byte),
+                APU_PULSE_1_LENGTH => self.apu.write_pulse_1_length(byte),
+                APU_PULSE_2_FLAGS => self.apu.write_pulse_2_flags(byte),
+                APU_PULSE_2_TIMER => self.apu.write_pulse_2_timer(byte),
+                APU_PULSE_2_LENGTH => self.apu.write_pulse_2_length(byte),
+                APU_FRAME_COUNTER => self.apu.write_frame_counter(byte),
+                APU_STATUS => self.apu.write_status(byte),
+                _ => self.the_rest.write(address, byte), // TODO
+            }
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
             let ppu_registers = self.ppu_registers.borrow_mut();
@@ -395,6 +434,6 @@ mod tests {
         };
         let prg = ArrayMemory::default();
         let input = MockInput(0);
-        NESCPUMemory::new(prg, ppu, input)
+        NESCPUMemory::new(prg, ppu, APU::default(), input)
     }
 }
