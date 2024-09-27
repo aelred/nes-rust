@@ -1,5 +1,5 @@
 #![allow(dead_code)] // Might be disabled by features
-use crate::{runtime::Runtime, BufferDisplay, Buttons, INes, HEIGHT, NES, WIDTH};
+use crate::{runtime::Runtime, BufferDisplay, Buttons, INes, NESSpeaker, HEIGHT, NES, WIDTH};
 use anyhow::{anyhow, Context};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use std::{
@@ -17,7 +17,7 @@ use web_sys::{
 };
 use zip::ZipArchive;
 
-use super::FRAME_DURATION;
+use super::{FRAME_DURATION, NES_AUDIO_FREQ, TARGET_AUDIO_FREQ};
 
 pub struct Web;
 
@@ -191,7 +191,7 @@ impl Runtime for Web {
 }
 
 struct NesContext {
-    nes: NES<BufferDisplay, ()>,
+    nes: NES<BufferDisplay, WebSpeaker>,
     rom_hash: u64,
 }
 
@@ -263,12 +263,13 @@ fn set_rom(rom: &[u8]) -> Result<NesContext, Box<dyn Error>> {
     let ines = INes::read(rom)?;
     let cartridge = ines.into_cartridge();
     let display = BufferDisplay::default();
+    let speaker = WebSpeaker::default();
 
     let mut rom_hasher = DefaultHasher::new();
     rom.hash(&mut rom_hasher);
     let rom_hash = rom_hasher.finish();
 
-    let mut nes = NES::new(cartridge, display, ());
+    let mut nes = NES::new(cartridge, display, speaker);
     load_state(rom_hash, &mut nes)?;
 
     Ok(NesContext { nes, rom_hash })
@@ -331,4 +332,26 @@ fn local_storage() -> Result<Storage, Box<dyn Error>> {
 fn state_key(rom_hash: u64) -> String {
     let hash_base64 = BASE64_STANDARD.encode(rom_hash.to_le_bytes());
     format!("nes-state-{}", hash_base64)
+}
+
+#[derive(Default)]
+struct WebSpeaker {
+    next_sample: f64,
+}
+
+impl NESSpeaker for WebSpeaker {
+    fn emit(&mut self, value: u8) {
+        // Naive downsampling
+        if self.next_sample <= 0.0 {
+            push_audio_buffer(value);
+            self.next_sample += NES_AUDIO_FREQ / TARGET_AUDIO_FREQ as f64;
+        }
+        self.next_sample -= 1.0;
+    }
+}
+
+#[wasm_bindgen(module = "/web/audio.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = pushAudioBuffer)]
+    fn push_audio_buffer(byte: u8);
 }
