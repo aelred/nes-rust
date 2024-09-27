@@ -15,17 +15,20 @@ async function startAudio() {
 addEventListener("click", startAudio);
 addEventListener("keydown", startAudio);
 addEventListener("visibilitychange", () => {
-    if (audioProcessorNode && document.visibilityState !== 'visible') {
-        audioProcessorNode.port.postMessage(new Float32Array(BUFFER_SIZE))
+    if (audioProcessorNode && document.visibilityState === 'hidden') {
+        audioProcessorNode.port.postMessage({ type: "mute" });
     }
 });
 
 export function pushAudioBuffer(byte) {
-    if (audioProcessorNode == null || document.visibilityState !== 'visible') return;
+    if (audioProcessorNode == null) return;
     buffer[bufferIndex] = (byte / 255) - 0.5;
     bufferIndex += 1;
     if (bufferIndex === BUFFER_SIZE) {
         bufferIndex = 0;
-        audioProcessorNode.port.postMessage(buffer);
+
+        // Silence audio when page isn't visible
+        const event = document.visibilityState === 'visible' ? { type: "buffer", buffer } : { type: "mute" };
+        audioProcessorNode.port.postMessage(event);
     }
 }

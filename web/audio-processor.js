@@ -3,8 +3,13 @@ class AudioProcessor extends AudioWorkletProcessor {
         super();
         this.buffer = new CircularBuffer(2048);
         this.port.onmessage = event => {
-            for (const value of event.data) {
-                this.buffer.write(value);
+            if (event.data.type === "buffer") {
+                for (const value of event.data.buffer) {
+                    this.buffer.write(value);
+                }
+            } else if (event.data.type === "mute") {
+                console.log("Muting");
+                this.buffer.clear();
             }
         }
     }
@@ -22,6 +27,10 @@ class CircularBuffer {
         this.buffer = new Float32Array(size);
         this.writeCursor = Math.floor(size / 2);
         this.readCursor = 0;
+    }
+
+    clear() {
+        this.buffer.fill(0);
     }
 
     write(value) {
