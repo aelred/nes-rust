@@ -15,7 +15,6 @@ pub struct APU {
     // APU can run in two "modes", which affect timing and interrupts
     mode_toggle: bool,
     cycles: u16,
-    output: u8,
 }
 
 impl APU {
