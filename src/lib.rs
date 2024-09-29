@@ -126,11 +126,11 @@ impl NESDisplay for BufferDisplay {
 }
 
 pub trait NESSpeaker {
-    fn emit(&mut self, wave: u8);
+    fn emit(&mut self, wave: f32);
 }
 
 impl NESSpeaker for () {
-    fn emit(&mut self, _wave: u8) {}
+    fn emit(&mut self, _wave: f32) {}
 }
 
 #[derive(Debug)]
@@ -138,9 +138,6 @@ pub struct NES<D, S> {
     cpu: CPU,
     display: D,
     speaker: S,
-    // 2 CPU cycles = 1 APU cycle, so sometimes they don't perfectly line up and we need to keep track of the lag.
-    // e.g. if a CPU instruction takes 3 cycles, the APU will tick once but we have to remember to tick again after 1 CPU cycle next time.
-    apu_lag: u8,
 }
 
 impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
@@ -157,7 +154,6 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
             cpu,
             display,
             speaker,
-            apu_lag: 0,
         }
     }
 
@@ -189,11 +185,9 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
             self.tick_ppu();
         }
 
-        let apu_cycles = (cpu_cycles + self.apu_lag) / 2;
-        for _ in 0..apu_cycles {
+        for _ in 0..cpu_cycles {
             self.tick_apu();
         }
-        self.apu_lag = (cpu_cycles + self.apu_lag) % 2;
     }
 
     fn ppu(&mut self) -> &mut PPU {

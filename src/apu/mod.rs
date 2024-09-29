@@ -1,45 +1,53 @@
 //! Emulates the APU (audio processing unit)
 use bitflags::bitflags;
 use pulse::PulseGenerator;
+use triangle::TriangleGenerator;
 
 mod envelope;
 mod pulse;
+mod triangle;
 
 #[derive(Default)]
 pub struct APU {
     pulse_1: PulseGenerator,
     pulse_2: PulseGenerator,
+    triangle: TriangleGenerator,
     // APU can run in two "modes", which affect timing and interrupts
     mode_toggle: bool,
     cycles: u16,
+    output: u8,
 }
 
 impl APU {
-    pub fn tick(&mut self) -> u8 {
+    pub fn tick(&mut self) -> f32 {
         let pulse_1 = self.pulse_1.tick();
         let pulse_2 = self.pulse_2.tick();
+        let triangle = self.triangle.tick();
 
         let cycles = self.cycles;
         self.cycles += 1;
 
         match (self.mode_toggle, cycles) {
-            (_, 3728) | (_, 11185) => {
+            (_, 7457) | (_, 22371) => {
                 self.pulse_1.clock_envelope();
                 self.pulse_2.clock_envelope();
+                self.triangle.clock_linear_counter();
             }
-            (_, 7456) | (false, 14914) | (true, 18640) => {
+            (_, 14913) | (false, 29829) | (true, 37281) => {
                 self.pulse_1.clock_envelope();
                 self.pulse_2.clock_envelope();
+                self.triangle.clock_linear_counter();
                 self.pulse_1.clock_length_counter();
                 self.pulse_2.clock_length_counter();
+                self.triangle.clock_length_counter();
             }
-            (false, 14915) | (true, 18641) => {
+            (false, 14915) | (true, 37282) => {
                 self.cycles = 0;
             }
             _ => {}
         }
 
-        pulse_1 + pulse_2
+        mix(pulse_1, pulse_2, triangle)
     }
 
     pub fn write_pulse_1_flags(&mut self, value: u8) {
@@ -66,6 +74,18 @@ impl APU {
         self.pulse_2.write_length(value);
     }
 
+    pub fn write_triangle_flags(&mut self, value: u8) {
+        self.triangle.write_flags(value);
+    }
+
+    pub fn write_triangle_timer(&mut self, value: u8) {
+        self.triangle.write_timer(value);
+    }
+
+    pub fn write_triangle_length(&mut self, value: u8) {
+        self.triangle.write_length(value);
+    }
+
     pub fn write_frame_counter(&mut self, value: u8) {
         let value = FrameCounter::from_bits_truncate(value);
         self.mode_toggle = value.contains(FrameCounter::MODE);
@@ -82,7 +102,26 @@ impl APU {
         let status = Status::from_bits_truncate(value);
         self.pulse_1.set_enabled(status.contains(Status::PULSE_1));
         self.pulse_2.set_enabled(status.contains(Status::PULSE_2));
+        self.triangle.set_enabled(status.contains(Status::TRIANGLE));
     }
+}
+
+// Mix output channels, produce a value between 0.0 and 1.0
+fn mix(pulse_1: u8, pulse_2: u8, triangle: u8) -> f32 {
+    let pulse_in = (pulse_1 + pulse_2) as f32;
+    let pulse_out = if pulse_in == 0.0 {
+        0.0
+    } else {
+        95.88 / ((8128.0 / pulse_in) + 100.0)
+    };
+
+    let tnd_in = (triangle as f32) / 8227.0;
+    let tnd_out = if tnd_in == 0.0 {
+        0.0
+    } else {
+        159.79 / (1.0 / tnd_in + 100.0)
+    };
+    pulse_out + tnd_out
 }
 
 bitflags! {

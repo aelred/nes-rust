@@ -144,6 +144,9 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
                 APU_PULSE_2_FLAGS => self.apu.write_pulse_2_flags(byte),
                 APU_PULSE_2_TIMER => self.apu.write_pulse_2_timer(byte),
                 APU_PULSE_2_LENGTH => self.apu.write_pulse_2_length(byte),
+                APU_TRIANGLE_FLAGS => self.apu.write_triangle_flags(byte),
+                APU_TRIANGLE_TIMER => self.apu.write_triangle_timer(byte),
+                APU_TRIANGLE_LENGTH => self.apu.write_triangle_length(byte),
                 APU_FRAME_COUNTER => self.apu.write_frame_counter(byte),
                 APU_STATUS => self.apu.write_status(byte),
                 _ => self.the_rest.write(address, byte), // TODO

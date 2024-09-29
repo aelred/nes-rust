@@ -9,6 +9,8 @@ use super::envelope::Envelope;
 // A 'pulse wave' is a rectangular wave (alternating from high to low).
 pub struct PulseGenerator {
     enabled: bool,
+    // Pulse generator tick at half the CPU speed
+    odd_cycle: bool,
     // `timer` starts at `timer_initial` and counts down to 0.
     // When it reaches 0, it is reloaded with `timer_initial` and `sequencer` is incremented.
     // A lower `timer_initial` value results in a higher frequency.
@@ -83,11 +85,14 @@ impl PulseGenerator {
         let waveform = PULSE_DUTY_WAVEFORM[self.duty_cycle as usize];
         let value = (waveform.rotate_right(self.sequencer as u32) & 0b1) * volume * playing as u8;
 
-        if self.timer == 0 {
-            self.timer = self.timer_initial;
-            self.sequencer = self.sequencer.wrapping_add(1);
-        } else {
-            self.timer -= 1;
+        self.odd_cycle = !self.odd_cycle;
+        if !self.odd_cycle {
+            if self.timer == 0 {
+                self.timer = self.timer_initial;
+                self.sequencer = self.sequencer.wrapping_add(1);
+            } else {
+                self.timer -= 1;
+            }
         }
 
         value
@@ -119,6 +124,7 @@ mod tests {
     fn test_pulse_generator_produces_rectangle_wave() {
         let mut pulse = PulseGenerator {
             enabled: true,
+            odd_cycle: false,
             timer_initial: 8,
             timer: 8,
             sequencer: 0,
@@ -135,18 +141,18 @@ mod tests {
 
         // Get two periods of the waveform
         let wave: Vec<u8> = std::iter::repeat_with(|| pulse.tick())
-            .take(9 * 16)
+            .take(18 * 16)
             .collect();
 
-        // Each part of wave is repeated `timer + 1 = 9` times
+        // Each part of wave is repeated `(timer + 1) * 2 = 18` CPU cycles
         assert_eq!(
             wave,
             [
-                vec![0; 9],
-                vec![11; 2 * 9],
-                vec![0; 6 * 9],
-                vec![11; 2 * 9],
-                vec![0; 5 * 9]
+                vec![0; 18],
+                vec![11; 2 * 18],
+                vec![0; 6 * 18],
+                vec![11; 2 * 18],
+                vec![0; 5 * 18]
             ]
             .concat()
         );

@@ -238,7 +238,7 @@ impl SDLSpeaker {
             double_buffer
                 .lock()
                 .unwrap()
-                .resize(spec.samples as usize, 0);
+                .resize(spec.samples as usize, 0.0);
             MyAudioCallback(double_buffer)
         })?;
         device.resume();
@@ -257,7 +257,7 @@ impl SDLSpeaker {
 }
 
 impl NESSpeaker for SDLSpeaker {
-    fn emit(&mut self, value: u8) {
+    fn emit(&mut self, value: f32) {
         // Naive downsampling
         if self.next_sample <= 0.0 {
             self.buffer.push(value);
@@ -269,12 +269,12 @@ impl NESSpeaker for SDLSpeaker {
 
 struct AudioBuffer {
     size: usize,
-    buffer: Vec<u8>,
-    double_buffer: Arc<Mutex<Vec<u8>>>,
+    buffer: Vec<f32>,
+    double_buffer: Arc<Mutex<Vec<f32>>>,
 }
 
 impl AudioBuffer {
-    fn new(size: usize, double_buffer: Arc<Mutex<Vec<u8>>>) -> Self {
+    fn new(size: usize, double_buffer: Arc<Mutex<Vec<f32>>>) -> Self {
         let buffer = Vec::with_capacity(size);
         Self {
             size,
@@ -283,7 +283,7 @@ impl AudioBuffer {
         }
     }
 
-    fn push(&mut self, value: u8) {
+    fn push(&mut self, value: f32) {
         self.buffer.push(value);
         if self.buffer.len() == self.size {
             let mut double_buffer = self.double_buffer.lock().unwrap();
@@ -293,12 +293,12 @@ impl AudioBuffer {
     }
 }
 
-struct MyAudioCallback(Arc<Mutex<Vec<u8>>>);
+struct MyAudioCallback(Arc<Mutex<Vec<f32>>>);
 
 impl AudioCallback for MyAudioCallback {
-    type Channel = u8;
+    type Channel = f32;
 
-    fn callback(&mut self, out: &mut [u8]) {
+    fn callback(&mut self, out: &mut [f32]) {
         let buffer = self.0.lock().unwrap();
         debug_assert_eq!(buffer.len(), out.len());
         out.copy_from_slice(&buffer);

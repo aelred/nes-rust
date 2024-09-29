@@ -340,7 +340,7 @@ struct WebSpeaker {
 }
 
 impl NESSpeaker for WebSpeaker {
-    fn emit(&mut self, value: u8) {
+    fn emit(&mut self, value: f32) {
         // Naive downsampling
         if self.next_sample <= 0.0 {
             push_audio_buffer(value);
@@ -353,5 +353,5 @@ impl NESSpeaker for WebSpeaker {
 #[wasm_bindgen(module = "/web/audio.js")]
 extern "C" {
     #[wasm_bindgen(js_name = pushAudioBuffer)]
-    fn push_audio_buffer(byte: u8);
+    fn push_audio_buffer(byte: f32);
 }

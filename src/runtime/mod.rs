@@ -19,6 +19,6 @@ pub trait Runtime {
 
 const FPS: u64 = 60;
 const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / FPS);
-// True frequency is 894886.5Hz, but tuned to match my emulator's rate
-const NES_AUDIO_FREQ: f64 = 93_3000.0;
+// True frequency is 1789773Hz, but tuned to match my emulator's rate
+const NES_AUDIO_FREQ: f64 = 1_866_000.0;
 const TARGET_AUDIO_FREQ: i32 = 44100;

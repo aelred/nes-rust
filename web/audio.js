@@ -20,9 +20,9 @@ addEventListener("visibilitychange", () => {
     }
 });
 
-export function pushAudioBuffer(byte) {
+export function pushAudioBuffer(value) {
     if (audioProcessorNode == null) return;
-    buffer[bufferIndex] = (byte / 255) - 0.5;
+    buffer[bufferIndex] = value - 0.5;
     bufferIndex += 1;
     if (bufferIndex === BUFFER_SIZE) {
         bufferIndex = 0;
