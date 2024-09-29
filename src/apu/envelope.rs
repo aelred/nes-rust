@@ -2,12 +2,12 @@
 // An envelope changes a sound's volume over time.
 // In the NES APU, it can set a constant volume or a decay.
 pub struct Envelope {
-    pub constant_volume: bool,
-    pub looping: bool,
-    pub start: bool,
-    pub divider: u8,
-    pub decay_level: u8,
-    pub volume: u8,
+    constant_volume: bool,
+    looping: bool,
+    start: bool,
+    divider: u8,
+    decay_level: u8,
+    volume: u8,
 }
 
 impl Envelope {

@@ -124,17 +124,14 @@ mod tests {
             sequencer: 0,
             length_counter: 5,
             length_counter_halt: false,
-            // Set duty to 25% and volume goes up to 11
+            // Set duty to 25%
             duty_cycle: 1,
-            envelope: Envelope {
-                constant_volume: true,
-                looping: false,
-                start: false,
-                divider: 0,
-                decay_level: 0,
-                volume: 11,
-            },
+            envelope: Envelope::default(),
         };
+
+        // Volume goes up to 11
+        pulse.envelope.set_constant_volume(true);
+        pulse.envelope.set_volume(11);
 
         // Get two periods of the waveform
         let wave: Vec<u8> = std::iter::repeat_with(|| pulse.tick())
