@@ -150,13 +150,12 @@ impl<'r> SDLDisplay<'r> {
             .unwrap();
 
         let now = Instant::now();
-        // We start at the LAST tile, because the PPU is always loading data one tile ahead
         SDLDisplay {
             canvas,
             texture,
             buffer: [0; WIDTH as usize * HEIGHT as usize * 4],
-            x: usize::from(WIDTH) - 8,
-            y: usize::from(HEIGHT) - 1,
+            x: 0,
+            y: 0,
             start_of_frame: now,
             last_fps_log: now,
             frames_since_last_fps_log: 0,

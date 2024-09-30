@@ -162,9 +162,6 @@ impl<M: Memory> PPU<M> {
             }
         }
 
-        self.tile_pattern.shift();
-        self.palette_select.shift();
-
         Some(color)
     }
 
@@ -203,12 +200,12 @@ impl<M: Memory> PPU<M> {
             let x = u16::from(sprite.x);
             let attr = sprite.attributes;
 
-            if cycle_count < x + 8 || cycle_count >= x + 16 {
+            if cycle_count < x || cycle_count >= x + 8 || scanline < sprite.y as u16 {
                 continue;
             }
 
-            let x_in_sprite = attr.hor_flip((cycle_count - x - 8) as u8);
-            let y_in_sprite = attr.ver_flip((scanline - u16::from(sprite.y)) as u8);
+            let x_in_sprite = attr.hor_flip((cycle_count - x) as u8);
+            let y_in_sprite = attr.ver_flip((scanline - sprite.y as u16) as u8);
 
             let index = sprite.tile_index;
             let (pattern0, pattern1) = self.read_pattern_row(table, index, y_in_sprite);
@@ -307,12 +304,27 @@ impl<M: Memory> PPU<M> {
         }
 
         // TODO: not sure about these conditions
-        if rendering && in_bounds && self.cycle_count % 8 == 0 {
+        // A tile is fetched every 8 cycles.
+        // The 1st and 2nd tiles are fetched at the of the previous scanline, filling the 16-bit shift registers.
+        // The first cycle is idle, so the 3rd tile is fetched at cycle 8.
+        let preparing_next_scanline =
+            (self.scanline < 240 || self.scanline == 261) && self.cycle_count >= 328;
+        if rendering
+            && ((in_bounds && self.cycle_count > 0) || preparing_next_scanline)
+            && self.cycle_count % 8 == 0
+        {
             self.read_next_tile();
             self.increment_coarse_x();
         }
 
         let color = if in_bounds { self.next_color() } else { None };
+
+        // Don't shift registers in the last 4 bits, or everything goes out of alignment.
+        // Oddly, the cycle count in a scanline isn't divisible by 8.
+        if self.cycle_count < 336 {
+            self.tile_pattern.shift();
+            self.palette_select.shift();
+        }
 
         let vblank = self.scanline >= 240;
 
@@ -369,6 +381,8 @@ struct ShiftRegister(u16, u16);
 
 impl ShiftRegister {
     fn set_next_bytes(&mut self, byte0: u8, byte1: u8) {
+        // debug_assert_eq!(self.0 & 0x00FF, 0, "Lower byte should have shifted out");
+        // debug_assert_eq!(self.1 & 0x00FF, 0, "Lower byte should have shifted out");
         self.0 |= u16::from(byte0);
         self.1 |= u16::from(byte1);
     }
