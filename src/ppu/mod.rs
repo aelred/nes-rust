@@ -381,8 +381,8 @@ struct ShiftRegister(u16, u16);
 
 impl ShiftRegister {
     fn set_next_bytes(&mut self, byte0: u8, byte1: u8) {
-        // debug_assert_eq!(self.0 & 0x00FF, 0, "Lower byte should have shifted out");
-        // debug_assert_eq!(self.1 & 0x00FF, 0, "Lower byte should have shifted out");
+        debug_assert_eq!(self.0 & 0x00FF, 0, "Lower byte should have shifted out");
+        debug_assert_eq!(self.1 & 0x00FF, 0, "Lower byte should have shifted out");
         self.0 |= u16::from(byte0);
         self.1 |= u16::from(byte1);
     }
