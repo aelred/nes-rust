@@ -52,12 +52,16 @@ impl INes {
         reader.read_exact(&mut header)?;
 
         let mapper = INes::mapper(header)?;
+        log::info!("Read mapper as {:?}", mapper);
 
-        let prg_rom_size = header[PRG_ROM_SIZE_LOCATION];
-        let mut prg_rom = vec![0u8; prg_rom_size as usize * _16KB];
+        let prg_rom_size = header[PRG_ROM_SIZE_LOCATION] as usize * _16KB;
+        log::info!("Read PRG ROM size as {}", prg_rom_size);
+
+        let mut prg_rom = vec![0u8; prg_rom_size];
         reader.read_exact(prg_rom.as_mut())?;
 
-        let chr_rom_size = header[CHR_ROM_SIZE_LOCATION];
+        let chr_rom_size = header[CHR_ROM_SIZE_LOCATION] as usize * _8KB;
+        log::info!("Read CHR ROM size as {}", chr_rom_size);
 
         let mut chr_rom: Vec<u8>;
         let chr_ram_enabled: bool;
@@ -67,7 +71,7 @@ impl INes {
             chr_rom = vec![0u8; _8KB];
             chr_ram_enabled = true;
         } else {
-            chr_rom = vec![0u8; chr_rom_size as usize * _8KB];
+            chr_rom = vec![0u8; chr_rom_size];
             reader.read_exact(chr_rom.as_mut())?;
             chr_ram_enabled = false;
         };

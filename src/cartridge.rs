@@ -25,11 +25,12 @@ impl Cartridge {
             _ => unimplemented!("Unsupported mapper {:?}", mapper),
         };
 
-        let prg_rom_len: u16 = prg_rom.len().try_into().unwrap_or(u16::MAX);
+        let prg_rom_len = prg_rom.len();
+        let prg_rom_window = prg_rom_window.min(prg_rom_len.try_into().unwrap_or(u16::MAX));
 
         let prg = PRG {
             rom: prg_rom,
-            rom_window: prg_rom_window.min(prg_rom_len),
+            rom_window: prg_rom_window,
             rom_bank: 0,
             ram: [0; 0x2000],
         };
@@ -39,6 +40,12 @@ impl Cartridge {
             chr_ram_enabled,
             ppu_ram: [0; 0x800],
         };
+
+        log::info!(
+            "Creating cartridge with PRG ROM of size {} and window of size {}",
+            prg_rom_len,
+            prg_rom_window
+        );
 
         Cartridge { prg, chr }
     }
