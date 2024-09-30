@@ -71,8 +71,8 @@ impl Default for BufferDisplay {
     fn default() -> Self {
         BufferDisplay {
             buffer: Box::new([0; WIDTH as usize * HEIGHT as usize * 4]),
-            x: usize::from(WIDTH) - 8,
-            y: usize::from(HEIGHT) - 1,
+            x: 0,
+            y: 0,
             vblank: false,
         }
     }
