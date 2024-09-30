@@ -197,9 +197,9 @@ struct NesContext {
 
 fn keycode_binding(keycode: &str) -> Buttons {
     match keycode {
-        "KeyZ" => Buttons::A,
-        "KeyX" => Buttons::B,
-        "ShiftRight" => Buttons::SELECT,
+        "KeyZ" | "KeyA" => Buttons::A,
+        "KeyX" | "KeyS" => Buttons::B,
+        "ShiftRight" | "ShiftLeft" => Buttons::SELECT,
         "Enter" => Buttons::START,
         "ArrowUp" => Buttons::UP,
         "ArrowDown" => Buttons::DOWN,

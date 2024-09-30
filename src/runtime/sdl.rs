@@ -120,9 +120,9 @@ impl Runtime for Sdl {
 
 fn keycode_binding(keycode: Keycode) -> Buttons {
     match keycode {
-        Keycode::Z => Buttons::A,
-        Keycode::X => Buttons::B,
-        Keycode::RShift => Buttons::SELECT,
+        Keycode::Z | Keycode::A => Buttons::A,
+        Keycode::X | Keycode::S => Buttons::B,
+        Keycode::RShift | Keycode::LShift => Buttons::SELECT,
         Keycode::Return => Buttons::START,
         Keycode::Up => Buttons::UP,
         Keycode::Down => Buttons::DOWN,
