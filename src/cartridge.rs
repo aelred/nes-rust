@@ -16,7 +16,7 @@ impl Cartridge {
         chr_ram_enabled: bool,
         mapper: Mapper,
     ) -> Self {
-        let prg_rom_window = match mapper {
+        let prg_bank_size = match mapper {
             Mapper::NROM => 0x4000,
             Mapper::UxROM => 0x4000,
             Mapper::MMC1 => 0x4000,
@@ -26,12 +26,22 @@ impl Cartridge {
         };
 
         let prg_rom_len = prg_rom.len();
-        let prg_rom_window = prg_rom_window.min(prg_rom_len.try_into().unwrap_or(u16::MAX));
+        let prg_bank_size = prg_bank_size.min(prg_rom_len.try_into().unwrap_or(u16::MAX));
+        let last_bank = (prg_rom_len / (prg_bank_size as usize) - 1) as u8;
+
+        let bank_switcher = match mapper {
+            Mapper::MMC1 => BankSwitcher::MMC1 {
+                shift_register: 0,
+                writes: 0,
+            },
+            _ => BankSwitcher::First,
+        };
 
         let prg = PRG {
             rom: prg_rom,
-            rom_window: prg_rom_window,
-            rom_bank: 0,
+            bank_mapping: vec![0, last_bank].into(),
+            bank_size: prg_bank_size,
+            bank_switcher,
             ram: [0; 0x2000],
         };
 
@@ -44,7 +54,7 @@ impl Cartridge {
         log::info!(
             "Creating cartridge with PRG ROM of size {} and window of size {}",
             prg_rom_len,
-            prg_rom_window
+            prg_bank_size
         );
 
         Cartridge { prg, chr }
@@ -54,23 +64,15 @@ impl Cartridge {
 /// Program memory on a NES cartridge, connected to the CPU
 pub struct PRG {
     rom: Box<[u8]>,
-    rom_window: u16,
-    rom_bank: u8,
+    bank_mapping: Box<[u8]>,
+    bank_size: u16,
+    bank_switcher: BankSwitcher,
     ram: [u8; 0x2000],
 }
 
 impl PRG {
     pub fn ram(&mut self) -> &mut [u8] {
         &mut self.ram
-    }
-
-    fn read_bank(&self, bank: u8, address: Address) -> u8 {
-        let window = self.rom_window as usize;
-        self.rom[bank as usize * window + (address.index() % window)]
-    }
-
-    fn last_bank(&self) -> u8 {
-        ((self.rom.len() / (self.rom_window as usize)) - 1) as u8
     }
 }
 
@@ -84,8 +86,15 @@ impl Memory for PRG {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x6000..=0x7fff => self.ram[address.index() - 0x6000],
-            0x8000..=0xbfff => self.read_bank(self.rom_bank, address - 0x8000),
-            0xc000..=0xffff => self.read_bank(self.last_bank(), address - 0xc000),
+            0x8000..=0xffff => {
+                let relative_address = address - 0x8000;
+                let bank_index = relative_address.bytes() / self.bank_size;
+                let bank = self.bank_mapping[bank_index as usize];
+                let bank_start = bank_index * self.bank_size;
+                let bank_address = relative_address - bank_start;
+                let bank_size = self.bank_size as usize;
+                self.rom[bank as usize * bank_size + (bank_address.index() % bank_size)]
+            }
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -97,14 +106,46 @@ impl Memory for PRG {
             0x6000..=0x7fff => {
                 self.ram[address.index() - 0x6000] = byte;
             }
-            0x8000..=0xffff => {
-                self.rom_bank = byte;
-            }
+            0x8000..=0xffff => match &mut self.bank_switcher {
+                BankSwitcher::First => {
+                    self.bank_mapping[0] = byte;
+                }
+                // MMC1 mapper uses a serial interface, where bits are shifted into a shift register.
+                // After 5 writes, the shift register is used to update a register.
+                BankSwitcher::MMC1 {
+                    shift_register,
+                    writes,
+                } => {
+                    let reset = (byte >> 7) & 1 == 1;
+                    if reset {
+                        *shift_register = 0;
+                        *writes = 0;
+                    } else {
+                        *shift_register >>= 1;
+                        *shift_register |= (byte & 1) << 4;
+                        *writes += 1;
+                        if *writes == 5 {
+                            // TODO: support other MMC1 registers
+                            if (0xe000..=0xffff).contains(&address.index()) {
+                                self.bank_mapping[0] = *shift_register & 0b1111;
+                            }
+
+                            *shift_register = 0;
+                            *writes = 0;
+                        }
+                    }
+                }
+            },
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
         }
     }
+}
+
+enum BankSwitcher {
+    First,
+    MMC1 { shift_register: u8, writes: u8 },
 }
 
 /// Character memory on a NES cartridge, stores pattern tables and is connected to the PPU
