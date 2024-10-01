@@ -10,18 +10,26 @@ impl Control {
         Self(ControlFlags::from_bits_truncate(bits))
     }
 
+    pub fn sprite_size(self) -> SpriteSize {
+        if self.0.contains(ControlFlags::SPRITE_SIZE) {
+            SpriteSize::_8x16
+        } else {
+            SpriteSize::_8x8
+        }
+    }
+
     pub fn nametable_select(self) -> u8 {
         (self.0 & ControlFlags::NAMETABLE_SELECT).bits()
     }
 
-    pub fn background_pattern_table_address(self) -> Address {
-        // 0x1000 if flag is set, 0x0000 otherwise
-        Address::new(u16::from((self.0 & ControlFlags::BACKGROUND_PATTERN_TABLE).bits()) << 8)
+    pub fn background_pattern_table(self) -> PatternTable {
+        self.0
+            .contains(ControlFlags::BACKGROUND_PATTERN_TABLE)
+            .into()
     }
 
-    pub fn sprite_pattern_table_address(self) -> Address {
-        // 0x1000 if flag is set, 0x0000 otherwise
-        Address::new(u16::from((self.0 & ControlFlags::SPRITE_PATTERN_TABLE).bits()) << 9)
+    pub fn sprite_pattern_table(self) -> PatternTable {
+        self.0.contains(ControlFlags::SPRITE_PATTERN_TABLE).into()
     }
 
     pub fn address_increment(self) -> u16 {
@@ -32,6 +40,46 @@ impl Control {
 
     pub fn nmi_on_vblank(self) -> bool {
         self.0.contains(ControlFlags::NMI_ON_VBLANK)
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum SpriteSize {
+    _8x8,
+    _8x16,
+}
+
+impl SpriteSize {
+    pub fn height(self) -> u8 {
+        match self {
+            Self::_8x8 => 8,
+            Self::_8x16 => 16,
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum PatternTable {
+    Left,
+    Right,
+}
+
+impl From<bool> for PatternTable {
+    fn from(value: bool) -> Self {
+        if value {
+            Self::Right
+        } else {
+            Self::Left
+        }
+    }
+}
+
+impl From<PatternTable> for Address {
+    fn from(value: PatternTable) -> Self {
+        Self::new(match value {
+            PatternTable::Left => 0x0000,
+            PatternTable::Right => 0x1000,
+        })
     }
 }
 
@@ -56,12 +104,12 @@ mod tests {
     fn control_specifies_background_pattern_table_address() {
         let control = Control::from_bits(0b0000_0000);
         assert_eq!(
-            control.background_pattern_table_address(),
+            Address::from(control.background_pattern_table()),
             Address::new(0x0000)
         );
         let control = Control::from_bits(0b0001_0000);
         assert_eq!(
-            control.background_pattern_table_address(),
+            Address::from(control.background_pattern_table()),
             Address::new(0x1000)
         );
     }
@@ -69,9 +117,15 @@ mod tests {
     #[test]
     fn control_specifies_sprite_pattern_table_address() {
         let control = Control::from_bits(0b0000_0000);
-        assert_eq!(control.sprite_pattern_table_address(), Address::new(0x0000));
+        assert_eq!(
+            Address::from(control.sprite_pattern_table()),
+            Address::new(0x0000)
+        );
         let control = Control::from_bits(0b0000_1000);
-        assert_eq!(control.sprite_pattern_table_address(), Address::new(0x1000));
+        assert_eq!(
+            Address::from(control.sprite_pattern_table()),
+            Address::new(0x1000)
+        );
     }
 
     #[test]

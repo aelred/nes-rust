@@ -1,6 +1,8 @@
 use std::fmt::{Debug, Formatter};
 
 use bitflags::bitflags;
+use control::PatternTable;
+use control::SpriteSize;
 use log::warn;
 pub use registers::PPURegisters;
 
@@ -125,6 +127,8 @@ impl<M: Memory> PPU<M> {
             return;
         }
 
+        let sprite_size = self.control.sprite_size();
+
         let all_sprites = self.object_attribute_memory.chunks_exact(4).map(|chunk| {
             let attributes = SpriteAttributes::from_bits_truncate(chunk[2]);
             Sprite::new(chunk[3], chunk[0], chunk[1], attributes)
@@ -134,7 +138,7 @@ impl<M: Memory> PPU<M> {
 
         let sprites_on_scanline = all_sprites.enumerate().filter(|(_, sprite)| {
             let y = u16::from(sprite.y);
-            scanline >= y && scanline < y + 8
+            scanline >= y && scanline < y + sprite_size.height() as u16
         });
 
         self.active_sprites = [Sprite::default(); ACTIVE_SPRITES];
@@ -194,7 +198,9 @@ impl<M: Memory> PPU<M> {
         let scanline = self.scanline - 1;
 
         let sprites = self.active_sprites;
-        let table = self.control.sprite_pattern_table_address();
+
+        let sprite_size = self.control.sprite_size();
+        let table = self.control.sprite_pattern_table();
 
         for (i, sprite) in sprites.iter().enumerate() {
             let x = u16::from(sprite.x);
@@ -205,10 +211,17 @@ impl<M: Memory> PPU<M> {
             }
 
             let x_in_sprite = attr.hor_flip((cycle_count - x) as u8);
-            let y_in_sprite = attr.ver_flip((scanline - sprite.y as u16) as u8);
+            let y_in_sprite = attr.ver_flip((scanline - sprite.y as u16) as u8, sprite_size);
 
-            let index = sprite.tile_index;
-            let (pattern0, pattern1) = self.read_pattern_row(table, index, y_in_sprite);
+            let (sprite_table, index) = match sprite_size {
+                SpriteSize::_8x8 => (table, sprite.tile_index),
+                SpriteSize::_8x16 => (
+                    PatternTable::from((sprite.tile_index & 0b1) == 1),
+                    sprite.tile_index & 0b1111_1110,
+                ),
+            };
+
+            let (pattern0, pattern1) = self.read_pattern_row(sprite_table, index, y_in_sprite);
 
             let bit0 = (pattern0 >> x_in_sprite) & 0b1;
             let bit1 = (pattern1 >> x_in_sprite) & 0b1;
@@ -233,11 +246,19 @@ impl<M: Memory> PPU<M> {
         None
     }
 
-    fn read_pattern_row(&mut self, nametable: Address, pattern_index: u8, row: u8) -> (u8, u8) {
-        debug_assert!(row < 8, "expected row < 8, but row = {}", row);
+    fn read_pattern_row(
+        &mut self,
+        nametable: PatternTable,
+        pattern_index: u8,
+        row: u8,
+    ) -> (u8, u8) {
+        debug_assert!(row < 16, "expected row < 16, but row = {}", row);
+        // For 8x16 sprites, shift bit pattern to fetch lower tile:
+        // row = 0b0000_abcd => 0b000a_0bcd
+        let row = row & 0b0111 | ((row & 0b1000) << 1);
 
         let index = u16::from(pattern_index) << 4 | u16::from(row);
-        let pattern_address0 = nametable + index;
+        let pattern_address0 = Address::from(nametable) + index;
         let pattern_address1 = pattern_address0 + 0b1000;
 
         let pattern0 = self.memory.read(pattern_address0);
@@ -257,7 +278,7 @@ impl<M: Memory> PPU<M> {
         let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
         let attribute_bit_index1 = attribute_bit_index0 + 1;
 
-        let table = self.control.background_pattern_table_address();
+        let table = self.control.background_pattern_table();
         let (pattern0, pattern1) = self.read_pattern_row(table, pattern_index, fine_y);
 
         self.tile_pattern.set_next_bytes(pattern0, pattern1);
@@ -441,9 +462,9 @@ impl SpriteAttributes {
         x ^ ((((self & Self::HORIZONTAL_FLIP) ^ Self::HORIZONTAL_FLIP).bits() >> 6) * 0b0000_0111)
     }
 
-    /// Bit-twiddling to avoid a conditional, same as `y = if ver_flip { 7 - y } else { y }`
-    fn ver_flip(self, y: u8) -> u8 {
-        y ^ ((self.bits() >> 7) * 0b0000_0111)
+    /// Bit-twiddling to avoid a conditional, same as `y = if ver_flip { height - 1 - y } else { y }`
+    fn ver_flip(self, y: u8, sprite_size: SpriteSize) -> u8 {
+        y ^ ((self.bits() >> 7) * (sprite_size.height() - 1))
     }
 }
 
@@ -1145,7 +1166,7 @@ mod tests {
             }
         });
 
-        let table = Address::new(0x1000);
+        let table = PatternTable::Right;
         let index = 5;
         let row = 4;
         let (bit0, bit1) = ppu.read_pattern_row(table, index, row);
@@ -1162,13 +1183,20 @@ mod tests {
         let ver = SpriteAttributes::VERTICAL_FLIP;
         for value in 0..8 {
             assert_eq!(empty.hor_flip(value), 7 - value);
-            assert_eq!(empty.ver_flip(value), value);
+            assert_eq!(empty.ver_flip(value, SpriteSize::_8x8), value);
             assert_eq!((all - hor).hor_flip(value), 7 - value);
-            assert_eq!((all - ver).ver_flip(value), value);
+            assert_eq!((all - ver).ver_flip(value, SpriteSize::_8x8), value);
             assert_eq!(hor.hor_flip(value), value);
-            assert_eq!(ver.ver_flip(value), 7 - value);
+            assert_eq!(ver.ver_flip(value, SpriteSize::_8x8), 7 - value);
             assert_eq!(all.hor_flip(value), value);
-            assert_eq!(all.ver_flip(value), 7 - value);
+            assert_eq!(all.ver_flip(value, SpriteSize::_8x8), 7 - value);
+        }
+
+        for value in 0..16 {
+            assert_eq!(empty.ver_flip(value, SpriteSize::_8x16), value);
+            assert_eq!((all - ver).ver_flip(value, SpriteSize::_8x16), value);
+            assert_eq!(ver.ver_flip(value, SpriteSize::_8x16), 15 - value);
+            assert_eq!(all.ver_flip(value, SpriteSize::_8x16), 15 - value);
         }
     }
 }
