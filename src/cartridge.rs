@@ -126,8 +126,24 @@ impl Memory for PRG {
                         *writes += 1;
                         if *writes == 5 {
                             // TODO: support other MMC1 registers
-                            if (0xe000..=0xffff).contains(&address.index()) {
-                                self.bank_mapping[0] = *shift_register & 0b1111;
+                            match address.index() {
+                                0x8000..=0x9fff => {
+                                    // TODO: support MMC1 control
+                                }
+                                0xa000..=0xbfff => {
+                                    if *shift_register != 0 {
+                                        todo!("Support MMC1 CHR bank 0");
+                                    }
+                                }
+                                0xc000..=0xdfff => {
+                                    todo!("Support MMC1 CHR bank 1");
+                                }
+                                0xe000..=0xffff => {
+                                    self.bank_mapping[0] = *shift_register & 0b1111;
+                                }
+                                _ => {
+                                    panic!("Out of addressable range: {:?}", address);
+                                }
                             }
 
                             *shift_register = 0;
