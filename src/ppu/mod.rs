@@ -170,21 +170,16 @@ impl<M: Memory> PPU<M> {
     }
 
     fn background_color(&mut self) -> (Color, bool) {
-        let (address, opaque) = if self.mask.contains(Mask::SHOW_BACKGROUND) {
             let lower_bits = self.tile_pattern.get_bits(self.fine_x);
             let higher_bits = self.palette_select.get_bits(self.fine_x);
 
-            let color_index = lower_bits | (higher_bits << 2);
+        let color_index = (lower_bits | (higher_bits << 2)) as u16;
 
-            if lower_bits != 0 {
-                (BACKGROUND_PALETTES + color_index.into(), true)
-            } else {
-                // Use universal background colour
-                (BACKGROUND_PALETTES, false)
-            }
-        } else {
-            (BACKGROUND_PALETTES, false)
-        };
+        let show_background = self.mask.contains(Mask::SHOW_BACKGROUND);
+        let opaque = show_background && lower_bits != 0;
+
+        // Use universal background colour when transparent
+        let address = BACKGROUND_PALETTES + color_index * opaque as u16;
 
         (Color(self.memory.read(address)), opaque)
     }
