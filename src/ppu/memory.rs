@@ -24,16 +24,11 @@ impl<CHR> NESPPUMemory<CHR> {
     }
 
     fn palette_index(&self, address: Address) -> usize {
-        let mut index = (address.index() - PALETTE_OFFSET) % 0x0020;
-
+        let index = (address.index() - PALETTE_OFFSET) % 0x0020;
         let is_unused_colour = index % 0x04 == 0;
-
         // unused colours mirror between sprite and background palettes
-        if is_unused_colour {
-            index &= 0b1111;
-        }
-
-        index
+        let mask = (is_unused_colour as usize).wrapping_sub(1) | 0b1111;
+        index & mask
     }
 }
 
