@@ -28,7 +28,7 @@ const TARGET_AUDIO_FREQ: i32 = 44100;
 pub type ActiveRuntime = ();
 
 impl Runtime for () {
-    fn init_log(level: log::Level) -> Result<(), Box<dyn Error>> {
+    fn init_log(_level: log::Level) -> Result<(), Box<dyn Error>> {
         Ok(())
     }
 
