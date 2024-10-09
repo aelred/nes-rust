@@ -59,7 +59,7 @@ impl Input for Controller {
 }
 
 bitflags! {
-    #[derive(Default, Debug)]
+    #[derive(Default, Debug, Copy, Clone)]
     pub struct Buttons: u8 {
         const A      = 0b1000_0000;
         const B      = 0b0100_0000;

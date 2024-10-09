@@ -1,0 +1,150 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'nes-rust'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=nes-rust"
+                ],
+                "filter": {
+                    "name": "nes-rust",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Donkey Kong",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=nes-rust",
+                    "--package=nes-rust"
+                ],
+                "filter": {
+                    "name": "nes-rust",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "stdio": [
+                "roms/Donkey Kong/Donkey Kong (World) (Rev 1).nes",
+                null
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Super Mario Bros.",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=nes-rust",
+                    "--package=nes-rust"
+                ],
+                "filter": {
+                    "name": "nes-rust",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "stdio": [
+                "roms/Mario/Super Mario Bros. (World).nes",
+                null
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Alwa's Awakening Demo",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=nes-rust",
+                    "--package=nes-rust"
+                ],
+                "filter": {
+                    "name": "nes-rust",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "stdio": [
+                "roms/AlwasAwakening_demo.nes",
+                null
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'nes-rust'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=nes-rust",
+                    "--package=nes-rust"
+                ],
+                "filter": {
+                    "name": "nes-rust",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'external_tests'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=external_tests",
+                    "--package=nes-rust"
+                ],
+                "filter": {
+                    "name": "external_tests",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'simple_programs'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=simple_programs",
+                    "--package=nes-rust"
+                ],
+                "filter": {
+                    "name": "simple_programs",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

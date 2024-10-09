@@ -12,8 +12,8 @@ use std::{
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*, Clamped};
 use web_sys::{
     js_sys::{ArrayBuffer, Uint8Array},
-    CanvasRenderingContext2d, DragEvent, HtmlCanvasElement, ImageData, KeyboardEvent, Storage,
-    Window,
+    CanvasRenderingContext2d, Document, DragEvent, EventTarget, HtmlCanvasElement, ImageData,
+    KeyboardEvent, PointerEvent, Storage, Window,
 };
 use zip::ZipArchive;
 
@@ -28,6 +28,8 @@ impl Runtime for Web {
     }
 
     fn run() -> Result<(), Box<dyn Error>> {
+        let window = window()?;
+        let dom = dom()?;
         let base_ctx = Rc::new(RefCell::new(Option::<NesContext>::None));
 
         if let Some(rom) = load_rom()? {
@@ -36,7 +38,7 @@ impl Runtime for Web {
         }
 
         let ctx = base_ctx.clone();
-        add_event_listener("keydown", move |event: KeyboardEvent| {
+        add_event_listener(&window, "keydown", move |event: KeyboardEvent| {
             let mut ctx = ctx.borrow_mut();
             let nes = match &mut *ctx {
                 Some(ctx) => &mut ctx.nes,
@@ -48,7 +50,7 @@ impl Runtime for Web {
         })?;
 
         let ctx = base_ctx.clone();
-        add_event_listener("keyup", move |event: KeyboardEvent| {
+        add_event_listener(&window, "keyup", move |event: KeyboardEvent| {
             let mut ctx = ctx.borrow_mut();
             let nes = match &mut *ctx {
                 Some(ctx) => &mut ctx.nes,
@@ -59,8 +61,56 @@ impl Runtime for Web {
             Ok(())
         })?;
 
+        let controller_element = dom
+            .get_element_by_id("controller")
+            .context("controller not found")?;
+
+        add_event_listener(&controller_element, "contextmenu", |event: PointerEvent| {
+            event.prevent_default();
+            Ok(())
+        })?;
+
+        const BUTTONS: [(&str, Buttons); 8] = [
+            ("a", Buttons::A),
+            ("b", Buttons::B),
+            ("start", Buttons::START),
+            ("select", Buttons::SELECT),
+            ("up", Buttons::UP),
+            ("down", Buttons::DOWN),
+            ("left", Buttons::LEFT),
+            ("right", Buttons::RIGHT),
+        ];
+
+        for (button_id, button) in BUTTONS.iter() {
+            let element = dom
+                .get_element_by_id(button_id)
+                .context(format!("button not found {}", button_id))?;
+
+            let ctx = base_ctx.clone();
+            add_event_listener(&element, "pointerenter", move |_: PointerEvent| {
+                let mut ctx = ctx.borrow_mut();
+                let nes = match &mut *ctx {
+                    Some(ctx) => &mut ctx.nes,
+                    None => return Ok(()),
+                };
+                nes.controller().press(*button);
+                Ok(())
+            })?;
+
+            let ctx = base_ctx.clone();
+            add_event_listener(&element, "pointerout", move |_: PointerEvent| {
+                let mut ctx = ctx.borrow_mut();
+                let nes = match &mut *ctx {
+                    Some(ctx) => &mut ctx.nes,
+                    None => return Ok(()),
+                };
+                nes.controller().release(*button);
+                Ok(())
+            })?;
+        }
+
         let ctx = base_ctx.clone();
-        add_event_listener("drop", move |event: DragEvent| {
+        add_event_listener(&window, "drop", move |event: DragEvent| {
             event.prevent_default();
             let items = event.data_transfer().context("No data transfered")?.items();
 
@@ -121,7 +171,7 @@ impl Runtime for Web {
             Ok(())
         })?;
 
-        add_event_listener("dragover", move |event: DragEvent| {
+        add_event_listener(&window, "dragover", move |event: DragEvent| {
             event.prevent_default();
             Ok(())
         })?;
@@ -213,9 +263,12 @@ fn window() -> anyhow::Result<Window> {
     web_sys::window().context("no global `window` exists")
 }
 
+fn dom() -> anyhow::Result<Document> {
+    window()?.document().context("DOM not found")
+}
+
 fn canvas_context() -> anyhow::Result<CanvasRenderingContext2d> {
-    let dom = window()?.document().context("DOM not found")?;
-    let canvas = dom
+    let canvas = dom()?
         .get_element_by_id("canvas")
         .context("canvas not found")?;
     let canvas: HtmlCanvasElement = canvas
@@ -237,11 +290,12 @@ fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) -> anyhow::Result<i32> {
 }
 
 fn add_event_listener<T: FromWasmAbi + 'static>(
+    target: &EventTarget,
     event: &str,
     listener: impl FnMut(T) -> Result<(), Box<dyn Error>> + 'static,
 ) -> anyhow::Result<()> {
     let closure = closure(listener);
-    window()?
+    target
         .add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())
         .map_err(|_| anyhow!("failed to add event listener"))?;
     // Make closure live forever
