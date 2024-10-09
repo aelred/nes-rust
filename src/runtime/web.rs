@@ -12,8 +12,8 @@ use std::{
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*, Clamped};
 use web_sys::{
     js_sys::{ArrayBuffer, Uint8Array},
-    CanvasRenderingContext2d, Document, DragEvent, EventTarget, HtmlCanvasElement, ImageData,
-    KeyboardEvent, PointerEvent, Storage, Window,
+    CanvasRenderingContext2d, Document, DragEvent, Event, EventTarget, File, HtmlCanvasElement,
+    HtmlInputElement, ImageData, KeyboardEvent, PointerEvent, Storage, Window,
 };
 use zip::ZipArchive;
 
@@ -109,65 +109,41 @@ impl Runtime for Web {
             })?;
         }
 
+        let upload_button = dom
+            .get_element_by_id("upload-rom")
+            .context("upload-rom button not found")?
+            .dyn_into::<HtmlInputElement>()
+            .map_err(|_| anyhow!("button was not a HtmlInputElement"))?;
+
+        let ctx = base_ctx.clone();
+        add_event_listener(&upload_button.clone(), "change", move |_: Event| {
+            let file_list = upload_button.files().context("No files selected")?;
+            let mut files = vec![];
+            for i in 0..file_list.length() {
+                let file = file_list.item(i).context("No file found")?;
+                files.push(file);
+            }
+            upload_rom(ctx.clone(), files.into_iter());
+            Ok(())
+        })?;
+
         let ctx = base_ctx.clone();
         add_event_listener(&window, "drop", move |event: DragEvent| {
             event.prevent_default();
             let items = event.data_transfer().context("No data transfered")?.items();
 
+            let mut files = vec![];
             for i in 0..items.length() {
                 let item = items.get(i).context("No data transfer item found")?;
                 if let Some(file) = item
                     .get_as_file()
                     .map_err(|_| anyhow!("Failed to get file"))?
                 {
-                    let filename = file.name();
-                    let ctx = ctx.clone();
-
-                    let success = closure(move |array_buffer: JsValue| {
-                        let array_buffer = array_buffer
-                            .dyn_into::<ArrayBuffer>()
-                            .map_err(|_| anyhow!("Failed to convert to ArrayBuffer"))?;
-
-                        let array = Uint8Array::new(&array_buffer);
-                        let mut data = vec![0; array.length() as usize];
-                        array.copy_to(&mut data);
-
-                        let mut rom: Option<Vec<u8>> = None;
-
-                        if filename.ends_with(".zip") {
-                            let mut zip = ZipArchive::new(Cursor::new(data))?;
-
-                            for index in 0..zip.len() {
-                                let mut file = zip.by_index(index)?;
-                                if file.name().ends_with(".nes") {
-                                    let mut rom_data = vec![0; file.size() as usize];
-                                    file.read_exact(&mut rom_data)?;
-                                    rom = Some(rom_data);
-                                    break;
-                                }
-                            }
-                        } else {
-                            rom = Some(data);
-                        }
-
-                        let rom = rom.ok_or_else(|| anyhow!("No .nes file found"))?;
-
-                        let new_ctx = set_rom(&rom)?;
-                        ctx.replace(Some(new_ctx));
-                        save_rom(&rom)?;
-                        Ok(())
-                    });
-                    let failure = closure(move |_| {
-                        log::error!("An error occurred getting array buffer");
-                        Ok(())
-                    });
-
-                    let _ = file.array_buffer().then2(&success, &failure);
-                    success.forget();
-                    failure.forget();
+                    files.push(file);
                 }
             }
 
+            upload_rom(ctx.clone(), files.into_iter());
             Ok(())
         })?;
 
@@ -311,6 +287,56 @@ fn closure<T: FromWasmAbi + 'static>(
             log::error!("Error: {}", err);
         }
     })
+}
+
+fn upload_rom(ctx: Rc<RefCell<Option<NesContext>>>, files: impl Iterator<Item = File>) {
+    for file in files {
+        let filename = file.name();
+        let ctx = ctx.clone();
+
+        let success = closure(move |array_buffer: JsValue| {
+            let array_buffer = array_buffer
+                .dyn_into::<ArrayBuffer>()
+                .map_err(|_| anyhow!("Failed to convert to ArrayBuffer"))?;
+
+            let array = Uint8Array::new(&array_buffer);
+            let mut data = vec![0; array.length() as usize];
+            array.copy_to(&mut data);
+
+            let mut rom: Option<Vec<u8>> = None;
+
+            if filename.ends_with(".zip") {
+                let mut zip = ZipArchive::new(Cursor::new(data))?;
+
+                for index in 0..zip.len() {
+                    let mut file = zip.by_index(index)?;
+                    if file.name().ends_with(".nes") {
+                        let mut rom_data = vec![0; file.size() as usize];
+                        file.read_exact(&mut rom_data)?;
+                        rom = Some(rom_data);
+                        break;
+                    }
+                }
+            } else {
+                rom = Some(data);
+            }
+
+            let rom = rom.ok_or_else(|| anyhow!("No .nes file found"))?;
+
+            let new_ctx = set_rom(&rom)?;
+            ctx.replace(Some(new_ctx));
+            save_rom(&rom)?;
+            Ok(())
+        });
+        let failure = closure(move |_| {
+            log::error!("An error occurred getting array buffer");
+            Ok(())
+        });
+
+        let _ = file.array_buffer().then2(&success, &failure);
+        success.forget();
+        failure.forget();
+    }
 }
 
 fn set_rom(rom: &[u8]) -> Result<NesContext, Box<dyn Error>> {

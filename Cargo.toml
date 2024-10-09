@@ -40,12 +40,14 @@ web-sys = { version = "0.3.70", optional = true, features = [
     'Element',
     'HtmlCanvasElement',
     'Window',
-    # Features required for reading drag+dropped ROMs
+    # Features required for reading uploaded/drag+dropped ROMs
     'DragEvent',
     'DataTransfer',
     'DataTransferItem',
     'DataTransferItemList',
     'File',
+    'FileList',
+    'HtmlInputElement',
     # Features required for the mobile controller
     'PointerEvent',
     # Feature required for saving the game
