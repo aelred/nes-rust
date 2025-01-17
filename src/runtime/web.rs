@@ -19,6 +19,8 @@ use zip::ZipArchive;
 
 use super::{FRAME_DURATION, NES_AUDIO_FREQ, TARGET_AUDIO_FREQ};
 
+const DEFAULT_ROM: &[u8] = include_bytes!("../../roms/AlwasAwakening_demo.nes");
+
 pub struct Web;
 
 impl Runtime for Web {
@@ -32,10 +34,9 @@ impl Runtime for Web {
         let dom = dom()?;
         let base_ctx = Rc::new(RefCell::new(Option::<NesContext>::None));
 
-        if let Some(rom) = load_rom()? {
-            let new_ctx = set_rom(&rom)?;
-            base_ctx.borrow_mut().replace(new_ctx);
-        }
+        let rom = load_rom()?;
+        let new_ctx = set_rom(&rom)?;
+        base_ctx.borrow_mut().replace(new_ctx);
 
         let ctx = base_ctx.clone();
         add_event_listener(&window, "keydown", move |event: KeyboardEvent| {
@@ -391,15 +392,15 @@ fn save_rom(rom: &[u8]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn load_rom() -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+fn load_rom() -> Result<Vec<u8>, Box<dyn Error>> {
     let value = match local_storage()?
         .get_item(ROM_KEY)
         .map_err(|_| anyhow!("Failed to read ROM"))?
     {
         Some(value) => value,
-        None => return Ok(None),
+        None => return Ok(DEFAULT_ROM.to_vec()),
     };
-    Ok(Some(BASE64_STANDARD.decode(value)?))
+    Ok(BASE64_STANDARD.decode(value)?)
 }
 
 fn local_storage() -> Result<Storage, Box<dyn Error>> {
