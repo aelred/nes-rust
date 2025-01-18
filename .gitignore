@@ -2,7 +2,8 @@
 **/*.rs.bk
 *.iml
 .idea/
-roms
+roms/*
+!roms/AlwasAwakening_demo.nes
 test_results
 web/pkg
 web/dist
