@@ -1,7 +1,7 @@
 use std::{error::Error, time::Duration};
 
 #[cfg(feature = "sdl")]
-mod sdl;
+pub mod sdl;
 
 #[cfg(feature = "web")]
 mod web;

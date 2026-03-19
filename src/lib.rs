@@ -32,7 +32,7 @@ mod input;
 mod mapper;
 mod memory;
 mod ppu;
-mod runtime;
+pub mod runtime;
 mod serialize;
 
 pub const WIDTH: u16 = 256;

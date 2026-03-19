@@ -5,21 +5,19 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
+use crate::INes;
+use crate::NESDisplay;
+use crate::NESSpeaker;
+use crate::NES;
+use crate::{Buttons, Color, HEIGHT, WIDTH};
 use log::info;
 use sdl2::audio::AudioCallback;
 use sdl2::audio::AudioDevice;
 use sdl2::audio::AudioSpecDesired;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
+use sdl2::render::Texture;
 use sdl2::render::WindowCanvas;
-use sdl2::render::{Texture, TextureCreator};
-use sdl2::video::WindowContext;
-
-use crate::INes;
-use crate::NESDisplay;
-use crate::NESSpeaker;
-use crate::NES;
-use crate::{Buttons, Color, HEIGHT, WIDTH};
 
 use super::Runtime;
 use super::FRAME_DURATION;
@@ -30,48 +28,13 @@ const SCALE: u16 = 3;
 
 pub struct Sdl;
 
-impl Runtime for Sdl {
-    fn init_log(level: log::Level) -> Result<(), Box<dyn Error>> {
-        env_logger::builder()
-            .target(env_logger::Target::Stdout)
-            .filter_level(level.to_level_filter())
-            .init();
-        Ok(())
-    }
-
-    fn run() -> Result<(), Box<dyn Error>> {
-        let sdl_context = sdl2::init()?;
-        let video_subsystem = sdl_context.video()?;
+impl Sdl {
+    pub fn run_with(
+        sdl_context: &sdl2::Sdl,
+        display: impl NESDisplay,
+        speaker: impl NESSpeaker,
+    ) -> Result<(), Box<dyn Error>> {
         let mut event_pump = sdl_context.event_pump()?;
-
-        let window = video_subsystem
-            .window(
-                "nes-rust",
-                u32::from(WIDTH * SCALE),
-                u32::from(HEIGHT * SCALE),
-            )
-            .position_centered()
-            .build()?;
-
-        let mut canvas = window
-            .into_canvas()
-            .target_texture()
-            .present_vsync()
-            .build()?;
-
-        canvas.set_draw_color(sdl2::pixels::Color {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        });
-        canvas.set_scale(f32::from(SCALE), f32::from(SCALE))?;
-        canvas.clear();
-        canvas.present();
-
-        let texture_creator = canvas.texture_creator();
-        let display = SDLDisplay::new(&texture_creator, canvas);
-        let speaker = SDLSpeaker::new(&sdl_context)?;
 
         let args: Vec<String> = std::env::args().collect();
 
@@ -118,6 +81,23 @@ impl Runtime for Sdl {
     }
 }
 
+impl Runtime for Sdl {
+    fn init_log(level: log::Level) -> Result<(), Box<dyn Error>> {
+        env_logger::builder()
+            .target(env_logger::Target::Stdout)
+            .filter_level(level.to_level_filter())
+            .init();
+        Ok(())
+    }
+
+    fn run() -> Result<(), Box<dyn Error>> {
+        let sdl_context = sdl2::init()?;
+        let display = SDLDisplay::new(&sdl_context)?;
+        let speaker = SDLSpeaker::new(&sdl_context)?;
+        Self::run_with(&sdl_context, display, speaker)
+    }
+}
+
 fn keycode_binding(keycode: Keycode) -> Buttons {
     match keycode {
         Keycode::Z | Keycode::A => Buttons::A,
@@ -132,9 +112,9 @@ fn keycode_binding(keycode: Keycode) -> Buttons {
     }
 }
 
-struct SDLDisplay<'r> {
+pub struct SDLDisplay {
     canvas: WindowCanvas,
-    texture: Texture<'r>,
+    texture: Texture,
     buffer: [u8; WIDTH as usize * HEIGHT as usize * 4],
     x: usize,
     y: usize,
@@ -143,14 +123,41 @@ struct SDLDisplay<'r> {
     frames_since_last_fps_log: u64,
 }
 
-impl<'r> SDLDisplay<'r> {
-    fn new(texture_creator: &'r TextureCreator<WindowContext>, canvas: WindowCanvas) -> Self {
-        let texture = texture_creator
-            .create_texture_streaming(None, WIDTH as u32, HEIGHT as u32)
-            .unwrap();
+impl SDLDisplay {
+    pub fn new(sdl_context: &sdl2::Sdl) -> Result<Self, Box<dyn Error>> {
+        let video_subsystem = sdl_context.video()?;
+
+        let window = video_subsystem
+            .window(
+                "nes-rust",
+                u32::from(WIDTH * SCALE),
+                u32::from(HEIGHT * SCALE),
+            )
+            .position_centered()
+            .build()?;
+
+        let mut canvas = window
+            .into_canvas()
+            .target_texture()
+            .present_vsync()
+            .build()?;
+
+        canvas.set_draw_color(sdl2::pixels::Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        });
+        canvas.set_scale(f32::from(SCALE), f32::from(SCALE))?;
+        canvas.clear();
+        canvas.present();
+
+        let texture_creator = canvas.texture_creator();
+        let texture =
+            texture_creator.create_texture_streaming(None, WIDTH as u32, HEIGHT as u32)?;
 
         let now = Instant::now();
-        SDLDisplay {
+        Ok(Self {
             canvas,
             texture,
             buffer: [0; WIDTH as usize * HEIGHT as usize * 4],
@@ -159,11 +166,11 @@ impl<'r> SDLDisplay<'r> {
             start_of_frame: now,
             last_fps_log: now,
             frames_since_last_fps_log: 0,
-        }
+        })
     }
 }
 
-impl<'r> NESDisplay for SDLDisplay<'r> {
+impl NESDisplay for SDLDisplay {
     fn draw_pixel(&mut self, color: Color) {
         let offset = (self.y * WIDTH as usize + self.x) * 4;
         if offset + 2 < self.buffer.len() {
@@ -214,14 +221,14 @@ impl<'r> NESDisplay for SDLDisplay<'r> {
     fn enter_vblank(&mut self) {}
 }
 
-struct SDLSpeaker {
+pub struct SDLSpeaker {
     _device: AudioDevice<MyAudioCallback>,
     buffer: AudioBuffer,
     next_sample: f64,
 }
 
 impl SDLSpeaker {
-    fn new(sdl_context: &sdl2::Sdl) -> Result<Self, String> {
+    pub fn new(sdl_context: &sdl2::Sdl) -> Result<Self, String> {
         let audio_subsystem = sdl_context.audio()?;
 
         let desired_spec = AudioSpecDesired {
