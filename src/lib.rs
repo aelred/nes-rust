@@ -24,6 +24,7 @@ pub use crate::runtime::Runtime;
 
 mod address;
 mod apu;
+mod audio;
 mod cartridge;
 mod cpu;
 mod i_nes;
