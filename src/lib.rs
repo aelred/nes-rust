@@ -21,7 +21,6 @@ use crate::ppu::NESPPUMemory;
 use crate::ppu::PPU;
 pub use crate::runtime::ActiveRuntime;
 pub use crate::runtime::Runtime;
-pub use crate::serialize::SerializeByte;
 
 mod address;
 mod apu;
@@ -33,7 +32,6 @@ mod mapper;
 mod memory;
 mod ppu;
 pub mod runtime;
-mod serialize;
 
 pub const WIDTH: u16 = 256;
 pub const HEIGHT: u16 = 240;
@@ -230,7 +228,7 @@ macro_rules! mem {
                 #[allow(unused_variables, unused_mut)]
                 let mut addr: $crate::Address = $crate::Address::from($offset);
                 $(
-                    let byte = $crate::SerializeByte::to_byte($data);
+                    let byte = u8::from($data);
                     $crate::Memory::write(&mut memory, addr, byte);
                     addr += 1u16;
                 )*

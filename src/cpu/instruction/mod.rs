@@ -486,6 +486,12 @@ pub enum Instruction {
     RRA(StoreAddressingMode),
 }
 
+impl From<Instruction> for u8 {
+    fn from(value: Instruction) -> Self {
+        value.to_opcode()
+    }
+}
+
 macro_rules! def_opcodes {
     ($($num:tt => $name:ident $(=> $instr:ident$(($mode:path))*)*),* $(,)*) => {
         pub mod instructions {
