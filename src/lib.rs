@@ -1,9 +1,5 @@
 #![allow(clippy::upper_case_acronyms)] // Allow upper case acronyms like NES, CPU because I think it's more readable!
 
-use std::fmt::{Debug, Formatter};
-
-use apu::APU;
-
 pub use crate::address::Address;
 pub use crate::cartridge::Cartridge;
 pub use crate::cpu::instructions;
@@ -21,10 +17,14 @@ use crate::ppu::NESPPUMemory;
 use crate::ppu::PPU;
 pub use crate::runtime::ActiveRuntime;
 pub use crate::runtime::Runtime;
+use apu::APU;
+use std::fmt::{Debug, Formatter};
+use std::thread;
+use std::time::{Duration, Instant};
 
 mod address;
 mod apu;
-mod audio;
+pub mod audio;
 mod cartridge;
 mod cpu;
 mod i_nes;
@@ -36,6 +36,7 @@ pub mod runtime;
 
 pub const WIDTH: u16 = 256;
 pub const HEIGHT: u16 = 240;
+pub const NES_FREQ: f64 = 1_789_773.0;
 
 #[cfg_attr(feature = "web", wasm_bindgen::prelude::wasm_bindgen(start))]
 pub fn run() {
@@ -134,6 +135,8 @@ impl NESSpeaker for () {
 
 #[derive(Debug)]
 pub struct NES<D, S> {
+    start: Instant,
+    cycles: usize,
     cpu: CPU,
     display: D,
     speaker: S,
@@ -150,6 +153,8 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         let cpu = CPU::from_memory(cpu_memory);
 
         NES {
+            start: Instant::now(),
+            cycles: 0,
             cpu,
             display,
             speaker,
@@ -186,6 +191,16 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
 
         for _ in 0..cpu_cycles {
             self.tick_apu();
+        }
+
+        self.cycles += cpu_cycles as usize;
+    }
+
+    pub fn sleep(&self) {
+        let expected_time = Duration::from_secs_f64(self.cycles as f64 / NES_FREQ);
+        let actual_time = self.start.elapsed();
+        if actual_time < expected_time {
+            thread::sleep(expected_time - actual_time);
         }
     }
 

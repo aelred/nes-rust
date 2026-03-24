@@ -1,4 +1,6 @@
 #![allow(dead_code)] // Might be disabled by features
+use super::FRAME_DURATION;
+use crate::audio::TARGET_AUDIO_FREQ;
 use crate::{runtime::Runtime, BufferDisplay, Buttons, INes, NESSpeaker, HEIGHT, NES, WIDTH};
 use anyhow::{anyhow, Context};
 use base64::{prelude::BASE64_STANDARD, Engine};
@@ -17,9 +19,11 @@ use web_sys::{
 };
 use zip::ZipArchive;
 
-use super::{FRAME_DURATION, NES_AUDIO_FREQ, TARGET_AUDIO_FREQ};
-
 const DEFAULT_ROM: &[u8] = include_bytes!("../../roms/AlwasAwakening_demo.nes");
+
+// True frequency is 1789773Hz, but tuned to match my emulator's rate
+// TODO: may have to change this to use NES_FREQ
+const NES_AUDIO_FREQ: f64 = 1_866_000.0;
 
 pub struct Web;
 
@@ -425,7 +429,7 @@ impl NESSpeaker for WebSpeaker {
         // Naive downsampling
         if self.next_sample <= 0.0 {
             push_audio_buffer(value);
-            self.next_sample += NES_AUDIO_FREQ / TARGET_AUDIO_FREQ as f64;
+            self.next_sample += NES_AUDIO_FREQ / TARGET_AUDIO_FREQ;
         }
         self.next_sample -= 1.0;
     }

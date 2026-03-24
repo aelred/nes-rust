@@ -1,3 +1,4 @@
+use nes_rust::audio::audio_pipeline;
 use nes_rust::runtime::sdl::{SDLDisplay, SDLSpeaker, Sdl};
 use nes_rust::NESSpeaker;
 use std::fs::File;
@@ -11,12 +12,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to get path to audio recording")
         .join("audio-recording.bin");
 
+    let (audio_sink, audio_source) = audio_pipeline();
     let sdl_context = sdl2::init()?;
     let display = SDLDisplay::new(&sdl_context)?;
     let speaker = RecordingSpeaker {
         file: BufWriter::new(File::create(audio_recording_path)?),
-        speaker: SDLSpeaker::new(&sdl_context)?,
+        speaker: audio_sink,
     };
+    let _sdl_speaker = SDLSpeaker::new(&sdl_context, audio_source)?;
 
     Sdl::run_with(&sdl_context, display, speaker)?;
 

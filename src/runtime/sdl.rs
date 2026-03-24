@@ -1,10 +1,10 @@
 use std::error::Error;
 use std::fs::File;
-use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
+use super::Runtime;
+use crate::audio::{audio_pipeline, AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
 use crate::INes;
 use crate::NESDisplay;
 use crate::NESSpeaker;
@@ -18,11 +18,6 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::Texture;
 use sdl2::render::WindowCanvas;
-
-use super::Runtime;
-use super::FRAME_DURATION;
-use super::NES_AUDIO_FREQ;
-use super::TARGET_AUDIO_FREQ;
 
 const SCALE: u16 = 3;
 
@@ -52,10 +47,11 @@ impl Sdl {
         let mut nes = NES::new(cartridge, display, speaker);
 
         loop {
-            // Arbitrary number of ticks so we don't poll events too much
+            // Arbitrary number of ticks so we don't poll events or sleep too regularly
             for _ in 1..1000 {
                 nes.tick();
             }
+            nes.sleep();
 
             for event in event_pump.poll_iter() {
                 match event {
@@ -91,10 +87,11 @@ impl Runtime for Sdl {
     }
 
     fn run() -> Result<(), Box<dyn Error>> {
+        let (audio_sink, audio_source) = audio_pipeline();
         let sdl_context = sdl2::init()?;
         let display = SDLDisplay::new(&sdl_context)?;
-        let speaker = SDLSpeaker::new(&sdl_context)?;
-        Self::run_with(&sdl_context, display, speaker)
+        let _speaker = SDLSpeaker::new(&sdl_context, audio_source)?;
+        Self::run_with(&sdl_context, display, audio_sink)
     }
 }
 
@@ -118,7 +115,6 @@ pub struct SDLDisplay {
     buffer: [u8; WIDTH as usize * HEIGHT as usize * 4],
     x: usize,
     y: usize,
-    start_of_frame: Instant,
     last_fps_log: Instant,
     frames_since_last_fps_log: u64,
 }
@@ -136,11 +132,7 @@ impl SDLDisplay {
             .position_centered()
             .build()?;
 
-        let mut canvas = window
-            .into_canvas()
-            .target_texture()
-            .present_vsync()
-            .build()?;
+        let mut canvas = window.into_canvas().target_texture().build()?;
 
         canvas.set_draw_color(sdl2::pixels::Color {
             r: 0,
@@ -163,7 +155,6 @@ impl SDLDisplay {
             buffer: [0; WIDTH as usize * HEIGHT as usize * 4],
             x: 0,
             y: 0,
-            start_of_frame: now,
             last_fps_log: now,
             frames_since_last_fps_log: 0,
         })
@@ -194,16 +185,6 @@ impl NESDisplay for SDLDisplay {
             self.canvas.copy(&self.texture, None, None).unwrap();
             self.canvas.present();
 
-            let now = Instant::now();
-            let elapsed = now.duration_since(self.start_of_frame);
-            if let Some(time_to_sleep) = FRAME_DURATION.checked_sub(elapsed) {
-                std::thread::sleep(time_to_sleep);
-                self.start_of_frame = now + time_to_sleep;
-            } else {
-                // We're running behind, sleep less next time
-                self.start_of_frame = now - (elapsed - FRAME_DURATION);
-            }
-
             self.frames_since_last_fps_log += 1;
 
             let now = Instant::now();
@@ -222,91 +203,30 @@ impl NESDisplay for SDLDisplay {
 }
 
 pub struct SDLSpeaker {
-    _device: AudioDevice<MyAudioCallback>,
-    buffer: AudioBuffer,
-    next_sample: f64,
+    _device: AudioDevice<AudioSource>,
 }
 
 impl SDLSpeaker {
-    pub fn new(sdl_context: &sdl2::Sdl) -> Result<Self, String> {
+    pub fn new(sdl_context: &sdl2::Sdl, audio_source: AudioSource) -> Result<Self, String> {
         let audio_subsystem = sdl_context.audio()?;
 
-        let desired_spec = AudioSpecDesired {
-            freq: Some(TARGET_AUDIO_FREQ),
+        let spec = AudioSpecDesired {
+            freq: Some(TARGET_AUDIO_FREQ as i32),
             channels: Some(1),
-            samples: None,
+            samples: Some(AUDIO_SAMPLE_SIZE as u16),
         };
 
-        let double_buffer = Arc::new(Mutex::new(Vec::new()));
-
-        let device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
-            let double_buffer = double_buffer.clone();
-            double_buffer
-                .lock()
-                .unwrap()
-                .resize(spec.samples as usize, 0.0);
-            MyAudioCallback(double_buffer)
-        })?;
+        let device = audio_subsystem.open_playback(None, &spec, |_| audio_source)?;
         device.resume();
 
-        let sample_size = device.spec().samples;
-        log::info!("Audio sample size: {}", sample_size);
-
-        let buffer = AudioBuffer::new(sample_size as usize, double_buffer);
-
-        Ok(Self {
-            _device: device,
-            buffer,
-            next_sample: 0.0,
-        })
+        Ok(Self { _device: device })
     }
 }
 
-impl NESSpeaker for SDLSpeaker {
-    fn emit(&mut self, value: f32) {
-        // Naive downsampling
-        if self.next_sample <= 0.0 {
-            self.buffer.push(value);
-            self.next_sample += NES_AUDIO_FREQ / TARGET_AUDIO_FREQ as f64;
-        }
-        self.next_sample -= 1.0;
-    }
-}
-
-struct AudioBuffer {
-    size: usize,
-    buffer: Vec<f32>,
-    double_buffer: Arc<Mutex<Vec<f32>>>,
-}
-
-impl AudioBuffer {
-    fn new(size: usize, double_buffer: Arc<Mutex<Vec<f32>>>) -> Self {
-        let buffer = Vec::with_capacity(size);
-        Self {
-            size,
-            buffer,
-            double_buffer,
-        }
-    }
-
-    fn push(&mut self, value: f32) {
-        self.buffer.push(value);
-        if self.buffer.len() == self.size {
-            let mut double_buffer = self.double_buffer.lock().unwrap();
-            double_buffer.copy_from_slice(&self.buffer);
-            self.buffer.clear();
-        }
-    }
-}
-
-struct MyAudioCallback(Arc<Mutex<Vec<f32>>>);
-
-impl AudioCallback for MyAudioCallback {
+impl AudioCallback for AudioSource {
     type Channel = f32;
 
     fn callback(&mut self, out: &mut [f32]) {
-        let buffer = self.0.lock().unwrap();
-        debug_assert_eq!(buffer.len(), out.len());
-        out.copy_from_slice(&buffer);
+        self.read(out);
     }
 }

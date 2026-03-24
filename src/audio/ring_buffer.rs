@@ -82,6 +82,7 @@ impl RingBufferWriter {
     }
 
     /// Get the current window size.
+    #[inline]
     pub fn window_size(&self) -> usize {
         self.window_size
     }
@@ -149,6 +150,7 @@ impl RingBufferReader {
     }
 
     /// Get the current window size.
+    #[inline]
     pub fn window_size(&self) -> usize {
         self.window_size
     }
