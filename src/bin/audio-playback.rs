@@ -691,3 +691,102 @@ impl AudioCallback for MyAudioCallback {
         self.buffers[i].read_into(out);
     }
 }
+
+/// This isn't used in the main code any more, but it has a PI controller so I wanted to keep it
+mod rate_controller {
+    use crate::TARGET_AUDIO_FREQ;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+    use std::sync::Arc;
+
+    // Lower target -> higher chance of audio "pops" (consuming audio faster than it can be produced)
+    // Higher target -> higher chance of audio "skipping" (producing audio faster than it can be consumed -- sort of, with a big buffer it's very unlikely)
+    // Value chosen by experimentation
+    const TARGET_LATENCY_SECONDS: f64 = 0.05;
+    const TARGET_AVAILABLE_SAMPLES: f64 = TARGET_AUDIO_FREQ as f64 * TARGET_LATENCY_SECONDS;
+
+    /// A rate controller that can manage sample output rate to keep a target audio latency.
+    pub fn rate_controller() -> (RateController, RateReader) {
+        let rate = Arc::new(AtomicU64::new(1f64.to_bits()));
+
+        let rate_controller = RateController {
+            // These are lower numbers than you would get just by tuning because we're considering "just-noticeable difference"
+            // These should keep it +-0.4% frequency which will not be noticeable.
+            // p impact on adjust rate = p_gain * max error (max error = 1/2 buffer size)
+            // i impact on adjust rate = i_max * i_gain
+            pi_controller: PIController::new(0.00001, 0.0000001, -200_000.0, 200_000.0),
+            rate: rate.clone(),
+        };
+
+        let rate_reader = RateReader(rate);
+
+        (rate_controller, rate_reader)
+    }
+
+    pub struct RateController {
+        pi_controller: PIController,
+        rate: Arc<AtomicU64>,
+    }
+
+    impl RateController {
+        /// Update the rate based on the measured available samples, must be called at regular intervals.
+        pub fn update(&mut self, available_samples: usize) {
+            let error = TARGET_AVAILABLE_SAMPLES - available_samples as f64;
+
+            let target_rate = 1.0 + self.pi_controller.update(error);
+            let old_rate = f64::from_bits(self.rate.load(Relaxed));
+
+            // Clamp rate CHANGE
+            // Calculate from desired rate per second * rate controller updates per second
+            let delta = target_rate - old_rate;
+            let rate = (old_rate + delta.clamp(-3e-5, 3e-5)).clamp(0.99, 1.01);
+
+            self.rate.store(rate.to_bits(), Release);
+        }
+    }
+
+    pub struct RateReader(Arc<AtomicU64>);
+
+    impl RateReader {
+        /// Get the current rate.
+        pub fn read(&self) -> f64 {
+            f64::from_bits(self.0.load(Acquire))
+        }
+    }
+
+    /// Basic PI controller that will adjust a control signal based on measured error.
+    struct PIController {
+        p_gain: f64,
+        i_gain: f64,
+        i_min: f64,
+        i_max: f64,
+        i_state: f64,
+    }
+
+    impl PIController {
+        /// Specify the gain of the P (proportional) and I (integral) components.
+        /// `i_min` and `i_max` manage "integral windup" and have the same units as the error.
+        fn new(p_gain: f64, i_gain: f64, i_min: f64, i_max: f64) -> Self {
+            Self {
+                p_gain,
+                i_gain,
+                i_min,
+                i_max,
+                i_state: 0.0,
+            }
+        }
+
+        /// Given error (distance from target), update the state and output the control signal.
+        ///
+        /// Assumed to be called at regular intervals.
+        fn update(&mut self, error: f64) -> f64 {
+            let p = self.p_gain * error;
+
+            self.i_state += error;
+            self.i_state = self.i_state.clamp(self.i_min, self.i_max);
+            let i = self.i_gain * self.i_state;
+
+            p + i
+        }
+    }
+}
