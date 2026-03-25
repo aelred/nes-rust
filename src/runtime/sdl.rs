@@ -1,15 +1,16 @@
 use std::error::Error;
 use std::fs::File;
+use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 
 use super::Runtime;
 use crate::audio::{audio_pipeline, AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
-use crate::INes;
 use crate::NESDisplay;
 use crate::NESSpeaker;
 use crate::NES;
 use crate::{Buttons, Color, HEIGHT, WIDTH};
+use crate::{INes, NES_FREQ};
 use log::info;
 use sdl2::audio::AudioCallback;
 use sdl2::audio::AudioDevice;
@@ -45,13 +46,20 @@ impl Sdl {
         let cartridge = ines.into_cartridge();
 
         let mut nes = NES::new(cartridge, display, speaker);
+        let mut cycles: u64 = 0;
+        let start = Instant::now();
 
         loop {
             // Arbitrary number of ticks so we don't poll events or sleep too regularly
             for _ in 1..1000 {
-                nes.tick();
+                cycles += nes.tick() as u64;
             }
-            nes.sleep();
+
+            let expected_time = Duration::from_secs_f64(cycles as f64 / NES_FREQ);
+            let actual_time = start.elapsed();
+            if actual_time < expected_time {
+                thread::sleep(expected_time - actual_time);
+            }
 
             for event in event_pump.poll_iter() {
                 match event {

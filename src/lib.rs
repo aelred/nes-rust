@@ -135,8 +135,6 @@ impl NESSpeaker for () {
 
 #[derive(Debug)]
 pub struct NES<D, S> {
-    start: Instant,
-    cycles: usize,
     cpu: CPU,
     display: D,
     speaker: S,
@@ -153,8 +151,6 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         let cpu = CPU::from_memory(cpu_memory);
 
         NES {
-            start: Instant::now(),
-            cycles: 0,
             cpu,
             display,
             speaker,
@@ -181,7 +177,7 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         self.cpu.memory().input()
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self) -> u8 {
         let cpu_cycles = self.cpu.run_instruction();
 
         // There are 3 PPU cycles to 1 CPU cycle
@@ -193,15 +189,7 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
             self.tick_apu();
         }
 
-        self.cycles += cpu_cycles as usize;
-    }
-
-    pub fn sleep(&self) {
-        let expected_time = Duration::from_secs_f64(self.cycles as f64 / NES_FREQ);
-        let actual_time = self.start.elapsed();
-        if actual_time < expected_time {
-            thread::sleep(expected_time - actual_time);
-        }
+        cpu_cycles
     }
 
     fn ppu(&mut self) -> &mut PPU {
