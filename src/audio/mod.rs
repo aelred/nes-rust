@@ -8,10 +8,11 @@ mod ring_buffer;
 
 pub const TARGET_AUDIO_FREQ: f64 = 44100.0;
 pub const AUDIO_SAMPLE_SIZE: usize = 128;
+pub const BUFFER_SIZE: usize = 1024;
 
 /// Create audio pipeline, consisting a sink and source.
 pub fn audio_pipeline() -> (AudioSink, AudioSource) {
-    let (ring_writer, ring_reader) = ring_buffer(2048, 1, AUDIO_SAMPLE_SIZE);
+    let (ring_writer, ring_reader) = ring_buffer(BUFFER_SIZE, 1, AUDIO_SAMPLE_SIZE);
 
     let audio_sink = AudioSink {
         ring_buffer: ring_writer,
