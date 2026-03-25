@@ -426,29 +426,6 @@ extern "C" {
     fn push_audio_buffer(byte: f32);
 }
 
-#[derive(Debug)]
-pub struct JsError(String);
-
-impl std::fmt::Display for JsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Error for JsError {}
-
-impl From<JsValue> for JsError {
-    fn from(e: JsValue) -> Self {
-        let dbg = format!("{:?}", e);
-        let msg = js_sys::Error::from(e)
-            .message()
-            .as_string()
-            .filter(|s| !s.is_empty())
-            .unwrap_or(dbg);
-        JsError(msg)
-    }
-}
-
 trait WebResult<T> {
     fn anyhow(self) -> Result<T>;
 }
