@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use std::error::Error;
 use std::fs::File;
 use std::thread;
@@ -29,8 +30,8 @@ impl Sdl {
         sdl_context: &sdl2::Sdl,
         display: impl NESDisplay,
         speaker: impl NESSpeaker,
-    ) -> Result<(), Box<dyn Error>> {
-        let mut event_pump = sdl_context.event_pump()?;
+    ) -> Result<()> {
+        let mut event_pump = sdl_context.event_pump().anyhow()?;
 
         let args: Vec<String> = std::env::args().collect();
 
@@ -86,7 +87,7 @@ impl Sdl {
 }
 
 impl Runtime for Sdl {
-    fn init_log(level: log::Level) -> Result<(), Box<dyn Error>> {
+    fn init_log(level: log::Level) -> Result<()> {
         env_logger::builder()
             .target(env_logger::Target::Stdout)
             .filter_level(level.to_level_filter())
@@ -94,9 +95,9 @@ impl Runtime for Sdl {
         Ok(())
     }
 
-    fn run() -> Result<(), Box<dyn Error>> {
+    fn run() -> Result<()> {
         let (audio_sink, audio_source) = audio_pipeline();
-        let sdl_context = sdl2::init()?;
+        let sdl_context = sdl2::init().anyhow()?;
         let display = SDLDisplay::new(&sdl_context)?;
         let _speaker = SDLSpeaker::new(&sdl_context, audio_source)?;
         Self::run_with(&sdl_context, display, audio_sink)
@@ -128,8 +129,8 @@ pub struct SDLDisplay {
 }
 
 impl SDLDisplay {
-    pub fn new(sdl_context: &sdl2::Sdl) -> Result<Self, Box<dyn Error>> {
-        let video_subsystem = sdl_context.video()?;
+    pub fn new(sdl_context: &sdl2::Sdl) -> Result<Self> {
+        let video_subsystem = sdl_context.video().anyhow()?;
 
         let window = video_subsystem
             .window(
@@ -148,7 +149,9 @@ impl SDLDisplay {
             b: 0,
             a: 255,
         });
-        canvas.set_scale(f32::from(SCALE), f32::from(SCALE))?;
+        canvas
+            .set_scale(f32::from(SCALE), f32::from(SCALE))
+            .anyhow()?;
         canvas.clear();
         canvas.present();
 
@@ -215,8 +218,8 @@ pub struct SDLSpeaker {
 }
 
 impl SDLSpeaker {
-    pub fn new(sdl_context: &sdl2::Sdl, audio_source: AudioSource) -> Result<Self, String> {
-        let audio_subsystem = sdl_context.audio()?;
+    pub fn new(sdl_context: &sdl2::Sdl, source: AudioSource) -> Result<Self> {
+        let audio = sdl_context.audio().anyhow()?;
 
         let spec = AudioSpecDesired {
             freq: Some(TARGET_AUDIO_FREQ as i32),
@@ -224,7 +227,7 @@ impl SDLSpeaker {
             samples: Some(AUDIO_SAMPLE_SIZE as u16),
         };
 
-        let device = audio_subsystem.open_playback(None, &spec, |_| audio_source)?;
+        let device = audio.open_playback(None, &spec, |_| source).anyhow()?;
         device.resume();
 
         Ok(Self { _device: device })
@@ -236,5 +239,15 @@ impl AudioCallback for AudioSource {
 
     fn callback(&mut self, out: &mut [f32]) {
         self.read(out);
+    }
+}
+
+trait SdlResult<T> {
+    fn anyhow(self) -> Result<T>;
+}
+
+impl<T> SdlResult<T> for Result<T, String> {
+    fn anyhow(self) -> Result<T> {
+        self.map_err(|s| anyhow!(s))
     }
 }

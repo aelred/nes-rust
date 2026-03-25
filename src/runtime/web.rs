@@ -2,6 +2,7 @@
 use super::FRAME_DURATION;
 use crate::audio::TARGET_AUDIO_FREQ;
 use crate::{runtime::Runtime, BufferDisplay, Buttons, INes, NESSpeaker, HEIGHT, NES, WIDTH};
+use anyhow::Result;
 use anyhow::{anyhow, Context};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use std::{
@@ -13,6 +14,7 @@ use std::{
 };
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*, Clamped};
 use web_sys::{
+    js_sys,
     js_sys::{ArrayBuffer, Uint8Array},
     CanvasRenderingContext2d, Document, DragEvent, Event, EventTarget, File, HtmlCanvasElement,
     HtmlInputElement, ImageData, KeyboardEvent, PointerEvent, Storage, Window,
@@ -28,42 +30,40 @@ const NES_AUDIO_FREQ: f64 = 1_866_000.0;
 pub struct Web;
 
 impl Runtime for Web {
-    fn init_log(level: log::Level) -> Result<(), Box<dyn Error>> {
-        console_log::init_with_level(level).map_err(|_| anyhow!("Failed to initialize logger"))?;
+    fn init_log(level: log::Level) -> Result<()> {
+        std::panic::set_hook(Box::new(|info| {
+            web_sys::console::error_1(&info.to_string().into());
+        }));
+        console_log::init_with_level(level)?;
         Ok(())
     }
 
-    fn run() -> Result<(), Box<dyn Error>> {
+    fn run() -> Result<()> {
         let window = window()?;
         let dom = dom()?;
-        let base_ctx = Rc::new(RefCell::new(Option::<NesContext>::None));
 
         let rom = load_rom()?;
-        let new_ctx = set_rom(&rom)?;
-        base_ctx.borrow_mut().replace(new_ctx);
+        let ctx = set_rom(&rom)?;
+        let ctx = Rc::new(RefCell::new(ctx));
 
-        let ctx = base_ctx.clone();
-        add_event_listener(&window, "keydown", move |event: KeyboardEvent| {
-            let mut ctx = ctx.borrow_mut();
-            let nes = match &mut *ctx {
-                Some(ctx) => &mut ctx.nes,
-                None => return Ok(()),
-            };
-            let button = keycode_binding(&event.code());
-            nes.controller().press(button);
-            Ok(())
+        add_event_listener(&window, "keydown", {
+            let ctx = ctx.clone();
+            move |event: KeyboardEvent| {
+                let nes = &mut ctx.borrow_mut().nes;
+                let button = keycode_binding(&event.code());
+                nes.controller().press(button);
+                Ok(())
+            }
         })?;
 
-        let ctx = base_ctx.clone();
-        add_event_listener(&window, "keyup", move |event: KeyboardEvent| {
-            let mut ctx = ctx.borrow_mut();
-            let nes = match &mut *ctx {
-                Some(ctx) => &mut ctx.nes,
-                None => return Ok(()),
-            };
-            let button = keycode_binding(&event.code());
-            nes.controller().release(button);
-            Ok(())
+        add_event_listener(&window, "keyup", {
+            let ctx = ctx.clone();
+            move |event: KeyboardEvent| {
+                let nes = &mut ctx.borrow_mut().nes;
+                let button = keycode_binding(&event.code());
+                nes.controller().release(button);
+                Ok(())
+            }
         })?;
 
         let controller_element = dom
@@ -89,28 +89,24 @@ impl Runtime for Web {
         for (button_id, button) in BUTTONS.iter() {
             let element = dom
                 .get_element_by_id(button_id)
-                .context(format!("button not found {}", button_id))?;
+                .context(format!("button not found {button_id}"))?;
 
-            let ctx = base_ctx.clone();
-            add_event_listener(&element, "pointerenter", move |_: PointerEvent| {
-                let mut ctx = ctx.borrow_mut();
-                let nes = match &mut *ctx {
-                    Some(ctx) => &mut ctx.nes,
-                    None => return Ok(()),
-                };
-                nes.controller().press(*button);
-                Ok(())
+            add_event_listener(&element, "pointerenter", {
+                let ctx = ctx.clone();
+                move |_: PointerEvent| {
+                    let nes = &mut ctx.borrow_mut().nes;
+                    nes.controller().press(*button);
+                    Ok(())
+                }
             })?;
 
-            let ctx = base_ctx.clone();
-            add_event_listener(&element, "pointerout", move |_: PointerEvent| {
-                let mut ctx = ctx.borrow_mut();
-                let nes = match &mut *ctx {
-                    Some(ctx) => &mut ctx.nes,
-                    None => return Ok(()),
-                };
-                nes.controller().release(*button);
-                Ok(())
+            add_event_listener(&element, "pointerout", {
+                let ctx = ctx.clone();
+                move |_: PointerEvent| {
+                    let nes = &mut ctx.borrow_mut().nes;
+                    nes.controller().release(*button);
+                    Ok(())
+                }
             })?;
         }
 
@@ -118,38 +114,42 @@ impl Runtime for Web {
             .get_element_by_id("upload-rom")
             .context("upload-rom button not found")?
             .dyn_into::<HtmlInputElement>()
-            .map_err(|_| anyhow!("button was not a HtmlInputElement"))?;
+            .map_err(|_| anyhow!("upload-rom button was not a HtmlInputElement"))?;
 
-        let ctx = base_ctx.clone();
-        add_event_listener(&upload_button.clone(), "change", move |_: Event| {
-            let file_list = upload_button.files().context("No files selected")?;
-            let mut files = vec![];
-            for i in 0..file_list.length() {
-                let file = file_list.item(i).context("No file found")?;
-                files.push(file);
-            }
-            upload_rom(ctx.clone(), files.into_iter());
-            Ok(())
-        })?;
-
-        let ctx = base_ctx.clone();
-        add_event_listener(&window, "drop", move |event: DragEvent| {
-            event.prevent_default();
-            let items = event.data_transfer().context("No data transfered")?.items();
-
-            let mut files = vec![];
-            for i in 0..items.length() {
-                let item = items.get(i).context("No data transfer item found")?;
-                if let Some(file) = item
-                    .get_as_file()
-                    .map_err(|_| anyhow!("Failed to get file"))?
-                {
+        add_event_listener(&upload_button.clone(), "change", {
+            let ctx = ctx.clone();
+            move |_: Event| {
+                let file_list = upload_button.files().context("No files selected")?;
+                let mut files = vec![];
+                for i in 0..file_list.length() {
+                    let file = file_list.item(i).context("No file found")?;
                     files.push(file);
                 }
+                upload_rom(ctx.clone(), files.into_iter());
+                Ok(())
             }
+        })?;
 
-            upload_rom(ctx.clone(), files.into_iter());
-            Ok(())
+        add_event_listener(&window, "drop", {
+            let ctx = ctx.clone();
+            move |event: DragEvent| {
+                event.prevent_default();
+                let items = event
+                    .data_transfer()
+                    .context("No data transferred")?
+                    .items();
+
+                let mut files = vec![];
+                for i in 0..items.length() {
+                    let item = items.get(i).context("No data transfer item found")?;
+                    if let Some(file) = item.get_as_file().anyhow()? {
+                        files.push(file);
+                    }
+                }
+
+                upload_rom(ctx.clone(), files.into_iter());
+                Ok(())
+            }
         })?;
 
         add_event_listener(&window, "dragover", move |event: DragEvent| {
@@ -165,54 +165,51 @@ impl Runtime for Web {
         let mut timestamp_start_ms = 0.0;
         let mut num_frames: u64 = 0;
 
-        let ctx = base_ctx.clone();
-        *g.borrow_mut() = Some(closure(move |timestamp_ms: f64| {
-            request_animation_frame(f.borrow().as_ref().unwrap())?;
+        *g.borrow_mut() = Some(closure({
+            let ctx = ctx.clone();
+            move |timestamp_ms: f64| {
+                request_animation_frame(f.borrow().as_ref().unwrap())?;
 
-            if timestamp_start_ms == 0.0 {
-                timestamp_start_ms = timestamp_ms;
-            }
-
-            let expected_frames =
-                ((timestamp_ms - timestamp_start_ms) / FRAME_DURATION.as_millis() as f64) as u64;
-
-            let needed_frames = (expected_frames - num_frames).min(3);
-            if needed_frames == 0 {
-                return Ok(());
-            }
-
-            let mut ctx = ctx.borrow_mut();
-            let ctx = match &mut *ctx {
-                Some(ctx) => ctx,
-                None => return Ok(()),
-            };
-            let nes = &mut ctx.nes;
-
-            // Save state every frame, inefficient but it doesn't seem to matter
-            save_state(ctx.rom_hash, nes)?;
-
-            for _ in 0..needed_frames {
-                // Run NES until frame starts
-                while nes.display().vblank() {
-                    nes.tick();
+                if timestamp_start_ms == 0.0 {
+                    timestamp_start_ms = timestamp_ms;
                 }
-                // Run NES until frame ends
-                while !nes.display().vblank() {
-                    nes.tick();
-                }
-            }
-            num_frames = expected_frames;
 
-            let image_data = ImageData::new_with_u8_clamped_array_and_sh(
-                Clamped(nes.display().buffer()),
-                WIDTH as u32,
-                HEIGHT as u32,
-            )
-            .map_err(|_| anyhow!("Failed to create image data"))?;
-            context
-                .put_image_data(&image_data, 0.0, 0.0)
-                .map_err(|_| anyhow!("Failed to put image data"))?;
-            Ok(())
+                let expected_frames = ((timestamp_ms - timestamp_start_ms)
+                    / FRAME_DURATION.as_millis() as f64)
+                    as u64;
+
+                let needed_frames = (expected_frames - num_frames).min(3);
+                if needed_frames == 0 {
+                    return Ok(());
+                }
+
+                let mut ctx = ctx.borrow_mut();
+                let NesContext { nes, rom_hash } = &mut *ctx;
+
+                // Save state every frame, inefficient but it doesn't seem to matter
+                save_state(*rom_hash, nes)?;
+
+                for _ in 0..needed_frames {
+                    // Run NES until frame starts
+                    while nes.display().vblank() {
+                        nes.tick();
+                    }
+                    // Run NES until frame ends
+                    while !nes.display().vblank() {
+                        nes.tick();
+                    }
+                }
+                num_frames = expected_frames;
+
+                let image_data = ImageData::new_with_u8_clamped_array_and_sh(
+                    Clamped(nes.display().buffer()),
+                    WIDTH as u32,
+                    HEIGHT as u32,
+                )
+                .anyhow()?;
+                context.put_image_data(&image_data, 0.0, 0.0).anyhow()?;
+                Ok(())
+            }
         }));
 
         request_animation_frame(g.borrow().as_ref().unwrap())?;
@@ -240,15 +237,15 @@ fn keycode_binding(keycode: &str) -> Buttons {
     }
 }
 
-fn window() -> anyhow::Result<Window> {
+fn window() -> Result<Window> {
     web_sys::window().context("no global `window` exists")
 }
 
-fn dom() -> anyhow::Result<Document> {
+fn dom() -> Result<Document> {
     window()?.document().context("DOM not found")
 }
 
-fn canvas_context() -> anyhow::Result<CanvasRenderingContext2d> {
+fn canvas_context() -> Result<CanvasRenderingContext2d> {
     let canvas = dom()?
         .get_element_by_id("canvas")
         .context("canvas not found")?;
@@ -256,36 +253,36 @@ fn canvas_context() -> anyhow::Result<CanvasRenderingContext2d> {
         .dyn_into::<HtmlCanvasElement>()
         .map_err(|_| anyhow!("canvas was not a HtmlCanvasElement"))?;
 
-    canvas
+    Ok(canvas
         .get_context("2d")
-        .map_err(|_| anyhow!("Failed to get canvas context"))?
+        .anyhow()?
         .context("Unsupported canvas context '2d'")?
-        .dyn_into::<CanvasRenderingContext2d>()
-        .map_err(|_| anyhow!("canvas context was not a CanvasRenderingContext2d"))
+        .unchecked_into::<CanvasRenderingContext2d>())
 }
 
-fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) -> anyhow::Result<i32> {
-    window()?
+fn request_animation_frame(f: &Closure<dyn FnMut(f64)>) -> Result<i32> {
+    let result = window()?
         .request_animation_frame(f.as_ref().unchecked_ref())
-        .map_err(|_| anyhow!("failed to request animation frame"))
+        .anyhow()?;
+    Ok(result)
 }
 
 fn add_event_listener<T: FromWasmAbi + 'static>(
     target: &EventTarget,
     event: &str,
-    listener: impl FnMut(T) -> Result<(), Box<dyn Error>> + 'static,
-) -> anyhow::Result<()> {
+    listener: impl FnMut(T) -> Result<()> + 'static,
+) -> Result<()> {
     let closure = closure(listener);
     target
         .add_event_listener_with_callback(event, closure.as_ref().unchecked_ref())
-        .map_err(|_| anyhow!("failed to add event listener"))?;
+        .anyhow()?;
     // Make closure live forever
     closure.forget();
     Ok(())
 }
 
 fn closure<T: FromWasmAbi + 'static>(
-    mut function: impl FnMut(T) -> Result<(), Box<dyn Error>> + 'static,
+    mut function: impl FnMut(T) -> Result<()> + 'static,
 ) -> Closure<dyn FnMut(T)> {
     Closure::<dyn FnMut(T)>::new(move |arg| {
         if let Err(err) = function(arg) {
@@ -294,15 +291,13 @@ fn closure<T: FromWasmAbi + 'static>(
     })
 }
 
-fn upload_rom(ctx: Rc<RefCell<Option<NesContext>>>, files: impl Iterator<Item = File>) {
+fn upload_rom(ctx: Rc<RefCell<NesContext>>, files: impl Iterator<Item = File>) {
     for file in files {
         let filename = file.name();
         let ctx = ctx.clone();
 
         let success = closure(move |array_buffer: JsValue| {
-            let array_buffer = array_buffer
-                .dyn_into::<ArrayBuffer>()
-                .map_err(|_| anyhow!("Failed to convert to ArrayBuffer"))?;
+            let array_buffer = array_buffer.unchecked_into::<ArrayBuffer>();
 
             let array = Uint8Array::new(&array_buffer);
             let mut data = vec![0; array.length() as usize];
@@ -329,7 +324,7 @@ fn upload_rom(ctx: Rc<RefCell<Option<NesContext>>>, files: impl Iterator<Item = 
             let rom = rom.ok_or_else(|| anyhow!("No .nes file found"))?;
 
             let new_ctx = set_rom(&rom)?;
-            ctx.replace(Some(new_ctx));
+            ctx.replace(new_ctx);
             save_rom(&rom)?;
             Ok(())
         });
@@ -344,7 +339,7 @@ fn upload_rom(ctx: Rc<RefCell<Option<NesContext>>>, files: impl Iterator<Item = 
     }
 }
 
-fn set_rom(rom: &[u8]) -> Result<NesContext, Box<dyn Error>> {
+fn set_rom(rom: &[u8]) -> Result<NesContext> {
     let ines = INes::read(rom)?;
     let cartridge = ines.into_cartridge();
     let display = BufferDisplay::default();
@@ -360,23 +355,18 @@ fn set_rom(rom: &[u8]) -> Result<NesContext, Box<dyn Error>> {
     Ok(NesContext { nes, rom_hash })
 }
 
-fn save_state<D, S>(rom_hash: u64, nes: &mut NES<D, S>) -> Result<(), Box<dyn Error>> {
+fn save_state<D, S>(rom_hash: u64, nes: &mut NES<D, S>) -> Result<()> {
     let ram = nes.cpu.memory().prg().ram();
 
     let key = state_key(rom_hash);
     let value = BASE64_STANDARD.encode(ram);
-    local_storage()?
-        .set_item(&key, &value)
-        .map_err(|_| anyhow!("Failed to save state to local storage"))?;
+    local_storage()?.set_item(&key, &value).anyhow()?;
     Ok(())
 }
 
-fn load_state<D, S>(rom_hash: u64, nes: &mut NES<D, S>) -> Result<(), Box<dyn Error>> {
+fn load_state<D, S>(rom_hash: u64, nes: &mut NES<D, S>) -> Result<()> {
     let key = state_key(rom_hash);
-    let value = match local_storage()?
-        .get_item(&key)
-        .map_err(|_| anyhow!("Failed to get state from local storage"))?
-    {
+    let value = match local_storage()?.get_item(&key).anyhow()? {
         Some(value) => value,
         None => return Ok(()), // No state saved
     };
@@ -388,29 +378,24 @@ fn load_state<D, S>(rom_hash: u64, nes: &mut NES<D, S>) -> Result<(), Box<dyn Er
 
 const ROM_KEY: &str = "nes-rom";
 
-fn save_rom(rom: &[u8]) -> Result<(), Box<dyn Error>> {
+fn save_rom(rom: &[u8]) -> Result<()> {
     let value = BASE64_STANDARD.encode(rom);
-    local_storage()?
-        .set_item(ROM_KEY, &value)
-        .map_err(|_| anyhow!("Failed to save ROM"))?;
+    local_storage()?.set_item(ROM_KEY, &value).anyhow()?;
     Ok(())
 }
 
-fn load_rom() -> Result<Vec<u8>, Box<dyn Error>> {
-    let value = match local_storage()?
-        .get_item(ROM_KEY)
-        .map_err(|_| anyhow!("Failed to read ROM"))?
-    {
+fn load_rom() -> Result<Vec<u8>> {
+    let value = match local_storage()?.get_item(ROM_KEY).anyhow()? {
         Some(value) => value,
         None => return Ok(DEFAULT_ROM.to_vec()),
     };
     Ok(BASE64_STANDARD.decode(value)?)
 }
 
-fn local_storage() -> Result<Storage, Box<dyn Error>> {
+fn local_storage() -> Result<Storage> {
     Ok(window()?
         .local_storage()
-        .map_err(|_| anyhow!("Failed to get local storage"))?
+        .anyhow()?
         .context("Failed to get local storage")?)
 }
 
@@ -439,4 +424,41 @@ impl NESSpeaker for WebSpeaker {
 extern "C" {
     #[wasm_bindgen(js_name = pushAudioBuffer)]
     fn push_audio_buffer(byte: f32);
+}
+
+#[derive(Debug)]
+pub struct JsError(String);
+
+impl std::fmt::Display for JsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for JsError {}
+
+impl From<JsValue> for JsError {
+    fn from(e: JsValue) -> Self {
+        let dbg = format!("{:?}", e);
+        let msg = js_sys::Error::from(e)
+            .message()
+            .as_string()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(dbg);
+        JsError(msg)
+    }
+}
+
+trait WebResult<T> {
+    fn anyhow(self) -> Result<T>;
+}
+
+impl<T> WebResult<T> for Result<T, JsValue> {
+    fn anyhow(self) -> Result<T> {
+        self.map_err(|e| {
+            let dbg = format!("{:?}", e);
+            let msg = js_sys::Error::from(e).message().as_string().unwrap_or(dbg);
+            anyhow!(msg)
+        })
+    }
 }

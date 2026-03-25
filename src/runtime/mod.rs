@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::{error::Error, time::Duration};
 
 #[cfg(feature = "sdl")]
@@ -13,8 +14,8 @@ pub use web::Web as ActiveRuntime;
 pub use sdl::Sdl as ActiveRuntime;
 
 pub trait Runtime {
-    fn init_log(level: log::Level) -> Result<(), Box<dyn Error>>;
-    fn run() -> Result<(), Box<dyn Error>>;
+    fn init_log(level: log::Level) -> Result<()>;
+    fn run() -> Result<()>;
 }
 
 const FPS: u64 = 60;
@@ -25,11 +26,11 @@ const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / FPS);
 pub type ActiveRuntime = ();
 
 impl Runtime for () {
-    fn init_log(_level: log::Level) -> Result<(), Box<dyn Error>> {
+    fn init_log(_level: log::Level) -> Result<()> {
         Ok(())
     }
 
-    fn run() -> Result<(), Box<dyn Error>> {
+    fn run() -> Result<()> {
         use crate::{INes, NES};
         use std::fs::File;
 

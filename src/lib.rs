@@ -17,10 +17,10 @@ use crate::ppu::NESPPUMemory;
 use crate::ppu::PPU;
 pub use crate::runtime::ActiveRuntime;
 pub use crate::runtime::Runtime;
+use anyhow::Result;
 use apu::APU;
 use std::fmt::{Debug, Formatter};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 mod address;
 mod apu;
@@ -45,7 +45,7 @@ pub fn run() {
     }
 }
 
-fn run_inner() -> Result<(), Box<dyn std::error::Error>> {
+fn run_inner() -> Result<()> {
     ActiveRuntime::init_log(log::Level::Info)?;
     ActiveRuntime::run()
 }

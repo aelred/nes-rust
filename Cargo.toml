@@ -20,7 +20,7 @@ web = [
 ]
 
 [dependencies]
-log = "0.4.22"
+log = { version = "0.4.22", features = ["std"] }
 bitflags = "2.6.0"
 anyhow = "1.0.89"
 
