@@ -32,7 +32,8 @@ env_logger = { version = "0.11.5", optional = true, default-features = false, fe
     "humantime",
 ] }
 
-wasm-bindgen = { version = "0.2.93", optional = true }
+wasm-bindgen = { version = "0.2.114", optional = true }
+js-sys = { version = "0.3.92", features = ["futures"] }
 web-sys = { version = "0.3.70", optional = true, features = [
     'CanvasRenderingContext2d',
     'KeyboardEvent',
@@ -54,6 +55,12 @@ web-sys = { version = "0.3.70", optional = true, features = [
     'PointerEvent',
     # Feature required for saving the game
     'Storage',
+    # Features required for audio
+    'AudioContext',
+    'AudioDestinationNode',
+    'AudioWorklet',
+    'AudioWorkletNode',
+    'AudioWorkletNodeOptions'
 ] }
 zip = { version = "2.2.0", optional = true, default-features = false, features = [
     "deflate",

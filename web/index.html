@@ -64,66 +64,79 @@
 </head>
 
 <body>
-    <div id="container">
-        <canvas id="canvas" width="256" height="240">
-        </canvas>
-        <svg viewBox="5 0 90 46" id="controller" class="mobile">
-            <rect width="100" height="46" fill="#e5e5e5" rx="2" />
-            <rect x="3" y="5" width="94" height="38" fill="#0d0c0c" rx="1" />
-            <!-- Left -->
-            <rect x="7" y="20" width="24" height="10" fill="#e5e5e5" rx="1" />
-            <rect x="14" y="13" width="10" height="24" fill="#e5e5e5" rx="1" />
-            <rect x="8" y="21" width="22" height="8" fill="#0d0c0c" rx="1" />
-            <rect x="15" y="14" width="8" height="22" fill="#0d0c0c" rx="1" />
+<script type="module">
+    import init, {run} from "./nes_rust.js";
 
-            <rect x="7" y="20" width="10" height="10" visibility="hidden" pointer-events="all" id="left" />
-            <rect x="21" y="20" width="10" height="10" visibility="hidden" pointer-events="all" id="right" />
-            <rect x="14" y="13" width="10" height="10" visibility="hidden" pointer-events="all" id="up" />
-            <rect x="14" y="27" width="10" height="10" visibility="hidden" pointer-events="all" id="down" />
-            <!-- Middle -->
-            <rect x="36" y="5" width="28" height="1" fill="#a5a2a2" rx="0" />
-            <rect x="36" y="5" width="28" height="5" fill="#a5a2a2" rx="1" />
-            <rect x="36" y="12" width="28" height="5" fill="#a5a2a2" rx="1" />
-            <rect x="36" y="19" width="28" height="5" fill="#a5a2a2" rx="1" />
-            <text x="44.5" y="22.4" fill="#dd2020" text-anchor="middle" font-size="2.5"
-                font-family="monospace">SELECT</text>
-            <text x="55.5" y="22.4" fill="#dd2020" text-anchor="middle" font-size="2.5"
-                font-family="monospace">START</text>
-            <rect x="36" y="26" width="28" height="10" fill="#e5e5e5" rx="1" />
-            <rect x="40" y="30" width="9" height="3" fill="#0d0c0c" rx="2" id="select" />
-            <rect x="51" y="30" width="9" height="3" fill="#0d0c0c" rx="2" id="start" />
-            <rect x="36" y="38" width="28" height="5" fill="#a5a2a2" rx="1" />
-            <rect x="36" y="39" width="28" height="4" fill="#a5a2a2" rx="0" />
-            <!-- Right -->
-            <rect x="68" y="27" width="10" height="10" fill="#e5e5e5" rx="1" />
-            <circle cx="73" cy="32" r="4" fill="#dd2020" id="b" />
-            <text x="77" y="40" fill="#dd2020" text-anchor="middle" font-size="2.5" font-family="monospace">B</text>
-            <rect x="81" y="27" width="10" height="10" fill="#e5e5e5" rx="1" />
-            <circle cx="86" cy="32" r="4" fill="#dd2020" id="a" />
-            <text x="90" y="40" fill="#dd2020" text-anchor="middle" font-size="2.5" font-family="monospace">A</text>
-        </svg>
-        <p>
-            <input type="file" id="upload-rom" accept=".nes, .zip" />
-        </p>
-        <p>
-            This is a <a
-                href="https://www.nintendo.com/en-gb/Hardware/Nintendo-History/Nintendo-Entertainment-System/Nintendo-Entertainment-System-627024.html">NES</a>
-            emulator. Select or drag-and-drop a .nes or .zip file to play it, e.g. the <a
-                href="https://eldenpixels.itch.io/alwas-awakening-the-8-bit-edition#:~:text=944%20kB-,Download%20demo,-Download">Alwa's
-                Awakening demo</a>!
-        </p>
-        <p class="desktop">
-            Controls:&nbsp;
-            <span class=key>Z</span> = <span class=button>A</span>,&nbsp;
-            <span class=key>X</span> = <span class=button>B</span>,&nbsp;
-            <span class=key>Arrows</span> = <span class=button>D-Pad</span>,&nbsp;
-            <span class=key>Enter</span> = <span class=button> Start</span>,&nbsp;
-            <span class=key>Shift</span> = <span class=button>Select</span>
-        </p>
-        <p>
-            <a href="https://github.com/aelred/nes-rust">GitHub</a>
-        </p>
-    </div>
+    async function start() {
+        await init();
+        run();
+    }
+
+    start();
+</script>
+
+<div id="container">
+    <canvas height="240" id="canvas" width="256">
+    </canvas>
+    <svg class="mobile" id="controller" viewBox="5 0 90 46">
+        <rect fill="#e5e5e5" height="46" rx="2" width="100"/>
+        <rect fill="#0d0c0c" height="38" rx="1" width="94" x="3" y="5"/>
+        <!-- Left -->
+        <rect fill="#e5e5e5" height="10" rx="1" width="24" x="7" y="20"/>
+        <rect fill="#e5e5e5" height="24" rx="1" width="10" x="14" y="13"/>
+        <rect fill="#0d0c0c" height="8" rx="1" width="22" x="8" y="21"/>
+        <rect fill="#0d0c0c" height="22" rx="1" width="8" x="15" y="14"/>
+
+        <rect height="10" id="left" pointer-events="all" visibility="hidden" width="10" x="7" y="20"/>
+        <rect height="10" id="right" pointer-events="all" visibility="hidden" width="10" x="21" y="20"/>
+        <rect height="10" id="up" pointer-events="all" visibility="hidden" width="10" x="14" y="13"/>
+        <rect height="10" id="down" pointer-events="all" visibility="hidden" width="10" x="14" y="27"/>
+        <!-- Middle -->
+        <rect fill="#a5a2a2" height="1" rx="0" width="28" x="36" y="5"/>
+        <rect fill="#a5a2a2" height="5" rx="1" width="28" x="36" y="5"/>
+        <rect fill="#a5a2a2" height="5" rx="1" width="28" x="36" y="12"/>
+        <rect fill="#a5a2a2" height="5" rx="1" width="28" x="36" y="19"/>
+        <text fill="#dd2020" font-family="monospace" font-size="2.5" text-anchor="middle" x="44.5"
+              y="22.4">SELECT
+        </text>
+        <text fill="#dd2020" font-family="monospace" font-size="2.5" text-anchor="middle" x="55.5"
+              y="22.4">START
+        </text>
+        <rect fill="#e5e5e5" height="10" rx="1" width="28" x="36" y="26"/>
+        <rect fill="#0d0c0c" height="3" id="select" rx="2" width="9" x="40" y="30"/>
+        <rect fill="#0d0c0c" height="3" id="start" rx="2" width="9" x="51" y="30"/>
+        <rect fill="#a5a2a2" height="5" rx="1" width="28" x="36" y="38"/>
+        <rect fill="#a5a2a2" height="4" rx="0" width="28" x="36" y="39"/>
+        <!-- Right -->
+        <rect fill="#e5e5e5" height="10" rx="1" width="10" x="68" y="27"/>
+        <circle cx="73" cy="32" fill="#dd2020" id="b" r="4"/>
+        <text fill="#dd2020" font-family="monospace" font-size="2.5" text-anchor="middle" x="77" y="40">B</text>
+        <rect fill="#e5e5e5" height="10" rx="1" width="10" x="81" y="27"/>
+        <circle cx="86" cy="32" fill="#dd2020" id="a" r="4"/>
+        <text fill="#dd2020" font-family="monospace" font-size="2.5" text-anchor="middle" x="90" y="40">A</text>
+    </svg>
+    <p>
+        <input accept=".nes, .zip" id="upload-rom" type="file"/>
+    </p>
+    <p>
+        This is a <a
+            href="https://www.nintendo.com/en-gb/Hardware/Nintendo-History/Nintendo-Entertainment-System/Nintendo-Entertainment-System-627024.html">NES</a>
+        emulator. Select or drag-and-drop a .nes or .zip file to play it, e.g. the <a
+            href="https://eldenpixels.itch.io/alwas-awakening-the-8-bit-edition#:~:text=944%20kB-,Download%20demo,-Download">Alwa's
+        Awakening demo</a>!
+    </p>
+    <p class="desktop">
+        Controls:&nbsp;
+        <span class=key>Z</span> = <span class=button>A</span>,&nbsp;
+        <span class=key>X</span> = <span class=button>B</span>,&nbsp;
+        <span class=key>Arrows</span> = <span class=button>D-Pad</span>,&nbsp;
+        <span class=key>Enter</span> = <span class=button> Start</span>,&nbsp;
+        <span class=key>Shift</span> = <span class=button>Select</span>
+    </p>
+    <p>
+        <a href="https://github.com/aelred/nes-rust">GitHub</a>
+    </p>
+</div>
 </body>
 
 </html>

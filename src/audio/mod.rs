@@ -46,12 +46,17 @@ impl AudioSink {
 
         self.ring_buffer.get_mut().0[0] = output;
 
-        while !self.ring_buffer.next(1) {
-            // Manage audio timing using the buffer.
-            // If it's full, sleep for the time it takes the sink to read one window.
-            std::thread::sleep(Duration::from_secs_f64(
-                AUDIO_SAMPLE_SIZE as f64 / TARGET_AUDIO_FREQ,
-            ));
+        // TODO: fix this to work in web better
+        if cfg!(target_arch = "wasm32") {
+            let _ = self.ring_buffer.next(1);
+        } else {
+            while !self.ring_buffer.next(1) {
+                // Manage audio timing using the buffer.
+                // If it's full, sleep for the time it takes the sink to read one window.
+                std::thread::sleep(Duration::from_secs_f64(
+                    AUDIO_SAMPLE_SIZE as f64 / TARGET_AUDIO_FREQ,
+                ));
+            }
         }
     }
 }

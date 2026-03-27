@@ -20,7 +20,7 @@ pub use crate::runtime::Runtime;
 use anyhow::Result;
 use apu::APU;
 use std::fmt::{Debug, Formatter};
-use std::time::Instant;
+use wasm_bindgen::prelude::wasm_bindgen;
 
 mod address;
 mod apu;
@@ -38,7 +38,7 @@ pub const WIDTH: u16 = 256;
 pub const HEIGHT: u16 = 240;
 pub const NES_FREQ: f64 = 1_789_773.0;
 
-#[cfg_attr(feature = "web", wasm_bindgen::prelude::wasm_bindgen(start))]
+#[cfg_attr(feature = "web", wasm_bindgen)]
 pub fn run() {
     if let Err(e) = run_inner() {
         log::error!("Error: {}", e);
@@ -142,16 +142,8 @@ pub struct NES<D, S> {
 
 impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
     pub fn new(cartridge: Cartridge, display: D, speaker: S) -> Self {
-        let ppu_memory = NESPPUMemory::new(cartridge.chr);
-        let ppu = PPU::with_memory(ppu_memory);
-        let controller = Controller::default();
-        let apu = APU::default();
-
-        let cpu_memory = NESCPUMemory::new(cartridge.prg, ppu, apu, controller);
-        let cpu = CPU::from_memory(cpu_memory);
-
         NES {
-            cpu,
+            cpu: Self::cpu_from_cartridge(cartridge),
             display,
             speaker,
         }
@@ -167,6 +159,10 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
 
     pub fn set_program_counter(&mut self, address: Address) {
         self.cpu.set_program_counter(address);
+    }
+
+    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
+        self.cpu = Self::cpu_from_cartridge(cartridge);
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
@@ -216,6 +212,16 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         let apu = self.cpu.memory().apu();
         let wave = apu.tick();
         self.speaker.emit(wave);
+    }
+
+    fn cpu_from_cartridge(cartridge: Cartridge) -> CPU {
+        let ppu_memory = NESPPUMemory::new(cartridge.chr);
+        let ppu = PPU::with_memory(ppu_memory);
+        let controller = Controller::default();
+        let apu = APU::default();
+
+        let cpu_memory = NESCPUMemory::new(cartridge.prg, ppu, apu, controller);
+        CPU::from_memory(cpu_memory)
     }
 }
 
