@@ -20,6 +20,9 @@ pub use crate::runtime::Runtime;
 use anyhow::Result;
 use apu::APU;
 use std::fmt::{Debug, Formatter};
+use std::sync::atomic::Ordering::{AcqRel, Acquire, Release};
+use std::sync::atomic::{AtomicBool, AtomicPtr};
+use std::sync::Arc;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 mod address;
@@ -60,54 +63,74 @@ impl NESDisplay for () {
     fn enter_vblank(&mut self) {}
 }
 
-pub struct BufferDisplay {
-    buffer: Box<[u8; WIDTH as usize * HEIGHT as usize * 4]>,
+type Buffer = [u8; WIDTH as usize * HEIGHT as usize * 4];
+
+pub fn display_triple_buffer() -> (FrontBuffer, BackBuffer) {
+    let intermediate_buffer = Arc::new(IntermediateBuffer {
+        buffer: AtomicPtr::new(Box::into_raw(Box::new([0; _]))),
+        dirty: AtomicBool::new(false),
+    });
+
+    let front = FrontBuffer {
+        front_buffer: Some(Box::new([0; _])),
+        intermediate_buffer: intermediate_buffer.clone(),
+    };
+
+    let back = BackBuffer {
+        back_buffer: Some(Box::new([0; _])),
+        x: 0,
+        y: 0,
+        vblank: false,
+        intermediate_buffer,
+    };
+
+    (front, back)
+}
+
+pub struct FrontBuffer {
+    front_buffer: Option<Box<Buffer>>,
+    intermediate_buffer: Arc<IntermediateBuffer>,
+}
+
+impl FrontBuffer {
+    pub fn read_buffer(&mut self) -> &Buffer {
+        if self.intermediate_buffer.dirty.swap(false, AcqRel) {
+            let old_buffer = self.front_buffer.take().unwrap();
+            self.front_buffer = Some(self.intermediate_buffer.swap(old_buffer));
+        }
+
+        self.front_buffer.as_ref().unwrap()
+    }
+}
+
+pub struct BackBuffer {
+    back_buffer: Option<Box<Buffer>>,
     x: usize,
     y: usize,
     vblank: bool,
+    intermediate_buffer: Arc<IntermediateBuffer>,
 }
 
-impl Default for BufferDisplay {
-    fn default() -> Self {
-        BufferDisplay {
-            buffer: Box::new([0; WIDTH as usize * HEIGHT as usize * 4]),
-            x: 0,
-            y: 0,
-            vblank: false,
-        }
-    }
-}
-
-impl BufferDisplay {
-    pub fn buffer(&self) -> &[u8] {
-        self.buffer.as_slice()
-    }
-
+impl BackBuffer {
+    // TODO: we probably won't need this eventually
     pub fn vblank(&self) -> bool {
         self.vblank
     }
 }
 
-impl Debug for BufferDisplay {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BufferDisplay").finish()
-    }
-}
-
-impl NESDisplay for BufferDisplay {
+impl NESDisplay for BackBuffer {
     fn draw_pixel(&mut self, color: Color) {
-        // if self.vblank {
-        //     log::debug!("Exit vblank");
-        // }
         self.vblank = false;
 
+        let buffer = self.back_buffer.as_mut().unwrap();
+
         let offset = (self.y * WIDTH as usize + self.x) * 4;
-        if offset + 3 < self.buffer.len() {
+        if offset + 3 < buffer.len() {
             let (r, g, b) = color.to_rgb();
-            self.buffer[offset] = r;
-            self.buffer[offset + 1] = g;
-            self.buffer[offset + 2] = b;
-            self.buffer[offset + 3] = 0xFF;
+            buffer[offset] = r;
+            buffer[offset + 1] = g;
+            buffer[offset + 2] = b;
+            buffer[offset + 3] = 0xFF;
         }
 
         self.x += 1;
@@ -121,7 +144,36 @@ impl NESDisplay for BufferDisplay {
     }
 
     fn enter_vblank(&mut self) {
+        if self.vblank {
+            return;
+        }
+        let old_buffer = self.back_buffer.take().unwrap();
+        self.back_buffer = Some(self.intermediate_buffer.swap(old_buffer));
+        self.intermediate_buffer.dirty.store(true, Release);
         self.vblank = true;
+    }
+}
+
+struct IntermediateBuffer {
+    buffer: AtomicPtr<Buffer>,
+    dirty: AtomicBool,
+}
+
+impl IntermediateBuffer {
+    fn swap(&self, buffer: Box<Buffer>) -> Box<Buffer> {
+        let new_ptr = Box::into_raw(buffer);
+        let old_ptr = self.buffer.swap(new_ptr, AcqRel);
+        // SAFETY: the pointer is always valid and exclusive
+        unsafe { Box::from_raw(old_ptr) }
+    }
+}
+
+impl Drop for IntermediateBuffer {
+    fn drop(&mut self) {
+        let ptr = self.buffer.load(Acquire);
+        // SAFETY: the pointer is always valid and exclusive
+        let boxed = unsafe { Box::from_raw(ptr) };
+        drop(boxed)
     }
 }
 

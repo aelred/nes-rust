@@ -5,7 +5,10 @@ mod audio;
 use super::FRAME_DURATION;
 use crate::audio::{audio_pipeline, AudioSink};
 use crate::runtime::web::audio::wasm_audio;
-use crate::{runtime::Runtime, BufferDisplay, Buttons, INes, HEIGHT, NES, WIDTH};
+use crate::{
+    display_triple_buffer, runtime::Runtime, BackBuffer, Buttons, FrontBuffer, INes, HEIGHT, NES,
+    WIDTH,
+};
 use anyhow::Result;
 use anyhow::{anyhow, Context};
 use base64::{prelude::BASE64_STANDARD, Engine};
@@ -195,7 +198,11 @@ async fn run() -> Result<()> {
             }
 
             let mut ctx = ctx.borrow_mut();
-            let NesContext { nes, rom_hash } = &mut *ctx;
+            let NesContext {
+                nes,
+                front_buffer,
+                rom_hash,
+            } = &mut *ctx;
 
             // Save state every frame, inefficient but it doesn't seem to matter
             save_state(*rom_hash, nes)?;
@@ -214,7 +221,7 @@ async fn run() -> Result<()> {
 
             // ImageData doesn't let you pass in shared memory.
             // All the WASM memory is in a SharedArrayBuffer, so we have to copy it to the JS heap
-            let buffer = nes.display().buffer();
+            let buffer = front_buffer.read_buffer();
             let memory = wasm_bindgen::memory();
             let memory: &WebAssembly::Memory = memory.unchecked_ref();
             let shared_view = Uint8ClampedArray::new_with_byte_offset_and_length(
@@ -241,7 +248,8 @@ async fn run() -> Result<()> {
 }
 
 struct NesContext {
-    nes: NES<BufferDisplay, AudioSink>,
+    nes: NES<BackBuffer, AudioSink>,
+    front_buffer: FrontBuffer,
     rom_hash: u64,
 }
 
@@ -249,7 +257,7 @@ impl NesContext {
     async fn new() -> Result<Self> {
         let ines = INes::read(DEFAULT_ROM)?;
         let cartridge = ines.into_cartridge();
-        let display = BufferDisplay::default();
+        let (front_buffer, back_buffer) = display_triple_buffer();
 
         let (audio_sink, mut audio_source) = audio_pipeline();
 
@@ -262,9 +270,13 @@ impl NesContext {
         // TODO: is this needed?
         ctx.resume().anyhow()?.await.anyhow()?;
 
-        let nes = NES::new(cartridge, display, audio_sink);
+        let nes = NES::new(cartridge, back_buffer, audio_sink);
 
-        Ok(NesContext { nes, rom_hash: 0 })
+        Ok(NesContext {
+            nes,
+            front_buffer,
+            rom_hash: 0,
+        })
     }
 
     fn set_rom(&mut self, rom: &[u8]) -> Result<()> {

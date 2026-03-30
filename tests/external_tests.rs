@@ -4,9 +4,7 @@ use std::io::Cursor;
 use image::ColorType;
 
 use image::EncodableLayout;
-use nes_rust::INes;
-use nes_rust::NES;
-use nes_rust::{Address, BufferDisplay, HEIGHT, WIDTH};
+use nes_rust::{display_triple_buffer, Address, BackBuffer, INes, HEIGHT, NES, WIDTH};
 use yare::parameterized;
 
 enum Setup {
@@ -176,7 +174,9 @@ fn external_test(
     let ines = INes::read(cursor).unwrap();
     let cartridge = ines.into_cartridge();
 
-    let mut nes = NES::new(cartridge, BufferDisplay::default(), ());
+    let (mut front_buffer, back_buffer) = display_triple_buffer();
+
+    let mut nes = NES::new(cartridge, back_buffer, ());
 
     match setup {
         Setup::Default => {}
@@ -196,7 +196,8 @@ fn external_test(
             continue;
         }
 
-        match get_result(success_check, &mut nes) {
+        let image = front_buffer.read_buffer();
+        match get_result(success_check, &mut nes, image) {
             Ok(()) => {
                 if cycles < 10 {
                     panic!("Test passed suspiciously quickly, only {} cycles", cycles);
@@ -204,7 +205,7 @@ fn external_test(
                 return;
             }
             Err(message) => {
-                let fname = save_nes_test_result_image(name, &nes);
+                let fname = save_nes_test_result_image(name, image);
                 panic!("Failed: {}. Saved image in {}", message, fname)
             }
         }
@@ -222,12 +223,16 @@ fn external_test(
     );
 }
 
-fn get_result(success_check: Success, nes: &mut NES<BufferDisplay, ()>) -> Result<(), String> {
+fn get_result(
+    success_check: Success,
+    nes: &mut NES<BackBuffer, ()>,
+    image: &[u8],
+) -> Result<(), String> {
     match success_check {
         Success::Never => Err("Always fails".to_owned()),
         Success::Screen(bytes) => {
             let success_screen = image::load_from_memory(bytes).unwrap();
-            if success_screen.into_rgba8().as_bytes() == nes.display().buffer() {
+            if success_screen.into_rgba8().as_bytes() == image {
                 Ok(())
             } else {
                 Err("Screen doesn't match success".to_owned())
@@ -260,17 +265,9 @@ fn clear_nes_test_result_image(name: &str) {
     let _ = fs::remove_file(&fname);
 }
 
-fn save_nes_test_result_image(name: &str, nes: &NES<BufferDisplay, ()>) -> String {
+fn save_nes_test_result_image(name: &str, image: &[u8]) -> String {
     let fname = nes_test_result_image_name(name);
-    let buffer = nes.display().buffer();
-    image::save_buffer(
-        &fname,
-        buffer,
-        WIDTH.into(),
-        HEIGHT.into(),
-        ColorType::Rgba8,
-    )
-    .unwrap();
+    image::save_buffer(&fname, image, WIDTH.into(), HEIGHT.into(), ColorType::Rgba8).unwrap();
     fname
 }
 
