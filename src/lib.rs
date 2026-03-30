@@ -22,8 +22,11 @@ use apu::APU;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::Ordering::{AcqRel, Acquire, Release};
 use std::sync::atomic::{AtomicBool, AtomicPtr};
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
+use std::thread;
 use wasm_bindgen::prelude::wasm_bindgen;
+use web_time::{Duration, Instant};
 
 mod address;
 mod apu;
@@ -111,13 +114,6 @@ pub struct BackBuffer {
     intermediate_buffer: Arc<IntermediateBuffer>,
 }
 
-impl BackBuffer {
-    // TODO: we probably won't need this eventually
-    pub fn vblank(&self) -> bool {
-        self.vblank
-    }
-}
-
 impl NESDisplay for BackBuffer {
     fn draw_pixel(&mut self, color: Color) {
         self.vblank = false;
@@ -147,10 +143,14 @@ impl NESDisplay for BackBuffer {
         if self.vblank {
             return;
         }
+
+        self.x = 0;
+        self.y = 0;
+        self.vblank = true;
+
         let old_buffer = self.back_buffer.take().unwrap();
         self.back_buffer = Some(self.intermediate_buffer.swap(old_buffer));
         self.intermediate_buffer.dirty.store(true, Release);
-        self.vblank = true;
     }
 }
 
@@ -201,6 +201,43 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         }
     }
 
+    pub fn run(&mut self, commands: Receiver<Command>, events: Sender<Event>) -> ! {
+        let mut cycles: u64 = 0;
+        let start = Instant::now();
+
+        loop {
+            // Arbitrary number of ticks so we don't poll events or sleep too regularly
+            for _ in 0..1000 {
+                cycles += self.tick() as u64;
+            }
+
+            let expected_time = Duration::from_secs_f64(cycles as f64 / NES_FREQ);
+            let actual_time = start.elapsed();
+            if actual_time < expected_time {
+                thread::sleep(expected_time - actual_time);
+            }
+
+            for command in commands.try_iter() {
+                match command {
+                    Command::Press(buttons) => self.controller().press(buttons),
+                    Command::Release(buttons) => self.controller().release(buttons),
+                    Command::LoadRam(ram) => {
+                        self.cpu.memory().prg().ram_mut().copy_from_slice(&ram);
+                    }
+                    Command::LoadCartridge(cartridge) => {
+                        self.load_cartridge(cartridge);
+                    }
+                }
+            }
+
+            if let Some(ram) = self.cpu.memory().prg().changed_ram() {
+                // TODO: ideally don't allocate
+                let event = Event::RamChanged(Vec::from(ram));
+                let _ = events.send(event);
+            }
+        }
+    }
+
     pub fn display(&self) -> &D {
         &self.display
     }
@@ -215,6 +252,8 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.cpu = Self::cpu_from_cartridge(cartridge);
+        // Reset display since we'll start drawing from the top-left again
+        self.display.enter_vblank();
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
@@ -275,6 +314,17 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         let cpu_memory = NESCPUMemory::new(cartridge.prg, ppu, apu, controller);
         CPU::from_memory(cpu_memory)
     }
+}
+
+pub enum Command {
+    Press(Buttons),
+    Release(Buttons),
+    LoadRam(Vec<u8>),
+    LoadCartridge(Cartridge),
+}
+
+pub enum Event {
+    RamChanged(Vec<u8>),
 }
 
 #[macro_export]

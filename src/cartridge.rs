@@ -43,6 +43,7 @@ impl Cartridge {
             bank_size: prg_bank_size,
             bank_switcher,
             ram: [0; 0x2000],
+            dirty_ram: false,
         };
 
         let chr = CHR {
@@ -68,10 +69,22 @@ pub struct PRG {
     bank_size: u16,
     bank_switcher: BankSwitcher,
     ram: [u8; 0x2000],
+    dirty_ram: bool,
 }
 
 impl PRG {
-    pub fn ram(&mut self) -> &mut [u8] {
+    /// Return RAM if it changed since the last call.
+    pub fn changed_ram(&mut self) -> Option<&[u8]> {
+        if !self.dirty_ram {
+            return None;
+        }
+
+        self.dirty_ram = false;
+        Some(&self.ram)
+    }
+
+    /// Get mutable reference to RAM - this does not count as a change.
+    pub fn ram_mut(&mut self) -> &mut [u8] {
         &mut self.ram
     }
 }
@@ -104,6 +117,7 @@ impl Memory for PRG {
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
             0x6000..=0x7fff => {
+                self.dirty_ram = true;
                 self.ram[address.index() - 0x6000] = byte;
             }
             0x8000..=0xffff => match &mut self.bank_switcher {

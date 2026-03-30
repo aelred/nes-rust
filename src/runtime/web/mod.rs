@@ -2,18 +2,19 @@
 
 mod audio;
 
-use super::FRAME_DURATION;
-use crate::audio::{audio_pipeline, AudioSink};
+use crate::audio::audio_pipeline;
 use crate::runtime::web::audio::wasm_audio;
 use crate::{
-    display_triple_buffer, runtime::Runtime, BackBuffer, Buttons, FrontBuffer, INes, HEIGHT, NES,
-    WIDTH,
+    display_triple_buffer, runtime::Runtime, BackBuffer, Buttons, Command, Event, FrontBuffer,
+    INes, HEIGHT, NES, WIDTH,
 };
 use anyhow::Result;
 use anyhow::{anyhow, Context};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use js_sys::futures::spawn_local;
 use js_sys::{Uint8ClampedArray, WebAssembly};
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
 use std::{
     cell::RefCell,
     hash::{DefaultHasher, Hash, Hasher},
@@ -24,7 +25,7 @@ use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
 use web_sys::{
     js_sys,
     js_sys::{ArrayBuffer, Uint8Array},
-    CanvasRenderingContext2d, Document, DragEvent, Event, EventTarget, File, HtmlCanvasElement,
+    CanvasRenderingContext2d, Document, DragEvent, EventTarget, File, HtmlCanvasElement,
     HtmlInputElement, ImageData, KeyboardEvent, PointerEvent, Storage, Window,
 };
 use zip::ZipArchive;
@@ -64,9 +65,9 @@ async fn run() -> Result<()> {
     add_event_listener(&window, "keydown", {
         let ctx = ctx.clone();
         move |event: KeyboardEvent| {
-            let nes = &mut ctx.borrow_mut().nes;
+            let commands = &mut ctx.borrow_mut().commands;
             let button = keycode_binding(&event.code());
-            nes.controller().press(button);
+            commands.send(Command::Press(button))?;
             Ok(())
         }
     })?;
@@ -74,9 +75,9 @@ async fn run() -> Result<()> {
     add_event_listener(&window, "keyup", {
         let ctx = ctx.clone();
         move |event: KeyboardEvent| {
-            let nes = &mut ctx.borrow_mut().nes;
+            let commands = &mut ctx.borrow_mut().commands;
             let button = keycode_binding(&event.code());
-            nes.controller().release(button);
+            commands.send(Command::Release(button))?;
             Ok(())
         }
     })?;
@@ -109,8 +110,8 @@ async fn run() -> Result<()> {
         add_event_listener(&element, "pointerenter", {
             let ctx = ctx.clone();
             move |_: PointerEvent| {
-                let nes = &mut ctx.borrow_mut().nes;
-                nes.controller().press(*button);
+                let commands = &mut ctx.borrow_mut().commands;
+                commands.send(Command::Press(*button))?;
                 Ok(())
             }
         })?;
@@ -118,8 +119,8 @@ async fn run() -> Result<()> {
         add_event_listener(&element, "pointerout", {
             let ctx = ctx.clone();
             move |_: PointerEvent| {
-                let nes = &mut ctx.borrow_mut().nes;
-                nes.controller().release(*button);
+                let commands = &mut ctx.borrow_mut().commands;
+                commands.send(Command::Release(*button))?;
                 Ok(())
             }
         })?;
@@ -133,7 +134,7 @@ async fn run() -> Result<()> {
 
     add_event_listener(&upload_button.clone(), "change", {
         let ctx = ctx.clone();
-        move |_: Event| {
+        move |_: web_sys::Event| {
             let file_list = upload_button.files().context("No files selected")?;
             let mut files = vec![];
             for i in 0..file_list.length() {
@@ -177,51 +178,24 @@ async fn run() -> Result<()> {
     let f = Rc::new(RefCell::new(None));
     let g = f.clone();
 
-    let mut timestamp_start_ms = 0.0;
-    let mut num_frames: u64 = 0;
-
     *g.borrow_mut() = Some(closure({
         let ctx = ctx.clone();
-        move |timestamp_ms: f64| {
+        move |_| {
             request_animation_frame(f.borrow().as_ref().unwrap())?;
 
-            if timestamp_start_ms == 0.0 {
-                timestamp_start_ms = timestamp_ms;
-            }
-
-            let expected_frames =
-                ((timestamp_ms - timestamp_start_ms) / FRAME_DURATION.as_millis() as f64) as u64;
-
-            let needed_frames = (expected_frames - num_frames).min(3);
-            if needed_frames == 0 {
-                return Ok(());
-            }
-
             let mut ctx = ctx.borrow_mut();
-            let NesContext {
-                nes,
-                front_buffer,
-                rom_hash,
-            } = &mut *ctx;
 
-            // Save state every frame, inefficient but it doesn't seem to matter
-            save_state(*rom_hash, nes)?;
-
-            for _ in 0..needed_frames {
-                // Run NES until frame starts
-                while nes.display().vblank() {
-                    nes.tick();
-                }
-                // Run NES until frame ends
-                while !nes.display().vblank() {
-                    nes.tick();
+            for event in ctx.events.try_iter() {
+                match event {
+                    Event::RamChanged(ram) => {
+                        save_state(ctx.rom_hash, &ram)?;
+                    }
                 }
             }
-            num_frames = expected_frames;
 
             // ImageData doesn't let you pass in shared memory.
             // All the WASM memory is in a SharedArrayBuffer, so we have to copy it to the JS heap
-            let buffer = front_buffer.read_buffer();
+            let buffer = ctx.front_buffer.read_buffer();
             let memory = wasm_bindgen::memory();
             let memory: &WebAssembly::Memory = memory.unchecked_ref();
             let shared_view = Uint8ClampedArray::new_with_byte_offset_and_length(
@@ -248,8 +222,9 @@ async fn run() -> Result<()> {
 }
 
 struct NesContext {
-    nes: NES<BackBuffer, AudioSink>,
     front_buffer: FrontBuffer,
+    commands: Sender<Command>,
+    events: Receiver<Event>,
     rom_hash: u64,
 }
 
@@ -270,11 +245,19 @@ impl NesContext {
         // TODO: is this needed?
         ctx.resume().anyhow()?.await.anyhow()?;
 
-        let nes = NES::new(cartridge, back_buffer, audio_sink);
+        let mut nes = NES::new(cartridge, back_buffer, audio_sink);
+
+        let (commands_send, commands_recv) = mpsc::channel();
+        let (events_send, events_recv) = mpsc::channel();
+
+        wasm_thread::spawn(move || {
+            nes.run(commands_recv, events_send);
+        });
 
         Ok(NesContext {
-            nes,
             front_buffer,
+            commands: commands_send,
+            events: events_recv,
             rom_hash: 0,
         })
     }
@@ -287,9 +270,11 @@ impl NesContext {
         rom.hash(&mut rom_hasher);
         self.rom_hash = rom_hasher.finish();
 
-        self.nes.load_cartridge(cartridge);
+        self.commands.send(Command::LoadCartridge(cartridge))?;
 
-        load_state(self.rom_hash, &mut self.nes)?;
+        if let Some(ram) = load_state(self.rom_hash)? {
+            self.commands.send(Command::LoadRam(ram))?;
+        }
 
         Ok(())
     }
@@ -410,25 +395,21 @@ fn upload_rom(ctx: Rc<RefCell<NesContext>>, files: impl Iterator<Item = File>) {
     }
 }
 
-fn save_state<D, S>(rom_hash: u64, nes: &mut NES<D, S>) -> Result<()> {
-    let ram = nes.cpu.memory().prg().ram();
-
+fn save_state(rom_hash: u64, ram: &[u8]) -> Result<()> {
     let key = state_key(rom_hash);
     let value = BASE64_STANDARD.encode(ram);
     local_storage()?.set_item(&key, &value).anyhow()?;
     Ok(())
 }
 
-fn load_state<D, S>(rom_hash: u64, nes: &mut NES<D, S>) -> Result<()> {
+fn load_state(rom_hash: u64) -> Result<Option<Vec<u8>>> {
     let key = state_key(rom_hash);
     let value = match local_storage()?.get_item(&key).anyhow()? {
         Some(value) => value,
-        None => return Ok(()), // No state saved
+        None => return Ok(None),
     };
 
-    let ram = BASE64_STANDARD.decode(value)?;
-    nes.cpu.memory().prg().ram().copy_from_slice(&ram);
-    Ok(())
+    Ok(Some(BASE64_STANDARD.decode(value)?))
 }
 
 const ROM_KEY: &str = "nes-rom";
