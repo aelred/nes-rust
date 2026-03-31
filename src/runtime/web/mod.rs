@@ -62,16 +62,7 @@ async fn run() -> Result<()> {
 
     add_event_listener(&window, "visibilitychange", {
         let ctx = ctx.clone();
-        move |_: web_sys::Event| {
-            let commands = &mut ctx.borrow_mut().commands;
-            let command = match document()?.visibility_state() {
-                VisibilityState::Hidden => Command::Pause,
-                VisibilityState::Visible => Command::Resume,
-                state => bail!("Unrecognised visibility state: {:?}", state),
-            };
-            commands.send(command)?;
-            Ok(())
-        }
+        move |_: web_sys::Event| ctx.borrow_mut().set_paused_from_visibility()
     })?;
 
     add_event_listener(&window, "keydown", {
@@ -263,15 +254,17 @@ impl NesContext {
         let (events_send, events_recv) = mpsc::channel();
 
         wasm_thread::spawn(move || {
-            nes.run(commands_recv, events_send);
+            nes.start(commands_recv, events_send);
         });
 
-        Ok(NesContext {
+        let mut this = NesContext {
             front_buffer,
             commands: commands_send,
             events: events_recv,
             rom_hash: 0,
-        })
+        };
+        this.set_paused_from_visibility()?;
+        Ok(this)
     }
 
     fn set_rom(&mut self, rom: &[u8]) -> Result<()> {
@@ -286,6 +279,16 @@ impl NesContext {
         let command = Command::LoadCartridge { cartridge, ram };
         self.commands.send(command)?;
 
+        Ok(())
+    }
+
+    fn set_paused_from_visibility(&mut self) -> Result<()> {
+        let command = match document()?.visibility_state() {
+            VisibilityState::Hidden => Command::Pause,
+            VisibilityState::Visible => Command::Resume,
+            state => bail!("Unrecognised visibility state: {:?}", state),
+        };
+        self.commands.send(command)?;
         Ok(())
     }
 }

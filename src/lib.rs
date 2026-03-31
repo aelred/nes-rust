@@ -201,10 +201,10 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         }
     }
 
-    pub fn run(&mut self, commands: Receiver<Command>, events: Sender<Event>) -> ! {
+    pub fn start(&mut self, commands: Receiver<Command>, events: Sender<Event>) -> ! {
         let start = Instant::now();
         let mut cycles: u64 = 0;
-        let mut paused = false;
+        let mut paused = true;
 
         // Target CPU cycles per loop before sleeping and checking events.
         // Should be small enough to not fill the audio buffer, but too small adds overhead.
