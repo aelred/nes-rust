@@ -89,15 +89,12 @@ impl Sdl {
 }
 
 impl Runtime for Sdl {
-    fn init_log(level: log::Level) -> Result<()> {
+    fn run(log_level: log::Level) -> Result<()> {
         env_logger::builder()
             .target(env_logger::Target::Stdout)
-            .filter_level(level.to_level_filter())
+            .filter_level(log_level.to_level_filter())
             .init();
-        Ok(())
-    }
 
-    fn run() -> Result<()> {
         let (audio_sink, audio_source) = audio_pipeline();
         let sdl_context = sdl2::init().anyhow()?;
         let _speaker = SDLSpeaker::new(&sdl_context, audio_source)?;

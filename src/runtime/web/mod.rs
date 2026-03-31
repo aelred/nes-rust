@@ -5,8 +5,8 @@ mod audio;
 use crate::audio::audio_pipeline;
 use crate::runtime::web::audio::wasm_audio;
 use crate::{
-    display_triple_buffer, runtime::Runtime, BackBuffer, Buttons, Command, Event, FrontBuffer,
-    INes, HEIGHT, NES, WIDTH,
+    display_triple_buffer, runtime::Runtime, Buttons, Command, Event, FrontBuffer, INes, HEIGHT,
+    NES, WIDTH,
 };
 use anyhow::{anyhow, Context};
 use anyhow::{bail, Result};
@@ -35,13 +35,10 @@ const DEFAULT_ROM: &[u8] = include_bytes!("../../../roms/AlwasAwakening_demo.nes
 pub struct Web;
 
 impl Runtime for Web {
-    fn init_log(level: log::Level) -> Result<()> {
-        console_log::init_with_level(level)?;
+    fn run(log_level: log::Level) -> Result<()> {
+        console_log::init_with_level(log_level)?;
         std::panic::set_hook(Box::new(|info| log::error!("{}", info)));
-        Ok(())
-    }
 
-    fn run() -> Result<()> {
         spawn_local(async {
             if let Err(e) = run().await {
                 log::error!("Error: {}", e);

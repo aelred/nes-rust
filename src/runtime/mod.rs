@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::{error::Error, time::Duration};
+use std::time::Duration;
 
 #[cfg(feature = "sdl")]
 pub mod sdl;
@@ -7,30 +7,29 @@ pub mod sdl;
 #[cfg(feature = "web")]
 mod web;
 
-#[cfg(all(feature = "web", target_arch = "wasm32"))]
-pub use web::Web as ActiveRuntime;
-
-#[cfg(feature = "sdl")]
-pub use sdl::Sdl as ActiveRuntime;
-
-pub trait Runtime {
-    fn init_log(level: log::Level) -> Result<()>;
-    fn run() -> Result<()>;
-}
-
 const FPS: u64 = 60;
 const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / FPS);
 
+pub fn run(log_level: log::Level) -> Result<()> {
+    ActiveRuntime::run(log_level)
+}
+
+trait Runtime {
+    fn run(log_level: log::Level) -> Result<()>;
+}
+
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
+use web::Web as ActiveRuntime;
+
+#[cfg(feature = "sdl")]
+use sdl::Sdl as ActiveRuntime;
+
 // No-op runtime when one isn't configured
 #[cfg(not(any(feature = "web", feature = "sdl")))]
-pub type ActiveRuntime = ();
+type ActiveRuntime = ();
 
 impl Runtime for () {
-    fn init_log(_level: log::Level) -> Result<()> {
-        Ok(())
-    }
-
-    fn run() -> Result<()> {
+    fn run(_log_level: log::Level) -> Result<()> {
         use crate::{INes, NES};
         use std::fs::File;
 

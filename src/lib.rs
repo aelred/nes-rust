@@ -15,11 +15,8 @@ pub use crate::memory::Memory;
 pub use crate::ppu::Color;
 use crate::ppu::NESPPUMemory;
 use crate::ppu::PPU;
-pub use crate::runtime::ActiveRuntime;
-pub use crate::runtime::Runtime;
-use anyhow::Result;
 use apu::APU;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::sync::atomic::Ordering::{AcqRel, Acquire, Release};
 use std::sync::atomic::{AtomicBool, AtomicPtr};
 use std::sync::mpsc::{Receiver, Sender};
@@ -46,14 +43,9 @@ pub const NES_FREQ: f64 = 1_789_773.0;
 
 #[cfg_attr(feature = "web", wasm_bindgen)]
 pub fn run() {
-    if let Err(e) = run_inner() {
+    if let Err(e) = runtime::run(log::Level::Info) {
         log::error!("Error: {}", e);
     }
-}
-
-fn run_inner() -> Result<()> {
-    ActiveRuntime::init_log(log::Level::Info)?;
-    ActiveRuntime::run()
 }
 
 pub trait NESDisplay {
