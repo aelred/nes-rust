@@ -80,37 +80,6 @@ impl RingBufferWriter {
         self.buffer.write_cursor.store(new_write_cursor, Release);
         true
     }
-
-    /// Get the current window size.
-    #[inline]
-    pub fn window_size(&self) -> usize {
-        self.window_size
-    }
-
-    /// Change the window size, if there is space available.
-    ///
-    /// Any new values will be set to zero. Returns whether operation succeeded.
-    #[must_use]
-    pub fn set_window_size(&mut self, new_window_size: usize) -> bool {
-        let write_cursor = self.buffer.write_cursor.load(Relaxed);
-        let read_cursor = self.buffer.read_cursor.load(Acquire);
-
-        if write_cursor + new_window_size > read_cursor + self.buffer.capacity {
-            return false;
-        }
-
-        // Fill new values entering write window with 0
-        if new_window_size > self.window_size {
-            let start = write_cursor + self.window_size;
-            let increase = new_window_size - self.window_size;
-            let (s1, s2) = unsafe { self.buffer.get_mut(start, increase) };
-            s1.fill(0f32);
-            s2.fill(0f32);
-        }
-
-        self.window_size = new_window_size;
-        true
-    }
 }
 
 /// The reader for a ring buffer.
