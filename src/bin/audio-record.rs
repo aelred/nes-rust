@@ -1,5 +1,5 @@
 use nes_rust::audio::audio_pipeline;
-use nes_rust::runtime::sdl::{SDLDisplay, SDLSpeaker, Sdl};
+use nes_rust::runtime::sdl::{SDLSpeaker, Sdl};
 use nes_rust::NESSpeaker;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -14,14 +14,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (audio_sink, audio_source) = audio_pipeline();
     let sdl_context = sdl2::init()?;
-    let display = SDLDisplay::new(&sdl_context)?;
     let speaker = RecordingSpeaker {
         file: BufWriter::new(File::create(audio_recording_path)?),
         speaker: audio_sink,
     };
     let _sdl_speaker = SDLSpeaker::new(&sdl_context, audio_source)?;
 
-    Sdl::run_with(&sdl_context, display, speaker)?;
+    Sdl::run_with(&sdl_context, speaker)?;
 
     Ok(())
 }

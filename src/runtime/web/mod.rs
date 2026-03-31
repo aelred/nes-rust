@@ -253,9 +253,7 @@ impl NesContext {
         let (commands_send, commands_recv) = mpsc::channel();
         let (events_send, events_recv) = mpsc::channel();
 
-        wasm_thread::spawn(move || {
-            nes.start(commands_recv, events_send);
-        });
+        wasm_thread::spawn(move || nes.run(commands_recv, events_send));
 
         let mut this = NesContext {
             front_buffer,

@@ -1,23 +1,21 @@
 use anyhow::{anyhow, Result};
-use std::error::Error;
 use std::fs::File;
+use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use super::Runtime;
+use super::{Runtime, FRAME_DURATION};
 use crate::audio::{audio_pipeline, AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
-use crate::NESDisplay;
-use crate::NESSpeaker;
-use crate::NES;
-use crate::{Buttons, Color, HEIGHT, WIDTH};
-use crate::{INes, NES_FREQ};
-use log::info;
+use crate::{display_triple_buffer, NESSpeaker};
+use crate::{Buttons, HEIGHT, WIDTH};
+use crate::{Command, NES};
+use crate::{FrontBuffer, INes};
 use sdl2::audio::AudioCallback;
 use sdl2::audio::AudioDevice;
 use sdl2::audio::AudioSpecDesired;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
+use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::Texture;
 use sdl2::render::WindowCanvas;
 
@@ -28,8 +26,7 @@ pub struct Sdl;
 impl Sdl {
     pub fn run_with(
         sdl_context: &sdl2::Sdl,
-        display: impl NESDisplay,
-        speaker: impl NESSpeaker,
+        speaker: impl NESSpeaker + Send + 'static,
     ) -> Result<()> {
         let mut event_pump = sdl_context.event_pump().anyhow()?;
 
@@ -46,21 +43,28 @@ impl Sdl {
 
         let cartridge = ines.into_cartridge();
 
-        let mut nes = NES::new(cartridge, display, speaker);
-        let mut cycles: u64 = 0;
+        let (front_buffer, back_buffer) = display_triple_buffer();
+
+        let mut display = SDLDisplay::new(sdl_context, front_buffer)?;
+
+        let mut nes = NES::new(cartridge, back_buffer, speaker);
+        let mut expected_time = Duration::ZERO;
         let start = Instant::now();
 
-        loop {
-            // Arbitrary number of ticks so we don't poll events or sleep too regularly
-            for _ in 1..1000 {
-                cycles += nes.tick() as u64;
-            }
+        let (commands_send, commands_recv) = mpsc::channel();
+        let (events_send, _) = mpsc::channel();
 
-            let expected_time = Duration::from_secs_f64(cycles as f64 / NES_FREQ);
+        thread::spawn(move || nes.run(commands_recv, events_send));
+        commands_send.send(Command::Resume)?;
+
+        loop {
+            expected_time += FRAME_DURATION;
             let actual_time = start.elapsed();
             if actual_time < expected_time {
                 thread::sleep(expected_time - actual_time);
             }
+
+            display.present()?;
 
             for event in event_pump.poll_iter() {
                 match event {
@@ -68,16 +72,14 @@ impl Sdl {
                         return Ok(());
                     }
                     Event::KeyDown {
-                        keycode: Some(keycode),
-                        ..
+                        keycode: Some(key), ..
                     } => {
-                        nes.controller().press(keycode_binding(keycode));
+                        commands_send.send(Command::Press(keycode_binding(key)))?;
                     }
                     Event::KeyUp {
-                        keycode: Some(keycode),
-                        ..
+                        keycode: Some(key), ..
                     } => {
-                        nes.controller().release(keycode_binding(keycode));
+                        commands_send.send(Command::Release(keycode_binding(key)))?;
                     }
                     _ => {}
                 }
@@ -98,9 +100,8 @@ impl Runtime for Sdl {
     fn run() -> Result<()> {
         let (audio_sink, audio_source) = audio_pipeline();
         let sdl_context = sdl2::init().anyhow()?;
-        let display = SDLDisplay::new(&sdl_context)?;
         let _speaker = SDLSpeaker::new(&sdl_context, audio_source)?;
-        Self::run_with(&sdl_context, display, audio_sink)
+        Self::run_with(&sdl_context, audio_sink)
     }
 }
 
@@ -121,96 +122,44 @@ fn keycode_binding(keycode: Keycode) -> Buttons {
 pub struct SDLDisplay {
     canvas: WindowCanvas,
     texture: Texture,
-    buffer: [u8; WIDTH as usize * HEIGHT as usize * 4],
-    x: usize,
-    y: usize,
-    last_fps_log: Instant,
-    frames_since_last_fps_log: u64,
+    buffer: FrontBuffer,
 }
 
 impl SDLDisplay {
-    pub fn new(sdl_context: &sdl2::Sdl) -> Result<Self> {
-        let video_subsystem = sdl_context.video().anyhow()?;
+    pub fn new(sdl_context: &sdl2::Sdl, buffer: FrontBuffer) -> Result<Self> {
+        let video = sdl_context.video().anyhow()?;
 
-        let window = video_subsystem
-            .window(
-                "nes-rust",
-                u32::from(WIDTH * SCALE),
-                u32::from(HEIGHT * SCALE),
-            )
+        let window = video
+            .window("nes-rust", (WIDTH * SCALE) as u32, (HEIGHT * SCALE) as u32)
             .position_centered()
             .build()?;
 
         let mut canvas = window.into_canvas().target_texture().build()?;
 
-        canvas.set_draw_color(sdl2::pixels::Color {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        });
-        canvas
-            .set_scale(f32::from(SCALE), f32::from(SCALE))
-            .anyhow()?;
+        canvas.set_draw_color(sdl2::pixels::Color::BLACK);
+        canvas.set_scale(SCALE as f32, SCALE as f32).anyhow()?;
         canvas.clear();
         canvas.present();
 
-        let texture_creator = canvas.texture_creator();
-        let texture =
-            texture_creator.create_texture_streaming(None, WIDTH as u32, HEIGHT as u32)?;
+        let creator = canvas.texture_creator();
+        let format = PixelFormatEnum::RGBA32;
+        let texture = creator.create_texture_streaming(format, WIDTH as u32, HEIGHT as u32)?;
 
-        let now = Instant::now();
         Ok(Self {
             canvas,
             texture,
-            buffer: [0; WIDTH as usize * HEIGHT as usize * 4],
-            x: 0,
-            y: 0,
-            last_fps_log: now,
-            frames_since_last_fps_log: 0,
+            buffer,
         })
     }
-}
 
-impl NESDisplay for SDLDisplay {
-    fn draw_pixel(&mut self, color: Color) {
-        let offset = (self.y * WIDTH as usize + self.x) * 4;
-        if offset + 2 < self.buffer.len() {
-            let (r, g, b) = color.to_rgb();
-            self.buffer[offset] = b;
-            self.buffer[offset + 1] = g;
-            self.buffer[offset + 2] = r;
-        }
-
-        self.x += 1;
-
-        if self.x == usize::from(WIDTH) {
-            self.x = 0;
-            self.y += 1;
-        }
-        if self.y == usize::from(HEIGHT) {
-            self.y = 0;
-            self.texture
-                .update(None, &self.buffer, WIDTH as usize * 4)
-                .unwrap();
-            self.canvas.copy(&self.texture, None, None).unwrap();
-            self.canvas.present();
-
-            self.frames_since_last_fps_log += 1;
-
-            let now = Instant::now();
-            let elapsed_since_last_fps_log = now.duration_since(self.last_fps_log);
-            if elapsed_since_last_fps_log > Duration::from_secs(5) {
-                let fps = self.frames_since_last_fps_log as f64
-                    / elapsed_since_last_fps_log.as_secs_f64();
-                info!("FPS: {}", fps);
-                self.last_fps_log = now;
-                self.frames_since_last_fps_log = 0;
-            }
-        }
+    fn present(&mut self) -> Result<()> {
+        let buffer = self.buffer.read_buffer();
+        let pitch = WIDTH as usize * 4;
+        self.texture.update(None, buffer, pitch)?;
+        self.canvas.copy(&self.texture, None, None).anyhow()?;
+        self.canvas.present();
+        Ok(())
     }
-
-    fn enter_vblank(&mut self) {}
 }
 
 pub struct SDLSpeaker {

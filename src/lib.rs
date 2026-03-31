@@ -201,7 +201,7 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         }
     }
 
-    pub fn start(&mut self, commands: Receiver<Command>, events: Sender<Event>) -> ! {
+    pub fn run(&mut self, commands: Receiver<Command>, events: Sender<Event>) -> ! {
         let start = Instant::now();
         let mut cycles: u64 = 0;
         let mut paused = true;
