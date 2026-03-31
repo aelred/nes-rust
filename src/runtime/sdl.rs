@@ -6,10 +6,10 @@ use std::time::{Duration, Instant};
 
 use super::{Runtime, FRAME_DURATION};
 use crate::audio::{audio_pipeline, AudioSink, AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
-use crate::display_triple_buffer;
+use crate::video::{display_triple_buffer, FrontBuffer};
+use crate::INes;
 use crate::{Buttons, HEIGHT, WIDTH};
 use crate::{Command, NES};
-use crate::{FrontBuffer, INes};
 use sdl2::audio::AudioCallback;
 use sdl2::audio::AudioDevice;
 use sdl2::audio::AudioSpecDesired;

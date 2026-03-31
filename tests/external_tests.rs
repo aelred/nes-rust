@@ -5,7 +5,8 @@ use image::ColorType;
 
 use image::EncodableLayout;
 use nes_rust::audio::audio_pipeline;
-use nes_rust::{display_triple_buffer, Address, INes, HEIGHT, NES, WIDTH};
+use nes_rust::video::display_triple_buffer;
+use nes_rust::{Address, INes, HEIGHT, NES, WIDTH};
 use yare::parameterized;
 
 enum Setup {

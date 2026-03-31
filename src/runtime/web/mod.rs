@@ -4,10 +4,8 @@ mod audio;
 
 use crate::audio::audio_pipeline;
 use crate::runtime::web::audio::wasm_audio;
-use crate::{
-    display_triple_buffer, runtime::Runtime, Buttons, Command, Event, FrontBuffer, INes, HEIGHT,
-    NES, WIDTH,
-};
+use crate::video::{display_triple_buffer, FrontBuffer};
+use crate::{runtime::Runtime, Buttons, Command, Event, INes, HEIGHT, NES, WIDTH};
 use anyhow::{anyhow, Context};
 use anyhow::{bail, Result};
 use base64::{prelude::BASE64_STANDARD, Engine};

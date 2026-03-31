@@ -18,11 +18,9 @@ use crate::ppu::NESPPUMemory;
 use crate::ppu::PPU;
 use apu::APU;
 use std::fmt::Debug;
-use std::sync::atomic::Ordering::{AcqRel, Acquire, Release};
-use std::sync::atomic::{AtomicBool, AtomicPtr};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::Arc;
 use std::thread;
+use video::BackBuffer;
 use wasm_bindgen::prelude::wasm_bindgen;
 use web_time::{Duration, Instant};
 
@@ -37,6 +35,7 @@ mod mapper;
 mod memory;
 mod ppu;
 pub mod runtime;
+pub mod video;
 
 pub const WIDTH: u16 = 256;
 pub const HEIGHT: u16 = 240;
@@ -47,123 +46,6 @@ pub fn run() {
     if let Err(e) = runtime::run(log::Level::Info) {
         log::error!("Error: {}", e);
     }
-}
-
-type Buffer = [u8; WIDTH as usize * HEIGHT as usize * 4];
-
-pub fn display_triple_buffer() -> (FrontBuffer, BackBuffer) {
-    let intermediate_buffer = Arc::new(IntermediateBuffer {
-        buffer: AtomicPtr::new(Box::into_raw(Box::new([0; _]))),
-        dirty: AtomicBool::new(false),
-    });
-
-    let front = FrontBuffer {
-        front_buffer: Some(Box::new([0; _])),
-        intermediate_buffer: intermediate_buffer.clone(),
-    };
-
-    let back = BackBuffer {
-        back_buffer: Some(Box::new([0; _])),
-        x: 0,
-        y: 0,
-        vblank: false,
-        intermediate_buffer,
-    };
-
-    (front, back)
-}
-
-pub struct FrontBuffer {
-    front_buffer: Option<Box<Buffer>>,
-    intermediate_buffer: Arc<IntermediateBuffer>,
-}
-
-impl FrontBuffer {
-    pub fn read_buffer(&mut self) -> &Buffer {
-        if self.intermediate_buffer.dirty.swap(false, AcqRel) {
-            let old_buffer = self.front_buffer.take().unwrap();
-            self.front_buffer = Some(self.intermediate_buffer.swap(old_buffer));
-        }
-
-        self.front_buffer.as_ref().unwrap()
-    }
-}
-
-#[derive(Debug)]
-pub struct BackBuffer {
-    back_buffer: Option<Box<Buffer>>,
-    x: usize,
-    y: usize,
-    vblank: bool,
-    intermediate_buffer: Arc<IntermediateBuffer>,
-}
-
-impl BackBuffer {
-    fn draw_pixel(&mut self, color: Color) {
-        self.vblank = false;
-
-        let buffer = self.back_buffer.as_mut().unwrap();
-
-        let offset = (self.y * WIDTH as usize + self.x) * 4;
-        if offset + 3 < buffer.len() {
-            let (r, g, b) = color.to_rgb();
-            buffer[offset] = r;
-            buffer[offset + 1] = g;
-            buffer[offset + 2] = b;
-            buffer[offset + 3] = 0xFF;
-        }
-
-        self.x += 1;
-        if self.x == usize::from(WIDTH) {
-            self.x = 0;
-            self.y += 1;
-            if self.y == usize::from(HEIGHT) {
-                self.y = 0;
-            }
-        }
-    }
-
-    fn enter_vblank(&mut self) {
-        if self.vblank {
-            return;
-        }
-
-        self.x = 0;
-        self.y = 0;
-        self.vblank = true;
-
-        let old_buffer = self.back_buffer.take().unwrap();
-        self.back_buffer = Some(self.intermediate_buffer.swap(old_buffer));
-        self.intermediate_buffer.dirty.store(true, Release);
-    }
-}
-
-#[derive(Debug)]
-struct IntermediateBuffer {
-    buffer: AtomicPtr<Buffer>,
-    dirty: AtomicBool,
-}
-
-impl IntermediateBuffer {
-    fn swap(&self, buffer: Box<Buffer>) -> Box<Buffer> {
-        let new_ptr = Box::into_raw(buffer);
-        let old_ptr = self.buffer.swap(new_ptr, AcqRel);
-        // SAFETY: the pointer is always valid and exclusive
-        unsafe { Box::from_raw(old_ptr) }
-    }
-}
-
-impl Drop for IntermediateBuffer {
-    fn drop(&mut self) {
-        let ptr = self.buffer.load(Acquire);
-        // SAFETY: the pointer is always valid and exclusive
-        let boxed = unsafe { Box::from_raw(ptr) };
-        drop(boxed)
-    }
-}
-
-pub trait NESSpeaker {
-    fn emit(&mut self, sample: f32);
 }
 
 #[derive(Debug)]
@@ -246,8 +128,6 @@ impl NES {
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.cpu = Self::cpu_from_cartridge(cartridge);
-        // Reset display since we'll start drawing from the top-left again
-        self.video_out.enter_vblank();
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
@@ -285,18 +165,14 @@ impl NES {
         }
 
         if let Some(color) = output.color {
-            self.video_out.draw_pixel(color);
-        }
-
-        if output.vblank {
-            self.video_out.enter_vblank();
+            self.video_out.write(color);
         }
     }
 
     fn tick_apu(&mut self) {
         let apu = self.cpu.memory().apu();
         let wave = apu.tick();
-        self.audio_out.emit(wave);
+        self.audio_out.write(wave);
     }
 
     fn cpu_from_cartridge(cartridge: Cartridge) -> CPU {

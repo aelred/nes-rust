@@ -1,6 +1,5 @@
 use crate::audio::blip_buffer::BlipBuffer;
 use crate::audio::ring_buffer::{ring_buffer, RingBufferReader, RingBufferWriter};
-use crate::NESSpeaker;
 use std::time::Duration;
 
 mod blip_buffer;
@@ -54,13 +53,6 @@ impl AudioSink {
                 AUDIO_SAMPLE_SIZE as f64 / TARGET_AUDIO_FREQ,
             ));
         }
-    }
-}
-
-// TODO: change this trait eventually
-impl NESSpeaker for AudioSink {
-    fn emit(&mut self, wave: f32) {
-        self.write(wave);
     }
 }
 
