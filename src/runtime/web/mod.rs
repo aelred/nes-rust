@@ -8,8 +8,8 @@ use crate::{
     display_triple_buffer, runtime::Runtime, BackBuffer, Buttons, Command, Event, FrontBuffer,
     INes, HEIGHT, NES, WIDTH,
 };
-use anyhow::Result;
 use anyhow::{anyhow, Context};
+use anyhow::{bail, Result};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use js_sys::futures::spawn_local;
 use js_sys::{Uint8ClampedArray, WebAssembly};
@@ -26,7 +26,7 @@ use web_sys::{
     js_sys,
     js_sys::{ArrayBuffer, Uint8Array},
     CanvasRenderingContext2d, Document, DragEvent, EventTarget, File, HtmlCanvasElement,
-    HtmlInputElement, ImageData, KeyboardEvent, PointerEvent, Storage, Window,
+    HtmlInputElement, ImageData, KeyboardEvent, PointerEvent, Storage, VisibilityState, Window,
 };
 use zip::ZipArchive;
 
@@ -36,10 +36,8 @@ pub struct Web;
 
 impl Runtime for Web {
     fn init_log(level: log::Level) -> Result<()> {
-        std::panic::set_hook(Box::new(|info| {
-            web_sys::console::error_1(&info.to_string().into());
-        }));
         console_log::init_with_level(level)?;
+        std::panic::set_hook(Box::new(|info| log::error!("{}", info)));
         Ok(())
     }
 
@@ -55,12 +53,26 @@ impl Runtime for Web {
 
 async fn run() -> Result<()> {
     let window = window()?;
-    let dom = dom()?;
+    let dom = document()?;
 
     let rom = load_rom()?;
     let mut ctx = NesContext::new().await?;
     ctx.set_rom(&rom)?;
     let ctx = Rc::new(RefCell::new(ctx));
+
+    add_event_listener(&window, "visibilitychange", {
+        let ctx = ctx.clone();
+        move |_: web_sys::Event| {
+            let commands = &mut ctx.borrow_mut().commands;
+            let command = match document()?.visibility_state() {
+                VisibilityState::Hidden => Command::Pause,
+                VisibilityState::Visible => Command::Resume,
+                state => bail!("Unrecognised visibility state: {:?}", state),
+            };
+            commands.send(command)?;
+            Ok(())
+        }
+    })?;
 
     add_event_listener(&window, "keydown", {
         let ctx = ctx.clone();
@@ -298,12 +310,12 @@ fn window() -> Result<Window> {
     web_sys::window().context("no global `window` exists")
 }
 
-fn dom() -> Result<Document> {
+fn document() -> Result<Document> {
     window()?.document().context("DOM not found")
 }
 
 fn canvas_context() -> Result<CanvasRenderingContext2d> {
-    let canvas = dom()?
+    let canvas = document()?
         .get_element_by_id("canvas")
         .context("canvas not found")?;
     let canvas: HtmlCanvasElement = canvas

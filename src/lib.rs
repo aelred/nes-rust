@@ -202,14 +202,25 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
     }
 
     pub fn run(&mut self, commands: Receiver<Command>, events: Sender<Event>) -> ! {
-        let mut cycles: u64 = 0;
         let start = Instant::now();
+        let mut cycles: u64 = 0;
+        let mut paused = false;
+
+        // Target CPU cycles per loop before sleeping and checking events.
+        // Should be small enough to not fill the audio buffer, but too small adds overhead.
+        const CYCLES_PER_LOOP: u64 = 5000;
 
         loop {
-            // Arbitrary number of ticks so we don't poll events or sleep too regularly
-            for _ in 0..1000 {
-                cycles += self.tick() as u64;
+            let mut loop_cycles = 0;
+            if paused {
+                // Don't tick CPU if paused, pretend we ran cycles to sleep a reasonable time.
+                loop_cycles = CYCLES_PER_LOOP;
+            } else {
+                while loop_cycles < CYCLES_PER_LOOP {
+                    loop_cycles += self.tick() as u64;
+                }
             }
+            cycles += loop_cycles;
 
             let expected_time = Duration::from_secs_f64(cycles as f64 / NES_FREQ);
             let actual_time = start.elapsed();
@@ -226,6 +237,12 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
                     }
                     Command::LoadCartridge(cartridge) => {
                         self.load_cartridge(cartridge);
+                    }
+                    Command::Pause => {
+                        paused = true;
+                    }
+                    Command::Resume => {
+                        paused = false;
                     }
                 }
             }
@@ -321,6 +338,8 @@ pub enum Command {
     Release(Buttons),
     LoadRam(Vec<u8>),
     LoadCartridge(Cartridge),
+    Pause,
+    Resume,
 }
 
 pub enum Event {
