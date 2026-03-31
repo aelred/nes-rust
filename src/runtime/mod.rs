@@ -1,14 +1,10 @@
 use anyhow::Result;
-use std::time::Duration;
 
 #[cfg(feature = "sdl")]
 pub mod sdl;
 
 #[cfg(feature = "web")]
 mod web;
-
-const FPS: u64 = 60;
-const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / FPS);
 
 pub fn run(log_level: log::Level) -> Result<()> {
     ActiveRuntime::run(log_level)

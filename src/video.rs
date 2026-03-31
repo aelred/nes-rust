@@ -65,6 +65,10 @@ impl BackBuffer {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.offset = 0;
+    }
+
     fn swap_buffers(&mut self) {
         let old_buffer = self.back_buffer.take().unwrap();
         self.back_buffer = Some(self.intermediate_buffer.swap(old_buffer));

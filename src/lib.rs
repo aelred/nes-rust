@@ -18,11 +18,8 @@ use crate::ppu::NESPPUMemory;
 use crate::ppu::PPU;
 use apu::APU;
 use std::fmt::Debug;
-use std::sync::mpsc::{Receiver, Sender};
-use std::thread;
 use video::BackBuffer;
 use wasm_bindgen::prelude::wasm_bindgen;
-use web_time::{Duration, Instant};
 
 mod address;
 mod apu;
@@ -34,6 +31,7 @@ mod input;
 mod mapper;
 mod memory;
 mod ppu;
+mod runner;
 pub mod runtime;
 pub mod video;
 
@@ -64,60 +62,6 @@ impl NES {
         }
     }
 
-    pub fn run(&mut self, commands: Receiver<Command>, events: Sender<Event>) -> ! {
-        let start = Instant::now();
-        let mut cycles: u64 = 0;
-        let mut paused = true;
-
-        // Target CPU cycles per loop before sleeping and checking events.
-        // Should be small enough to not fill the audio buffer, but too small adds overhead.
-        const CYCLES_PER_LOOP: u64 = 5000;
-
-        loop {
-            let mut loop_cycles = 0;
-            if paused {
-                // Don't tick CPU if paused, pretend we ran cycles to sleep a reasonable time.
-                loop_cycles = CYCLES_PER_LOOP;
-            } else {
-                while loop_cycles < CYCLES_PER_LOOP {
-                    loop_cycles += self.tick() as u64;
-                }
-            }
-            cycles += loop_cycles;
-
-            let expected_time = Duration::from_secs_f64(cycles as f64 / NES_FREQ);
-            let actual_time = start.elapsed();
-            if actual_time < expected_time {
-                thread::sleep(expected_time - actual_time);
-            }
-
-            for command in commands.try_iter() {
-                match command {
-                    Command::Press(buttons) => self.controller().press(buttons),
-                    Command::Release(buttons) => self.controller().release(buttons),
-                    Command::LoadCartridge { cartridge, ram } => {
-                        self.load_cartridge(cartridge);
-                        if let Some(ram) = ram {
-                            self.cpu.memory().prg().ram_mut().copy_from_slice(&ram);
-                        }
-                    }
-                    Command::Pause => {
-                        paused = true;
-                    }
-                    Command::Resume => {
-                        paused = false;
-                    }
-                }
-            }
-
-            if let Some(ram) = self.cpu.memory().prg().changed_ram() {
-                // TODO: ideally don't allocate
-                let event = Event::RamChanged(Vec::from(ram));
-                let _ = events.send(event);
-            }
-        }
-    }
-
     pub fn program_counter(&mut self) -> Address {
         self.cpu.program_counter()
     }
@@ -128,6 +72,8 @@ impl NES {
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.cpu = Self::cpu_from_cartridge(cartridge);
+        // Draw from top left
+        self.video_out.reset();
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
@@ -184,21 +130,6 @@ impl NES {
         let cpu_memory = NESCPUMemory::new(cartridge.prg, ppu, apu, controller);
         CPU::from_memory(cpu_memory)
     }
-}
-
-pub enum Command {
-    Press(Buttons),
-    Release(Buttons),
-    LoadCartridge {
-        cartridge: Cartridge,
-        ram: Option<Vec<u8>>,
-    },
-    Pause,
-    Resume,
-}
-
-pub enum Event {
-    RamChanged(Vec<u8>),
 }
 
 #[macro_export]

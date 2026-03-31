@@ -1,15 +1,14 @@
 use anyhow::{anyhow, Result};
 use std::fs::File;
-use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::{Runtime, FRAME_DURATION};
-use crate::audio::{audio_pipeline, AudioSink, AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
-use crate::video::{display_triple_buffer, FrontBuffer};
+use super::Runtime;
+use crate::audio::{AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
+use crate::runner::NESRunner;
+use crate::video::FrontBuffer;
 use crate::INes;
 use crate::{Buttons, HEIGHT, WIDTH};
-use crate::{Command, NES};
 use sdl2::audio::AudioCallback;
 use sdl2::audio::AudioDevice;
 use sdl2::audio::AudioSpecDesired;
@@ -20,82 +19,96 @@ use sdl2::render::Texture;
 use sdl2::render::WindowCanvas;
 
 const SCALE: u16 = 3;
+const FPS: u64 = 60;
+const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / FPS);
 
-pub struct Sdl;
+type AudioListener = Box<dyn FnMut(&[f32]) + Send>;
 
-impl Sdl {
-    pub fn run_with(sdl_context: &sdl2::Sdl, speaker: AudioSink) -> Result<()> {
-        let mut event_pump = sdl_context.event_pump().anyhow()?;
+pub struct SdlParams {
+    pub log_level: log::Level,
+    pub audio_listener: AudioListener,
+}
 
-        let args: Vec<String> = std::env::args().collect();
+impl Default for SdlParams {
+    fn default() -> Self {
+        Self {
+            log_level: log::Level::Info,
+            audio_listener: Box::new(|_| {}),
+        }
+    }
+}
 
-        let ines = if let Some(filename) = args.get(1) {
-            let file = File::open(filename)?;
-            INes::read(file)?
-        } else {
-            let stdin = std::io::stdin();
-            let handle = stdin.lock();
-            INes::read(handle)?
-        };
+pub fn run_with(params: SdlParams) -> Result<()> {
+    env_logger::builder()
+        .target(env_logger::Target::Stdout)
+        .filter_level(params.log_level.to_level_filter())
+        .init();
 
-        let cartridge = ines.into_cartridge();
+    let sdl_context = sdl2::init().anyhow()?;
 
-        let (front_buffer, back_buffer) = display_triple_buffer();
+    let mut event_pump = sdl_context.event_pump().anyhow()?;
 
-        let mut display = SDLDisplay::new(sdl_context, front_buffer)?;
+    let args: Vec<String> = std::env::args().collect();
 
-        let mut nes = NES::new(cartridge, back_buffer, speaker);
-        let mut expected_time = Duration::ZERO;
-        let start = Instant::now();
+    let ines = if let Some(filename) = args.get(1) {
+        let file = File::open(filename)?;
+        INes::read(file)?
+    } else {
+        let stdin = std::io::stdin();
+        let handle = stdin.lock();
+        INes::read(handle)?
+    };
+    let cartridge = ines.into_cartridge();
 
-        let (commands_send, commands_recv) = mpsc::channel();
-        let (events_send, _) = mpsc::channel();
+    let (runner, front_buffer, audio_source) = NESRunner::new();
 
-        thread::spawn(move || nes.run(commands_recv, events_send));
-        commands_send.send(Command::Resume)?;
+    let mut display = SDLDisplay::new(&sdl_context, front_buffer)?;
+    let _speaker = SDLSpeaker::new(&sdl_context, audio_source, params.audio_listener)?;
 
-        loop {
-            expected_time += FRAME_DURATION;
-            let actual_time = start.elapsed();
-            if actual_time < expected_time {
-                thread::sleep(expected_time - actual_time);
-            }
+    runner.load_cartridge(cartridge);
+    runner.resume();
 
-            display.present()?;
+    let mut expected_time = Duration::ZERO;
+    let start = Instant::now();
 
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. } => {
-                        return Ok(());
-                    }
-                    Event::KeyDown {
-                        keycode: Some(key), ..
-                    } => {
-                        commands_send.send(Command::Press(keycode_binding(key)))?;
-                    }
-                    Event::KeyUp {
-                        keycode: Some(key), ..
-                    } => {
-                        commands_send.send(Command::Release(keycode_binding(key)))?;
-                    }
-                    _ => {}
+    loop {
+        expected_time += FRAME_DURATION;
+        let actual_time = start.elapsed();
+        if actual_time < expected_time {
+            thread::sleep(expected_time - actual_time);
+        }
+
+        display.present()?;
+
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. } => {
+                    return Ok(());
                 }
+                Event::KeyDown {
+                    keycode: Some(key), ..
+                } => {
+                    runner.press(keycode_binding(key));
+                }
+                Event::KeyUp {
+                    keycode: Some(key), ..
+                } => {
+                    runner.release(keycode_binding(key));
+                }
+                _ => {}
             }
         }
     }
 }
 
+pub struct Sdl;
+
 impl Runtime for Sdl {
     fn run(log_level: log::Level) -> Result<()> {
-        env_logger::builder()
-            .target(env_logger::Target::Stdout)
-            .filter_level(log_level.to_level_filter())
-            .init();
-
-        let (audio_sink, audio_source) = audio_pipeline();
-        let sdl_context = sdl2::init().anyhow()?;
-        let _speaker = SDLSpeaker::new(&sdl_context, audio_source)?;
-        Self::run_with(&sdl_context, audio_sink)
+        run_with(SdlParams {
+            log_level,
+            ..Default::default()
+        })
     }
 }
 
@@ -113,14 +126,14 @@ fn keycode_binding(keycode: Keycode) -> Buttons {
     }
 }
 
-pub struct SDLDisplay {
+struct SDLDisplay {
     canvas: WindowCanvas,
     texture: Texture,
     buffer: FrontBuffer,
 }
 
 impl SDLDisplay {
-    pub fn new(sdl_context: &sdl2::Sdl, buffer: FrontBuffer) -> Result<Self> {
+    fn new(sdl_context: &sdl2::Sdl, buffer: FrontBuffer) -> Result<Self> {
         let video = sdl_context.video().anyhow()?;
 
         let window = video
@@ -156,18 +169,27 @@ impl SDLDisplay {
     }
 }
 
-pub struct SDLSpeaker<CB: AudioCallback> {
-    _device: AudioDevice<CB>,
+struct SDLSpeaker {
+    _device: AudioDevice<SDLCallback>,
 }
 
-impl<CB: AudioCallback> SDLSpeaker<CB> {
-    pub fn new(sdl_context: &sdl2::Sdl, callback: CB) -> Result<Self> {
+impl SDLSpeaker {
+    fn new(
+        sdl_context: &sdl2::Sdl,
+        audio_source: AudioSource,
+        listener: AudioListener,
+    ) -> Result<Self> {
         let audio = sdl_context.audio().anyhow()?;
 
         let spec = AudioSpecDesired {
             freq: Some(TARGET_AUDIO_FREQ as i32),
             channels: Some(1),
             samples: Some(AUDIO_SAMPLE_SIZE as u16),
+        };
+
+        let callback = SDLCallback {
+            audio_source,
+            listener,
         };
 
         let device = audio.open_playback(None, &spec, |_| callback).anyhow()?;
@@ -177,11 +199,17 @@ impl<CB: AudioCallback> SDLSpeaker<CB> {
     }
 }
 
-impl AudioCallback for AudioSource {
+struct SDLCallback {
+    audio_source: AudioSource,
+    listener: AudioListener,
+}
+
+impl AudioCallback for SDLCallback {
     type Channel = f32;
 
     fn callback(&mut self, out: &mut [f32]) {
-        self.read(out);
+        self.audio_source.read(out);
+        (self.listener)(out);
     }
 }
 

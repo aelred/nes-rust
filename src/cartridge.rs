@@ -4,6 +4,7 @@ use crate::mapper::Mapper;
 use crate::Address;
 use crate::Memory;
 
+#[derive(Default)]
 pub struct Cartridge {
     pub prg: PRG,
     pub chr: CHR,
@@ -60,6 +61,10 @@ impl Cartridge {
 
         Cartridge { prg, chr }
     }
+
+    pub fn set_ram(&mut self, ram: &[u8]) {
+        self.prg.ram.copy_from_slice(ram);
+    }
 }
 
 /// Program memory on a NES cartridge, connected to the CPU
@@ -81,11 +86,6 @@ impl PRG {
 
         self.dirty_ram = false;
         Some(&self.ram)
-    }
-
-    /// Get mutable reference to RAM - this does not count as a change.
-    pub fn ram_mut(&mut self) -> &mut [u8] {
-        &mut self.ram
     }
 }
 
@@ -173,6 +173,19 @@ impl Memory for PRG {
     }
 }
 
+impl Default for PRG {
+    fn default() -> Self {
+        Self {
+            rom: Box::new([0; 0x8000]),
+            bank_mapping: Box::new([0]),
+            bank_size: 0x8000,
+            bank_switcher: BankSwitcher::First,
+            ram: [0; _],
+            dirty_ram: false,
+        }
+    }
+}
+
 enum BankSwitcher {
     First,
     MMC1 { shift_register: u8, writes: u8 },
@@ -217,6 +230,16 @@ impl Memory for CHR {
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
+        }
+    }
+}
+
+impl Default for CHR {
+    fn default() -> Self {
+        Self {
+            chr_rom: Box::new([0; 0x2000]),
+            chr_ram_enabled: false,
+            ppu_ram: [0; _],
         }
     }
 }

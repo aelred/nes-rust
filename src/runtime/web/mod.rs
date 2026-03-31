@@ -2,17 +2,15 @@
 
 mod audio;
 
-use crate::audio::audio_pipeline;
+use crate::runner::{Event, NESRunner};
 use crate::runtime::web::audio::wasm_audio;
-use crate::video::{display_triple_buffer, FrontBuffer};
-use crate::{runtime::Runtime, Buttons, Command, Event, INes, HEIGHT, NES, WIDTH};
+use crate::video::FrontBuffer;
+use crate::{runtime::Runtime, Buttons, INes, HEIGHT, WIDTH};
 use anyhow::{anyhow, Context};
 use anyhow::{bail, Result};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use js_sys::futures::spawn_local;
 use js_sys::{Uint8ClampedArray, WebAssembly};
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
 use std::{
     cell::RefCell,
     hash::{DefaultHasher, Hash, Hasher},
@@ -50,8 +48,9 @@ async fn run() -> Result<()> {
     let window = window()?;
     let dom = document()?;
 
-    let rom = load_rom()?;
     let mut ctx = NesContext::new().await?;
+
+    let rom = load_rom()?;
     ctx.set_rom(&rom)?;
     let ctx = Rc::new(RefCell::new(ctx));
 
@@ -63,9 +62,8 @@ async fn run() -> Result<()> {
     add_event_listener(&window, "keydown", {
         let ctx = ctx.clone();
         move |event: KeyboardEvent| {
-            let commands = &mut ctx.borrow_mut().commands;
             let button = keycode_binding(&event.code());
-            commands.send(Command::Press(button))?;
+            ctx.borrow_mut().runner.press(button);
             Ok(())
         }
     })?;
@@ -73,9 +71,8 @@ async fn run() -> Result<()> {
     add_event_listener(&window, "keyup", {
         let ctx = ctx.clone();
         move |event: KeyboardEvent| {
-            let commands = &mut ctx.borrow_mut().commands;
             let button = keycode_binding(&event.code());
-            commands.send(Command::Release(button))?;
+            ctx.borrow_mut().runner.release(button);
             Ok(())
         }
     })?;
@@ -108,8 +105,7 @@ async fn run() -> Result<()> {
         add_event_listener(&element, "pointerenter", {
             let ctx = ctx.clone();
             move |_: PointerEvent| {
-                let commands = &mut ctx.borrow_mut().commands;
-                commands.send(Command::Press(*button))?;
+                ctx.borrow_mut().runner.press(*button);
                 Ok(())
             }
         })?;
@@ -117,8 +113,7 @@ async fn run() -> Result<()> {
         add_event_listener(&element, "pointerout", {
             let ctx = ctx.clone();
             move |_: PointerEvent| {
-                let commands = &mut ctx.borrow_mut().commands;
-                commands.send(Command::Release(*button))?;
+                ctx.borrow_mut().runner.release(*button);
                 Ok(())
             }
         })?;
@@ -183,7 +178,7 @@ async fn run() -> Result<()> {
 
             let mut ctx = ctx.borrow_mut();
 
-            for event in ctx.events.try_iter() {
+            for event in ctx.runner.events() {
                 match event {
                     Event::RamChanged(ram) => {
                         save_state(ctx.rom_hash, &ram)?;
@@ -221,18 +216,13 @@ async fn run() -> Result<()> {
 
 struct NesContext {
     front_buffer: FrontBuffer,
-    commands: Sender<Command>,
-    events: Receiver<Event>,
+    runner: NESRunner,
     rom_hash: u64,
 }
 
 impl NesContext {
     async fn new() -> Result<Self> {
-        let ines = INes::read(DEFAULT_ROM)?;
-        let cartridge = ines.into_cartridge();
-        let (front_buffer, back_buffer) = display_triple_buffer();
-
-        let (audio_sink, mut audio_source) = audio_pipeline();
+        let (runner, front_buffer, mut audio_source) = NESRunner::new();
 
         let ctx = wasm_audio(Box::new(move |buf| {
             audio_source.read(buf);
@@ -243,17 +233,9 @@ impl NesContext {
         // TODO: is this needed?
         ctx.resume().anyhow()?.await.anyhow()?;
 
-        let mut nes = NES::new(cartridge, back_buffer, audio_sink);
-
-        let (commands_send, commands_recv) = mpsc::channel();
-        let (events_send, events_recv) = mpsc::channel();
-
-        wasm_thread::spawn(move || nes.run(commands_recv, events_send));
-
         let mut this = NesContext {
             front_buffer,
-            commands: commands_send,
-            events: events_recv,
+            runner,
             rom_hash: 0,
         };
         this.set_paused_from_visibility()?;
@@ -262,26 +244,27 @@ impl NesContext {
 
     fn set_rom(&mut self, rom: &[u8]) -> Result<()> {
         let ines = INes::read(rom)?;
-        let cartridge = ines.into_cartridge();
+        let mut cartridge = ines.into_cartridge();
 
         let mut rom_hasher = DefaultHasher::new();
         rom.hash(&mut rom_hasher);
         self.rom_hash = rom_hasher.finish();
 
-        let ram = load_state(self.rom_hash)?;
-        let command = Command::LoadCartridge { cartridge, ram };
-        self.commands.send(command)?;
+        if let Some(ram) = load_state(self.rom_hash)? {
+            cartridge.set_ram(&ram);
+        }
+
+        self.runner.load_cartridge(cartridge);
 
         Ok(())
     }
 
     fn set_paused_from_visibility(&mut self) -> Result<()> {
-        let command = match document()?.visibility_state() {
-            VisibilityState::Hidden => Command::Pause,
-            VisibilityState::Visible => Command::Resume,
+        match document()?.visibility_state() {
+            VisibilityState::Hidden => self.runner.pause(),
+            VisibilityState::Visible => self.runner.resume(),
             state => bail!("Unrecognised visibility state: {:?}", state),
         };
-        self.commands.send(command)?;
         Ok(())
     }
 }
