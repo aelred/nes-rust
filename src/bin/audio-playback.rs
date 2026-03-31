@@ -693,6 +693,7 @@ impl AudioCallback for MyAudioCallback {
 }
 
 /// This isn't used in the main code any more, but it has a PI controller so I wanted to keep it
+#[allow(unused)]
 mod rate_controller {
     use crate::TARGET_AUDIO_FREQ;
     use std::sync::atomic::AtomicU64;
