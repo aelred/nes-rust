@@ -41,6 +41,7 @@ pub fn ring_buffer(
 }
 
 /// The writer for a ring buffer.
+#[derive(Debug)]
 pub struct RingBufferWriter {
     buffer: Arc<RingBuffer>,
     window_size: usize,
@@ -141,6 +142,7 @@ impl RingBufferReader {
     }
 }
 
+#[derive(Debug)]
 struct RingBuffer {
     capacity: usize,
     buffer: Box<[UnsafeCell<f32>]>,

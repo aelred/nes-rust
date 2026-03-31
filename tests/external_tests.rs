@@ -4,7 +4,8 @@ use std::io::Cursor;
 use image::ColorType;
 
 use image::EncodableLayout;
-use nes_rust::{display_triple_buffer, Address, BackBuffer, INes, HEIGHT, NES, WIDTH};
+use nes_rust::audio::audio_pipeline;
+use nes_rust::{display_triple_buffer, Address, INes, HEIGHT, NES, WIDTH};
 use yare::parameterized;
 
 enum Setup {
@@ -175,8 +176,10 @@ fn external_test(
     let cartridge = ines.into_cartridge();
 
     let (mut front_buffer, back_buffer) = display_triple_buffer();
+    let (audio_sink, audio_source) = audio_pipeline();
+    audio_source.silence();
 
-    let mut nes = NES::new(cartridge, back_buffer, ());
+    let mut nes = NES::new(cartridge, back_buffer, audio_sink);
 
     match setup {
         Setup::Default => {}
@@ -223,11 +226,7 @@ fn external_test(
     );
 }
 
-fn get_result(
-    success_check: Success,
-    nes: &mut NES<BackBuffer, ()>,
-    image: &[u8],
-) -> Result<(), String> {
+fn get_result(success_check: Success, nes: &mut NES, image: &[u8]) -> Result<(), String> {
     match success_check {
         Success::Never => Err("Always fails".to_owned()),
         Success::Screen(bytes) => {

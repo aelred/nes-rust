@@ -1,6 +1,7 @@
 #![allow(clippy::upper_case_acronyms)] // Allow upper case acronyms like NES, CPU because I think it's more readable!
 
 pub use crate::address::Address;
+use crate::audio::AudioSink;
 pub use crate::cartridge::Cartridge;
 pub use crate::cpu::instructions;
 pub use crate::cpu::Instruction;
@@ -48,16 +49,6 @@ pub fn run() {
     }
 }
 
-pub trait NESDisplay {
-    fn draw_pixel(&mut self, color: Color);
-    fn enter_vblank(&mut self);
-}
-
-impl NESDisplay for () {
-    fn draw_pixel(&mut self, _: Color) {}
-    fn enter_vblank(&mut self) {}
-}
-
 type Buffer = [u8; WIDTH as usize * HEIGHT as usize * 4];
 
 pub fn display_triple_buffer() -> (FrontBuffer, BackBuffer) {
@@ -98,6 +89,7 @@ impl FrontBuffer {
     }
 }
 
+#[derive(Debug)]
 pub struct BackBuffer {
     back_buffer: Option<Box<Buffer>>,
     x: usize,
@@ -106,7 +98,7 @@ pub struct BackBuffer {
     intermediate_buffer: Arc<IntermediateBuffer>,
 }
 
-impl NESDisplay for BackBuffer {
+impl BackBuffer {
     fn draw_pixel(&mut self, color: Color) {
         self.vblank = false;
 
@@ -146,6 +138,7 @@ impl NESDisplay for BackBuffer {
     }
 }
 
+#[derive(Debug)]
 struct IntermediateBuffer {
     buffer: AtomicPtr<Buffer>,
     dirty: AtomicBool,
@@ -170,26 +163,22 @@ impl Drop for IntermediateBuffer {
 }
 
 pub trait NESSpeaker {
-    fn emit(&mut self, wave: f32);
-}
-
-impl NESSpeaker for () {
-    fn emit(&mut self, _wave: f32) {}
+    fn emit(&mut self, sample: f32);
 }
 
 #[derive(Debug)]
-pub struct NES<D, S> {
+pub struct NES {
     cpu: CPU,
-    display: D,
-    speaker: S,
+    video_out: BackBuffer,
+    audio_out: AudioSink,
 }
 
-impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
-    pub fn new(cartridge: Cartridge, display: D, speaker: S) -> Self {
+impl NES {
+    pub fn new(cartridge: Cartridge, video_out: BackBuffer, audio_out: AudioSink) -> Self {
         NES {
             cpu: Self::cpu_from_cartridge(cartridge),
-            display,
-            speaker,
+            video_out,
+            audio_out,
         }
     }
 
@@ -247,10 +236,6 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         }
     }
 
-    pub fn display(&self) -> &D {
-        &self.display
-    }
-
     pub fn program_counter(&mut self) -> Address {
         self.cpu.program_counter()
     }
@@ -262,7 +247,7 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.cpu = Self::cpu_from_cartridge(cartridge);
         // Reset display since we'll start drawing from the top-left again
-        self.display.enter_vblank();
+        self.video_out.enter_vblank();
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
@@ -300,18 +285,18 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
         }
 
         if let Some(color) = output.color {
-            self.display.draw_pixel(color);
+            self.video_out.draw_pixel(color);
         }
 
         if output.vblank {
-            self.display.enter_vblank();
+            self.video_out.enter_vblank();
         }
     }
 
     fn tick_apu(&mut self) {
         let apu = self.cpu.memory().apu();
         let wave = apu.tick();
-        self.speaker.emit(wave);
+        self.audio_out.emit(wave);
     }
 
     fn cpu_from_cartridge(cartridge: Cartridge) -> CPU {

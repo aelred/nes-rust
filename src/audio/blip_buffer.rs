@@ -16,6 +16,7 @@ const STEP_SUBSAMPLES: usize = 32;
 /// perfectly low-passed and downsampled.
 ///
 /// The basics of the algorithm are described here: http://www.slack.net/~ant/bl-synth/
+#[derive(Debug)]
 pub struct BlipBuffer {
     /// Tiny ring buffer which always contains STEP_SAMPLE_SIZE elements
     diff_buffer: VecDeque<f32>,

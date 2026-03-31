@@ -1,6 +1,6 @@
-use nes_rust::audio::audio_pipeline;
+use nes_rust::audio::{audio_pipeline, AudioSource};
 use nes_rust::runtime::sdl::{SDLSpeaker, Sdl};
-use nes_rust::NESSpeaker;
+use sdl2::audio::AudioCallback;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -14,27 +14,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (audio_sink, audio_source) = audio_pipeline();
     let sdl_context = sdl2::init()?;
-    let speaker = RecordingSpeaker {
+    let callback = RecordingCallback {
         file: BufWriter::new(File::create(audio_recording_path)?),
-        speaker: audio_sink,
+        audio_source,
     };
-    let _sdl_speaker = SDLSpeaker::new(&sdl_context, audio_source)?;
+    let _sdl_speaker = SDLSpeaker::new(&sdl_context, callback)?;
 
-    Sdl::run_with(&sdl_context, speaker)?;
+    Sdl::run_with(&sdl_context, audio_sink)?;
 
     Ok(())
 }
 
-struct RecordingSpeaker<S> {
+struct RecordingCallback {
     file: BufWriter<File>,
-    speaker: S,
+    audio_source: AudioSource,
 }
 
-impl<S: NESSpeaker> NESSpeaker for RecordingSpeaker<S> {
-    fn emit(&mut self, wave: f32) {
-        self.file
-            .write(&wave.to_le_bytes())
-            .expect("Failed to write to recording file");
-        self.speaker.emit(wave)
+impl AudioCallback for RecordingCallback {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        self.audio_source.read(out);
+        for sample in out {
+            self.file
+                .write_all(&sample.to_le_bytes())
+                .expect("Failed to write to recording file");
+        }
     }
 }

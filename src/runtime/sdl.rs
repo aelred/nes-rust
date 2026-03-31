@@ -5,8 +5,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::{Runtime, FRAME_DURATION};
-use crate::audio::{audio_pipeline, AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
-use crate::{display_triple_buffer, NESSpeaker};
+use crate::audio::{audio_pipeline, AudioSink, AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
+use crate::display_triple_buffer;
 use crate::{Buttons, HEIGHT, WIDTH};
 use crate::{Command, NES};
 use crate::{FrontBuffer, INes};
@@ -24,10 +24,7 @@ const SCALE: u16 = 3;
 pub struct Sdl;
 
 impl Sdl {
-    pub fn run_with(
-        sdl_context: &sdl2::Sdl,
-        speaker: impl NESSpeaker + Send + 'static,
-    ) -> Result<()> {
+    pub fn run_with(sdl_context: &sdl2::Sdl, speaker: AudioSink) -> Result<()> {
         let mut event_pump = sdl_context.event_pump().anyhow()?;
 
         let args: Vec<String> = std::env::args().collect();
@@ -159,12 +156,12 @@ impl SDLDisplay {
     }
 }
 
-pub struct SDLSpeaker {
-    _device: AudioDevice<AudioSource>,
+pub struct SDLSpeaker<CB: AudioCallback> {
+    _device: AudioDevice<CB>,
 }
 
-impl SDLSpeaker {
-    pub fn new(sdl_context: &sdl2::Sdl, source: AudioSource) -> Result<Self> {
+impl<CB: AudioCallback> SDLSpeaker<CB> {
+    pub fn new(sdl_context: &sdl2::Sdl, callback: CB) -> Result<Self> {
         let audio = sdl_context.audio().anyhow()?;
 
         let spec = AudioSpecDesired {
@@ -173,7 +170,7 @@ impl SDLSpeaker {
             samples: Some(AUDIO_SAMPLE_SIZE as u16),
         };
 
-        let device = audio.open_playback(None, &spec, |_| source).anyhow()?;
+        let device = audio.open_playback(None, &spec, |_| callback).anyhow()?;
         device.resume();
 
         Ok(Self { _device: device })

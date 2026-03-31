@@ -30,25 +30,6 @@ type ActiveRuntime = ();
 
 impl Runtime for () {
     fn run(_log_level: log::Level) -> Result<()> {
-        use crate::{INes, NES};
-        use std::fs::File;
-
-        let args: Vec<String> = std::env::args().collect();
-
-        let ines = if let Some(filename) = args.get(1) {
-            let file = File::open(filename)?;
-            INes::read(file)?
-        } else {
-            let stdin = std::io::stdin();
-            let handle = stdin.lock();
-            INes::read(handle)?
-        };
-
-        let cartridge = ines.into_cartridge();
-
-        let mut nes = NES::new(cartridge, (), ());
-        // TODO: maybe execute indefinitely?
-        nes.tick();
-        Ok(())
+        panic!("No runtime configured, make sure target and features are set correctly")
     }
 }

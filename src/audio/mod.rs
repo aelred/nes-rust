@@ -26,6 +26,7 @@ pub fn audio_pipeline() -> (AudioSink, AudioSource) {
 }
 
 /// Sink for audio samples from the NES.
+#[derive(Debug)]
 pub struct AudioSink {
     blip_buffer: BlipBuffer,
     ring_buffer: RingBufferWriter,
@@ -95,6 +96,17 @@ impl AudioSource {
                 assert!(-1.0 <= *v && *v <= 1.0, "Unexpected audio sample: {:?}", v);
             }
         }
+    }
+
+    /// Consume all audio samples without playing them
+    pub fn silence(mut self) {
+        let window_size = self.buffer.window_size();
+        wasm_thread::spawn(move || loop {
+            while self.buffer.next(window_size) {}
+            std::thread::sleep(Duration::from_secs_f64(
+                window_size as f64 / TARGET_AUDIO_FREQ,
+            ));
+        });
     }
 
     /// Change window size if necessary. Audio devices don't typically do this, but it's possible.
