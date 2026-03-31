@@ -232,11 +232,11 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
                 match command {
                     Command::Press(buttons) => self.controller().press(buttons),
                     Command::Release(buttons) => self.controller().release(buttons),
-                    Command::LoadRam(ram) => {
-                        self.cpu.memory().prg().ram_mut().copy_from_slice(&ram);
-                    }
-                    Command::LoadCartridge(cartridge) => {
+                    Command::LoadCartridge { cartridge, ram } => {
                         self.load_cartridge(cartridge);
+                        if let Some(ram) = ram {
+                            self.cpu.memory().prg().ram_mut().copy_from_slice(&ram);
+                        }
                     }
                     Command::Pause => {
                         paused = true;
@@ -336,8 +336,10 @@ impl<D: NESDisplay, S: NESSpeaker> NES<D, S> {
 pub enum Command {
     Press(Buttons),
     Release(Buttons),
-    LoadRam(Vec<u8>),
-    LoadCartridge(Cartridge),
+    LoadCartridge {
+        cartridge: Cartridge,
+        ram: Option<Vec<u8>>,
+    },
     Pause,
     Resume,
 }

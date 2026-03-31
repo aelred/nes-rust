@@ -282,11 +282,9 @@ impl NesContext {
         rom.hash(&mut rom_hasher);
         self.rom_hash = rom_hasher.finish();
 
-        self.commands.send(Command::LoadCartridge(cartridge))?;
-
-        if let Some(ram) = load_state(self.rom_hash)? {
-            self.commands.send(Command::LoadRam(ram))?;
-        }
+        let ram = load_state(self.rom_hash)?;
+        let command = Command::LoadCartridge { cartridge, ram };
+        self.commands.send(command)?;
 
         Ok(())
     }
