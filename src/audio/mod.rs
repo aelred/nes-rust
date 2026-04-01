@@ -1,6 +1,11 @@
 use crate::audio::blip_buffer::BlipBuffer;
 use crate::audio::ring_buffer::{ring_buffer, RingBufferReader, RingBufferWriter};
+use std::sync::atomic::Ordering::Release;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
+use wasm_thread::JoinHandle;
+use Ordering::Acquire;
 
 mod blip_buffer;
 mod ring_buffer;
@@ -91,14 +96,8 @@ impl AudioSource {
     }
 
     /// Consume all audio samples without playing them
-    pub fn silence(mut self) {
-        let window_size = self.buffer.window_size();
-        wasm_thread::spawn(move || loop {
-            while self.buffer.next(window_size) {}
-            std::thread::sleep(Duration::from_secs_f64(
-                window_size as f64 / TARGET_AUDIO_FREQ,
-            ));
-        });
+    pub fn silence(self) -> Silencer {
+        Silencer::new(self)
     }
 
     /// Change window size if necessary. Audio devices don't typically do this, but it's possible.
@@ -115,5 +114,38 @@ impl AudioSource {
 
         log::info!("Resized audio buffer read window from {window} to {size}");
         true
+    }
+}
+
+pub struct Silencer {
+    handle: JoinHandle<AudioSource>,
+    close: Arc<AtomicBool>,
+}
+
+impl Silencer {
+    fn new(mut source: AudioSource) -> Self {
+        let window_size = source.buffer.window_size();
+
+        let close = Arc::new(AtomicBool::new(false));
+
+        let handle = wasm_thread::spawn({
+            let close = close.clone();
+            move || {
+                while !close.load(Acquire) {
+                    while source.buffer.next(window_size) {}
+                    std::thread::sleep(Duration::from_secs_f64(
+                        window_size as f64 / TARGET_AUDIO_FREQ,
+                    ));
+                }
+                source
+            }
+        });
+
+        Self { handle, close }
+    }
+
+    pub fn close(self) -> JoinHandle<AudioSource> {
+        self.close.store(true, Release);
+        self.handle
     }
 }

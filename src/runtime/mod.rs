@@ -3,7 +3,7 @@ use anyhow::Result;
 #[cfg(feature = "sdl")]
 pub mod sdl;
 
-#[cfg(feature = "web")]
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
 mod web;
 
 pub fn run(log_level: log::Level) -> Result<()> {

@@ -2,6 +2,7 @@
 
 mod audio;
 
+use crate::audio::{AudioSource, Silencer};
 use crate::runner::{Event, NESRunner};
 use crate::runtime::web::audio::wasm_audio;
 use crate::video::FrontBuffer;
@@ -21,9 +22,9 @@ use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
 use web_sys::{
     js_sys,
     js_sys::{ArrayBuffer, Uint8Array},
-    AudioContext, CanvasRenderingContext2d, Document, DragEvent, EventTarget, File,
-    HtmlCanvasElement, HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, PointerEvent,
-    Storage, VisibilityState, Window,
+    CanvasRenderingContext2d, Document, DragEvent, EventTarget, File, HtmlCanvasElement,
+    HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, PointerEvent, Storage, VisibilityState,
+    Window,
 };
 use zip::ZipArchive;
 
@@ -37,20 +38,15 @@ impl Runtime for Web {
         let _ = console_log::init_with_level(log_level);
         std::panic::set_hook(Box::new(|info| log::error!("{}", info)));
 
-        spawn_local(async {
-            if let Err(e) = run().await {
-                log::error!("Error: {}", e);
-            }
-        });
-        Ok(())
+        run()
     }
 }
 
-async fn run() -> Result<()> {
+fn run() -> Result<()> {
     let window = window()?;
     let dom = document()?;
 
-    let mut ctx = NesContext::new().await?;
+    let mut ctx = NesContext::new()?;
 
     let rom = load_rom()?;
     ctx.set_rom(&rom)?;
@@ -235,24 +231,22 @@ async fn run() -> Result<()> {
 
 struct NesContext {
     front_buffer: FrontBuffer,
-    audio: Option<AudioContext>,
+    silencer: Option<Silencer>,
     runner: NESRunner,
     rom_hash: u64,
 }
 
 impl NesContext {
-    async fn new() -> Result<Self> {
-        let (runner, front_buffer, mut audio_source) = NESRunner::new();
+    fn new() -> Result<Self> {
+        let (runner, front_buffer, audio_source) = NESRunner::new();
 
-        let audio = wasm_audio(Box::new(move |buf| {
-            audio_source.read(buf);
-            true
-        }))
-        .await?;
+        // We're not allowed to start audio until user interaction
+        // Explicitly "silence" the audio, consuming samples so the emulator doesn't sleep
+        let silencer = audio_source.silence();
 
         let mut this = NesContext {
             front_buffer,
-            audio: Some(audio),
+            silencer: Some(silencer),
             runner,
             rom_hash: 0,
         };
@@ -287,17 +281,26 @@ impl NesContext {
     }
 
     fn start_audio(&mut self) {
-        let Some(audio) = self.audio.take() else {
+        let Some(silencer) = self.silencer.take() else {
             return;
         };
 
-        async fn resume(audio: AudioContext) -> Result<()> {
+        async fn resume(silencer: Silencer) -> Result<()> {
+            let source = silencer.close();
+            let mut source = source.join_async().await.expect("error in silencer thread");
+
+            let audio = wasm_audio(Box::new(move |buf| {
+                source.read(buf);
+                true
+            }))
+            .await?;
+
             audio.resume().anyhow()?.await.anyhow()?;
             Ok(())
         }
 
         spawn_local(async {
-            if let Err(e) = resume(audio).await {
+            if let Err(e) = resume(silencer).await {
                 log::error!("{}", e);
             }
         });
