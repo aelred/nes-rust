@@ -32,7 +32,8 @@ pub struct Web;
 
 impl Runtime for Web {
     fn run(log_level: log::Level) -> Result<()> {
-        console_log::init_with_level(log_level)?;
+        // Ignore error if logger is already configured - can happen with page reload shenanigans
+        let _ = console_log::init_with_level(log_level);
         std::panic::set_hook(Box::new(|info| log::error!("{}", info)));
 
         spawn_local(async {
