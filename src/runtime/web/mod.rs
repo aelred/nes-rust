@@ -21,8 +21,9 @@ use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
 use web_sys::{
     js_sys,
     js_sys::{ArrayBuffer, Uint8Array},
-    CanvasRenderingContext2d, Document, DragEvent, EventTarget, File, HtmlCanvasElement,
-    HtmlInputElement, ImageData, KeyboardEvent, PointerEvent, Storage, VisibilityState, Window,
+    AudioContext, CanvasRenderingContext2d, Document, DragEvent, EventTarget, File,
+    HtmlCanvasElement, HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, PointerEvent,
+    Storage, VisibilityState, Window,
 };
 use zip::ZipArchive;
 
@@ -58,6 +59,23 @@ async fn run() -> Result<()> {
     add_event_listener(&window, "visibilitychange", {
         let ctx = ctx.clone();
         move |_: web_sys::Event| ctx.borrow_mut().set_paused_from_visibility()
+    })?;
+
+    // Audio is only allowed to start after user interacts with page
+    add_event_listener(&window, "keydown", {
+        let ctx = ctx.clone();
+        move |_: KeyboardEvent| {
+            ctx.borrow_mut().start_audio();
+            Ok(())
+        }
+    })?;
+
+    add_event_listener(&window, "click", {
+        let ctx = ctx.clone();
+        move |_: MouseEvent| {
+            ctx.borrow_mut().start_audio();
+            Ok(())
+        }
     })?;
 
     add_event_listener(&window, "keydown", {
@@ -217,6 +235,7 @@ async fn run() -> Result<()> {
 
 struct NesContext {
     front_buffer: FrontBuffer,
+    audio: Option<AudioContext>,
     runner: NESRunner,
     rom_hash: u64,
 }
@@ -225,17 +244,18 @@ impl NesContext {
     async fn new() -> Result<Self> {
         let (runner, front_buffer, mut audio_source) = NESRunner::new();
 
-        let ctx = wasm_audio(Box::new(move |buf| {
+        let audio = wasm_audio(Box::new(move |buf| {
             audio_source.read(buf);
             true
         }))
         .await?;
 
         // TODO: is this needed?
-        ctx.resume().anyhow()?.await.anyhow()?;
+        audio.resume().anyhow()?.await.anyhow()?;
 
         let mut this = NesContext {
             front_buffer,
+            audio: Some(audio),
             runner,
             rom_hash: 0,
         };
@@ -267,6 +287,23 @@ impl NesContext {
             state => bail!("Unrecognised visibility state: {:?}", state),
         };
         Ok(())
+    }
+
+    fn start_audio(&mut self) {
+        let Some(audio) = self.audio.take() else {
+            return;
+        };
+
+        async fn resume(audio: AudioContext) -> Result<()> {
+            audio.resume().anyhow()?.await.anyhow()?;
+            Ok(())
+        }
+
+        spawn_local(async {
+            if let Err(e) = resume(audio).await {
+                log::error!("{}", e);
+            }
+        });
     }
 }
 
