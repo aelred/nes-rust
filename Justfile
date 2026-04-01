@@ -1,3 +1,8 @@
+setup:
+    rustup toolchain install nightly
+    rustup component add rust-src --toolchain nightly
+    cargo install wasm-bindgen-cli@^0.2
+
 # Run the given ROM file
 run rom:
     cargo run --no-default-features --features=sdl -- {{quote(rom)}}
