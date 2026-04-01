@@ -2,7 +2,7 @@
 
 mod audio;
 
-use crate::audio::{AudioSource, Silencer};
+use crate::audio::Silencer;
 use crate::runner::{Event, NESRunner};
 use crate::runtime::web::audio::wasm_audio;
 use crate::video::FrontBuffer;
