@@ -75,7 +75,3 @@ web-time = "1.1.0"
 hexdump = "0.1.2"
 image = "0.25.2"
 yare = "3.0.0"
-
-[package.metadata.wasm-pack.profile.release]
-# default is ['-O4'], `--debuginfo` adds useful profiling information
-wasm-opt = ['-O4', '--debuginfo']
