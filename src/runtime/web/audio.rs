@@ -85,8 +85,8 @@ impl WasmAudioProcessor {
 #[wasm_bindgen(inline_js = "
 export function create_worklet_module_url() {
     // This inline module is at: snippets/<crate>-<hash>/inline0.js
-    // Main module is at: nes_rust.js (2 levels up)
-    const bindgenUrl = new URL('../../nes_rust.js', import.meta.url).href;
+    // Main module is at: nes-rust.js (2 levels up)
+    const bindgenUrl = new URL('../../nes-rust.js', import.meta.url).href;
     return URL.createObjectURL(new Blob([`
         import * as bindgen from '${bindgenUrl}';
 
