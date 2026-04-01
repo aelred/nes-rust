@@ -250,9 +250,6 @@ impl NesContext {
         }))
         .await?;
 
-        // TODO: is this needed?
-        audio.resume().anyhow()?.await.anyhow()?;
-
         let mut this = NesContext {
             front_buffer,
             audio: Some(audio),
