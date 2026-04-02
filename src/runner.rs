@@ -63,6 +63,8 @@ impl Drop for NESRunner {
 }
 
 fn run_nes(mut nes: NES, commands: Receiver<Command>, events: Sender<Event>) {
+    log::info!("Running NES");
+
     let start = Instant::now();
     let mut cycles: u64 = 0;
     let mut paused = true;
@@ -103,6 +105,7 @@ fn run_nes(mut nes: NES, commands: Receiver<Command>, events: Sender<Event>) {
                     paused = false;
                 }
                 Command::Stop => {
+                    log::info!("Stopping NES");
                     return;
                 }
             }
