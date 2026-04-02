@@ -39,10 +39,11 @@ enum Success {
         "blargg_ppu_tests_palette_ram", include_bytes!("blargg_ppu_tests/palette_ram.nes"),
         Setup::Default, Terminate::Address(0xe412), Success::Byte(0xf0, 0x01)
     },
-    blargg_ppu_tests_power_up_palette = {
-        "blargg_ppu_tests_power_up_palette", include_bytes!("blargg_ppu_tests/power_up_palette.nes"),
-        Setup::Default, Terminate::Address(0xe3ac), Success::Byte(0xf0, 0x01)
-    },
+    // The palette at power-up isn't truly specified, and $00 is nicer so we get a black screen.
+    // blargg_ppu_tests_power_up_palette = {
+    //     "blargg_ppu_tests_power_up_palette", include_bytes!("blargg_ppu_tests/power_up_palette.nes"),
+    //     Setup::Default, Terminate::Address(0xe3ac), Success::Byte(0xf0, 0x01)
+    // },
     blargg_ppu_tests_sprite_ram = {
         "blargg_ppu_tests_sprite_ram", include_bytes!("blargg_ppu_tests/sprite_ram.nes"),
         Setup::Default, Terminate::Address(0xe467), Success::Byte(0xf0, 0x01)
