@@ -68,14 +68,9 @@
 
 <body>
 <script type="module">
-    import init, {run} from "./nes-rust.js";
+    import init from "./nes-rust.js";
 
-    async function start() {
-        await init();
-        run();
-    }
-
-    start();
+    init();
 </script>
 
 <div id="container">

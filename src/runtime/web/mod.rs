@@ -34,8 +34,7 @@ pub struct Web;
 
 impl Runtime for Web {
     fn run(log_level: log::Level) -> Result<()> {
-        // Ignore error if logger is already configured - can happen with page reload shenanigans
-        let _ = console_log::init_with_level(log_level);
+        console_log::init_with_level(log_level)?;
         std::panic::set_hook(Box::new(|info| log::error!("{}", info)));
 
         run()
@@ -365,7 +364,7 @@ fn closure<T: FromWasmAbi + 'static>(
 ) -> Closure<dyn FnMut(T)> {
     Closure::<dyn FnMut(T)>::new(move |arg| {
         if let Err(err) = function(arg) {
-            log::error!("Error: {}", err);
+            log::error!("{}", err);
         }
     })
 }

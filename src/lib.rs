@@ -19,7 +19,6 @@ use crate::ppu::PPU;
 use apu::APU;
 use std::fmt::Debug;
 use video::BackBuffer;
-use wasm_bindgen::prelude::wasm_bindgen;
 
 mod address;
 mod apu;
@@ -38,13 +37,6 @@ pub mod video;
 pub const WIDTH: u16 = 256;
 pub const HEIGHT: u16 = 240;
 pub const NES_FREQ: f64 = 1_789_773.0;
-
-#[cfg_attr(feature = "web", wasm_bindgen)]
-pub fn run() {
-    if let Err(e) = runtime::run(log::Level::Info) {
-        log::error!("Error: {}", e);
-    }
-}
 
 #[derive(Debug)]
 pub struct NES {
