@@ -42,7 +42,7 @@ watch-web:
 
 # Host web server
 run-server:
-    npx vite
+    npx vite ./web --open
 
 # Build and serve the web version with hot reload
 [parallel]
