@@ -3,8 +3,7 @@ use crate::video::{display_triple_buffer, FrontBuffer};
 use crate::{Buttons, Cartridge, NES, NES_FREQ};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::thread;
-use web_time::{Duration, Instant};
+use web_time::Duration;
 
 pub struct NESRunner {
     commands: Sender<Command>,
@@ -65,30 +64,22 @@ impl Drop for NESRunner {
 fn run_nes(mut nes: NES, commands: Receiver<Command>, events: Sender<Event>) {
     log::info!("Running NES");
 
-    let start = Instant::now();
-    let mut cycles: u64 = 0;
     let mut paused = true;
 
-    // Target CPU cycles per loop before sleeping and checking events.
-    // Should be small enough to not fill the audio buffer, but too small adds overhead.
-    const CYCLES_PER_LOOP: u64 = 5000;
+    // Loop/sleep for about one frame between checking events
+    const LOOP_DURATION_SECS: f64 = 1.0 / 60.0;
+    const CYCLES_PER_LOOP: u64 = (NES_FREQ * LOOP_DURATION_SECS) as u64;
 
     loop {
-        let mut loop_cycles = 0;
         if paused {
-            // Don't tick CPU if paused, pretend we ran cycles to sleep a reasonable time.
-            loop_cycles = CYCLES_PER_LOOP;
+            // Don't tick CPU if paused, sleep instead
+            std::thread::sleep(Duration::from_secs_f64(LOOP_DURATION_SECS));
         } else {
-            while loop_cycles < CYCLES_PER_LOOP {
-                loop_cycles += nes.tick() as u64;
+            // Sleeping is done in the audio buffer sink
+            let mut cycles = 0;
+            while cycles < CYCLES_PER_LOOP {
+                cycles += nes.tick() as u64;
             }
-        }
-        cycles += loop_cycles;
-
-        let expected_time = Duration::from_secs_f64(cycles as f64 / NES_FREQ);
-        let actual_time = start.elapsed();
-        if actual_time < expected_time {
-            thread::sleep(expected_time - actual_time);
         }
 
         for command in commands.try_iter() {
