@@ -11,7 +11,7 @@ use anyhow::{anyhow, Context};
 use anyhow::{bail, Result};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use js_sys::futures::spawn_local;
-use js_sys::{Uint8ClampedArray, WebAssembly};
+use js_sys::Uint8ClampedArray;
 use std::{
     cell::RefCell,
     hash::{DefaultHasher, Hash, Hasher},
@@ -46,7 +46,7 @@ fn run() -> Result<()> {
     let window = window()?;
     let dom = document()?;
 
-    let mut ctx = NesContext::new()?;
+    let mut ctx: NesContext = NesContext::new()?;
 
     let rom = load_rom()?;
     ctx.set_rom(&rom)?;
@@ -186,6 +186,11 @@ fn run() -> Result<()> {
     let f = Rc::new(RefCell::new(None));
     let g = f.clone();
 
+    // ImageData doesn't let you pass in shared memory.
+    // All the WASM memory is in a SharedArrayBuffer, so we have to copy it to the JS heap
+    let buffer_length = ctx.borrow_mut().front_buffer.read_buffer().len();
+    let js_buffer = Uint8ClampedArray::new_with_length(buffer_length as u32);
+
     *g.borrow_mut() = Some(closure({
         let ctx = ctx.clone();
         move |_| {
@@ -200,21 +205,11 @@ fn run() -> Result<()> {
                     }
                 }
             }
-
-            // ImageData doesn't let you pass in shared memory.
-            // All the WASM memory is in a SharedArrayBuffer, so we have to copy it to the JS heap
             let buffer = ctx.front_buffer.read_buffer();
-            let memory = wasm_bindgen::memory();
-            let memory: &WebAssembly::Memory = memory.unchecked_ref();
-            let shared_view = Uint8ClampedArray::new_with_byte_offset_and_length(
-                &memory.buffer(),
-                buffer.as_ptr() as u32,
-                buffer.len() as u32,
-            );
-            let copied = Uint8ClampedArray::new(&shared_view);
+            js_buffer.copy_from(buffer);
 
             let image_data = ImageData::new_with_js_u8_clamped_array_and_sh(
-                &copied,
+                &js_buffer,
                 WIDTH as u32,
                 HEIGHT as u32,
             )
