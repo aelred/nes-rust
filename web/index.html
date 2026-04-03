@@ -4,20 +4,16 @@
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <style>
-        @media (pointer: fine) {
-            .mobile {
-                display: none;
-            }
-        }
-
         @media not (pointer: fine) {
             .desktop {
                 display: none;
             }
         }
 
-        .mobile {
-            font-size: xx-large;
+        @media (pointer: fine) {
+            .touch {
+                display: none;
+            }
         }
 
         body {
@@ -55,10 +51,14 @@
             color: #a5a2a2
         }
 
-        #controller {
-            object-fit: contian;
+        .controller {
+            object-fit: contain;
             overflow: auto;
             user-select: none;
+        }
+
+        .desktop.controller {
+            scale: 75%
         }
     </style>
 
@@ -76,7 +76,36 @@
 <div id="container">
     <canvas height="240" id="canvas" width="256">
     </canvas>
-    <svg class="mobile" id="controller" viewBox="5 0 90 46">
+
+    <svg class="controller desktop" viewBox="5 27 90 10">
+        <!-- Middle -->
+        <rect fill="#e5e5e5" height="10" rx="1" width="28" x="36" y="27"/>
+        <text fill="#dd2020" font-family="monospace" font-size="2.5" text-anchor="middle"
+              x="44.5"
+              y="30.1">SHIFT
+        </text>
+        <text fill="#dd2020" font-family="monospace" font-size="2.5" text-anchor="middle"
+              x="55.5"
+              y="30.1">ENTER
+        </text>
+        <rect fill="#0d0c0c" height="3" id="select" rx="2" width="9" x="40" y="31"/>
+        <rect fill="#0d0c0c" height="3" id="start" rx="2" width="9" x="51" y="31"/>
+        <!-- Right -->
+        <rect fill="#e5e5e5" height="10" rx="1" width="10" x="68" y="27"/>
+        <circle cx="73" cy="32" fill="#dd2020" id="b" r="4"/>
+        <text dominant-baseline="central" fill="#fff" font-family="monospace" font-size="4"
+              font-weight="bold"
+              text-anchor="middle" x="73" y="32">X
+        </text>
+        <rect fill="#e5e5e5" height="10" rx="1" width="10" x="81" y="27"/>
+        <circle cx="86" cy="32" fill="#dd2020" id="a" r="4"/>
+        <text dominant-baseline="central" fill="#fff" font-family="monospace" font-size="4"
+              font-weight="bold"
+              text-anchor="middle" x="86" y="32">Z
+        </text>
+    </svg>
+
+    <svg class="controller touch" viewBox="5 0 90 46">
         <rect fill="#e5e5e5" height="46" rx="2" width="100"/>
         <rect fill="#0d0c0c" height="38" rx="1" width="94" x="3" y="5"/>
         <!-- Left -->
@@ -84,6 +113,20 @@
         <rect fill="#e5e5e5" height="24" rx="1" width="10" x="14" y="13"/>
         <rect fill="#0d0c0c" height="8" rx="1" width="22" x="8" y="21"/>
         <rect fill="#0d0c0c" height="22" rx="1" width="8" x="15" y="14"/>
+
+        <!-- Arrows -->
+        <text dominant-baseline="central" fill="#555" font-family="monospace" font-size="5" text-anchor="middle" x="12"
+              y="25">&#x25C0;
+        </text>
+        <text dominant-baseline="central" fill="#555" font-family="monospace" font-size="5" text-anchor="middle" x="26"
+              y="25">&#x25B6;
+        </text>
+        <text dominant-baseline="central" fill="#555" font-family="monospace" font-size="5" text-anchor="middle" x="19"
+              y="18">&#x25B2;
+        </text>
+        <text dominant-baseline="central" fill="#555" font-family="monospace" font-size="5" text-anchor="middle" x="19"
+              y="32">&#x25BC;
+        </text>
 
         <rect height="10" id="left" pointer-events="all" visibility="hidden" width="10" x="7" y="20"/>
         <rect height="10" id="right" pointer-events="all" visibility="hidden" width="10" x="21" y="20"/>
@@ -117,19 +160,9 @@
         <input accept=".nes, .zip" id="upload-rom" type="file"/>
     </p>
     <p>
-        This is a <a
-            href="https://www.nintendo.com/en-gb/Hardware/Nintendo-History/Nintendo-Entertainment-System/Nintendo-Entertainment-System-627024.html">NES</a>
-        emulator. Select or drag-and-drop a .nes or .zip file to play it, e.g. the <a
+        Select or drag-and-drop a .nes or .zip file to play it, e.g. the <a
             href="https://eldenpixels.itch.io/alwas-awakening-the-8-bit-edition#:~:text=944%20kB-,Download%20demo,-Download">Alwa's
         Awakening demo</a>!
-    </p>
-    <p class="desktop">
-        Controls:&nbsp;
-        <span class=key>Z</span> = <span class=button>A</span>,&nbsp;
-        <span class=key>X</span> = <span class=button>B</span>,&nbsp;
-        <span class=key>Arrows</span> = <span class=button>D-Pad</span>,&nbsp;
-        <span class=key>Enter</span> = <span class=button> Start</span>,&nbsp;
-        <span class=key>Shift</span> = <span class=button>Select</span>
     </p>
     <p>
         <a href="https://github.com/aelred/nes-rust">GitHub</a>
