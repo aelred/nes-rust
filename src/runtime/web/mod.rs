@@ -91,14 +91,14 @@ fn run() -> Result<()> {
         }
     })?;
 
-    let controller_element = dom
-        .get_element_by_id("controller")
-        .context("controller not found")?;
-
-    add_event_listener(&controller_element, "contextmenu", |event: PointerEvent| {
-        event.prevent_default();
-        Ok(())
-    })?;
+    let controllers = dom.get_elements_by_class_name("controller");
+    for i in 0..controllers.length() {
+        let target: EventTarget = controllers.get_with_index(i).unwrap().into();
+        add_event_listener(&target, "contextmenu", |event: PointerEvent| {
+            event.prevent_default();
+            Ok(())
+        })?;
+    }
 
     const BUTTONS: [(&str, Buttons); 8] = [
         ("a", Buttons::A),
@@ -111,26 +111,30 @@ fn run() -> Result<()> {
         ("right", Buttons::RIGHT),
     ];
 
-    for (button_id, button) in BUTTONS.iter() {
-        let element = dom
-            .get_element_by_id(button_id)
-            .context(format!("button not found {button_id}"))?;
+    for (button_class, button) in BUTTONS.iter() {
+        let elements = dom.get_elements_by_class_name(button_class);
 
-        add_event_listener(&element, "pointerenter", {
-            let ctx = ctx.clone();
-            move |_: PointerEvent| {
-                ctx.borrow_mut().runner.press(*button);
-                Ok(())
-            }
-        })?;
+        for i in 0..elements.length() {
+            let target: EventTarget = elements.get_with_index(i).unwrap().into();
 
-        add_event_listener(&element, "pointerout", {
-            let ctx = ctx.clone();
-            move |_: PointerEvent| {
-                ctx.borrow_mut().runner.release(*button);
-                Ok(())
-            }
-        })?;
+            add_event_listener(&target, "pointerenter", {
+                let ctx = ctx.clone();
+                move |event: PointerEvent| {
+                    ctx.borrow_mut().runner.press(*button);
+                    event.prevent_default();
+                    Ok(())
+                }
+            })?;
+
+            add_event_listener(&target, "pointerout", {
+                let ctx = ctx.clone();
+                move |event: PointerEvent| {
+                    ctx.borrow_mut().runner.release(*button);
+                    event.prevent_default();
+                    Ok(())
+                }
+            })?;
+        }
     }
 
     let upload_button = dom
