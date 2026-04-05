@@ -1,8 +1,3 @@
-setup:
-    rustup toolchain install nightly
-    rustup component add rust-src --toolchain nightly
-    cargo install wasm-bindgen-cli@^0.2
-
 # Run the given ROM file
 run rom:
     cargo run --no-default-features --features=sdl -- {{quote(rom)}}
@@ -19,7 +14,7 @@ build-web:
 
     # Build WASM
     # Various flags needed because we want to use threads, atomics and shared memory in WASM
-    cargo +nightly build --bin nes-rust --release --target wasm32-unknown-unknown \
+    cargo build --bin nes-rust --release --target wasm32-unknown-unknown \
       --no-default-features --features=web \
       -Zbuild-std=std,panic_abort \
       --config "target.wasm32-unknown-unknown.rustflags='\
@@ -31,8 +26,7 @@ build-web:
     wasm-bindgen target/wasm32-unknown-unknown/release/nes-rust.wasm --target web --out-dir "$tmpdir" --no-typescript
 
     # Optimise WASM
-    npx --package binaryen@125 \
-        wasm-opt "$tmpdir/nes-rust_bg.wasm" --output "$tmpdir/nes-rust_bg.wasm" -O4 --debuginfo --dce
+    wasm-opt "$tmpdir/nes-rust_bg.wasm" --output "$tmpdir/nes-rust_bg.wasm" -O4 --debuginfo --dce
 
     cp -a "$tmpdir/." ./web
 
@@ -42,7 +36,7 @@ watch-web:
 
 # Host web server
 run-server:
-    npx vite ./web --open
+    vite ./web --open
 
 # Build and serve the web version with hot reload
 [parallel]

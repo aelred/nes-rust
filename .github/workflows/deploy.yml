@@ -25,7 +25,9 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: extractions/setup-just@v2
       - name: Setup
-        run: just setup
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.4.4
       - name: Build
         run: just build-web
       - name: Upload artifact
