@@ -117,7 +117,7 @@ fn run() -> Result<()> {
         for i in 0..elements.length() {
             let target: EventTarget = elements.get_with_index(i).unwrap().into();
 
-            add_event_listener(&target, "pointerenter", {
+            add_event_listener(&target, "pointerdown", {
                 let ctx = ctx.clone();
                 move |event: PointerEvent| {
                     ctx.borrow_mut().runner.press(*button);
@@ -126,7 +126,7 @@ fn run() -> Result<()> {
                 }
             })?;
 
-            add_event_listener(&target, "pointerout", {
+            add_event_listener(&target, "pointerup", {
                 let ctx = ctx.clone();
                 move |event: PointerEvent| {
                     ctx.borrow_mut().runner.release(*button);
