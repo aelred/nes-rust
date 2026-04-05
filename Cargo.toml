@@ -2,7 +2,7 @@
 name = "nes-rust"
 version = "0.1.0"
 authors = ["Felix Chapman <aelred717@gmail.com>"]
-edition = "2021"
+edition = "2024"
 default-run = "nes-rust"
 
 [lib]

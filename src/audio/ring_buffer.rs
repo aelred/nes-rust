@@ -158,15 +158,17 @@ impl RingBuffer {
         let end = (start + size) % self.capacity;
         let buffer = self.buffer.as_ptr() as *mut f32;
 
-        if end > start || size == 0 {
-            let slice = std::slice::from_raw_parts(buffer.add(start), size);
-            (slice, &[])
-        } else {
-            // Window wraps around
-            (
-                std::slice::from_raw_parts(buffer.add(start), self.capacity - start),
-                std::slice::from_raw_parts(buffer, end),
-            )
+        unsafe {
+            if end > start || size == 0 {
+                let slice = std::slice::from_raw_parts(buffer.add(start), size);
+                (slice, &[])
+            } else {
+                // Window wraps around
+                (
+                    std::slice::from_raw_parts(buffer.add(start), self.capacity - start),
+                    std::slice::from_raw_parts(buffer, end),
+                )
+            }
         }
     }
 
@@ -177,15 +179,17 @@ impl RingBuffer {
         let end = (start + size) % self.capacity;
         let buffer = self.buffer.as_ptr() as *mut f32;
 
-        if end > start || size == 0 {
-            let slice = std::slice::from_raw_parts_mut(buffer.add(start), size);
-            (slice, &mut [])
-        } else {
-            // Window wraps around
-            (
-                std::slice::from_raw_parts_mut(buffer.add(start), self.capacity - start),
-                std::slice::from_raw_parts_mut(buffer, end),
-            )
+        unsafe {
+            if end > start || size == 0 {
+                let slice = std::slice::from_raw_parts_mut(buffer.add(start), size);
+                (slice, &mut [])
+            } else {
+                // Window wraps around
+                (
+                    std::slice::from_raw_parts_mut(buffer.add(start), self.capacity - start),
+                    std::slice::from_raw_parts_mut(buffer, end),
+                )
+            }
         }
     }
 }
