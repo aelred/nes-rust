@@ -1,8 +1,14 @@
 [tools]
 just = "1"
-rust = { version = "nightly", postinstall = "rustup component add rust-src" }
+rust = { version = "nightly", targets = "wasm32-unknown-unknown", components = "rust-src" }
+terraform = "1"
+"cargo:cargo-watch" = "8"
+
+# Web
 "cargo:wasm-bindgen-cli" = "0.2"
 "github:WebAssembly/binaryen" = { version = "129", version_prefix = "version_" }
 "npm:vite" = "8"
-terraform = "1"
 
+# SDL
+"github:llvm/llvm-project" = { version = "22.1.2", version_prefix = "llvmorg-" }
+cmake = "3"
