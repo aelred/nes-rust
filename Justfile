@@ -40,7 +40,7 @@ run-server:
 
 # Build and serve the web version with hot reload
 [parallel]
-serve: watch-web run-server
+serve: build-web && watch-web run-server
 
 # Run all tests
 test:
