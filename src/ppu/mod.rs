@@ -363,8 +363,6 @@ impl<M: Memory> PPU<M> {
             self.palette_select.shift();
         }
 
-        let vblank = self.scanline >= 240;
-
         if self.cycle_count < 340 {
             self.cycle_count += 1;
         } else {
@@ -376,11 +374,7 @@ impl<M: Memory> PPU<M> {
             }
         };
 
-        PPUOutput {
-            color,
-            interrupt,
-            vblank,
-        }
+        PPUOutput { color, interrupt }
     }
 }
 
@@ -409,8 +403,6 @@ impl<M: Debug> Debug for PPU<M> {
 pub struct PPUOutput {
     pub color: Option<Color>,
     pub interrupt: bool,
-    /// vblank status sent to display, without quirks of the real PPU vblank
-    pub vblank: bool,
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]
@@ -695,6 +687,69 @@ mod tests {
         let memory = ArrayMemory::default();
         let mut ppu = PPU::with_memory(memory);
         let _color: Option<Color> = ppu.tick().color;
+    }
+
+    #[test]
+    fn each_scanline_contains_256_visible_pixels() {
+        let memory = ArrayMemory::default();
+        let mut ppu = PPU::with_memory(memory);
+
+        let mut pixels_output = 0;
+
+        // Watch for several frames
+        for _ in 0..3 * 256 * 240 {
+            match ppu.tick().color {
+                None => {
+                    if pixels_output != 0 {
+                        assert_eq!(pixels_output, 256);
+                    }
+
+                    pixels_output = 0;
+                }
+                Some(_) => {
+                    pixels_output += 1;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn each_scanline_takes_341_cycles() {
+        let memory = ArrayMemory::default();
+        let mut ppu = PPU::with_memory(memory);
+
+        // Watch for many scanlines over multiple frames
+        for _ in 0..1000 {
+            let mut cycles = 0;
+
+            let scanline = ppu.scanline;
+            while ppu.scanline == scanline {
+                ppu.tick();
+                cycles += 1;
+            }
+
+            assert_eq!(cycles, 341, "scanline={scanline}");
+        }
+    }
+
+    #[test]
+    fn each_frame_takes_89342_cycles() {
+        let memory = ArrayMemory::default();
+        let mut ppu = PPU::with_memory(memory);
+
+        // Watch for multiple frames
+        for _ in 0..3 {
+            for _ in 0..89342 {
+                ppu.tick();
+            }
+
+            assert_eq!(ppu.scanline, 0);
+            assert_eq!(ppu.cycle_count, 0);
+        }
+
+        // Sanity check that cycle count does indeed change
+        ppu.tick();
+        assert_ne!(ppu.cycle_count, 0);
     }
 
     #[test]
