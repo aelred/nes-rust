@@ -14,11 +14,21 @@ enum Setup {
     ProgramCounter(u16),
 }
 
+#[derive(Copy, Clone)]
 enum Terminate {
     #[allow(dead_code)]
     // Useful for debugging or adding new tests
     Never,
     Address(u16),
+}
+
+impl Terminate {
+    fn should_terminate(self, nes: &mut NES) -> bool {
+        match self {
+            Terminate::Never => false,
+            Terminate::Address(address) => nes.program_counter() == Address::new(address),
+        }
+    }
 }
 
 enum Success {
@@ -29,6 +39,8 @@ enum Success {
     Byte(u16, u8),
     Short(u16, u16),
 }
+
+const MAX_CYCLES: usize = 20_000_000;
 
 #[parameterized(
     nestest = {
@@ -188,47 +200,42 @@ fn external_test(
         Setup::ProgramCounter(address) => nes.set_program_counter(Address::new(address)),
     }
 
-    const ITERATIONS: usize = 10_000_000;
-
-    for cycles in 0..ITERATIONS {
-        let terminated = match terminate_check {
-            Terminate::Never => false,
-            Terminate::Address(address) => nes.program_counter() == Address::new(address),
-        };
-
-        if !terminated {
-            nes.tick();
-            continue;
-        }
-
-        let image = front_buffer.read_buffer();
-        match get_result(success_check, &mut nes, image) {
-            Ok(()) => {
-                if cycles < 10 {
-                    panic!("Test passed suspiciously quickly, only {} cycles", cycles);
-                }
-                return;
-            }
-            Err(message) => {
-                let fname = save_nes_test_result_image(name, image);
-                panic!("Failed: {}. Saved image in {}", message, fname)
-            }
-        }
+    let mut cycles = 0;
+    while cycles < MAX_CYCLES && !terminate_check.should_terminate(&mut nes) {
+        cycles += nes.tick() as usize;
     }
 
-    let pc1 = nes.program_counter();
-    nes.tick();
-    let pc2 = nes.program_counter();
-    nes.tick();
-    let pc3 = nes.program_counter();
-
-    panic!(
-        "Test didn't complete after {} iterations, last 3 program counters were: {} {} {}",
-        ITERATIONS, pc1, pc2, pc3
-    );
+    let image = front_buffer.read_buffer();
+    if let Err(message) = get_result(success_check, cycles, &mut nes, image) {
+        let filename = save_nes_test_result_image(name, image);
+        panic!("Failed: {}. Saved image in {}", message, filename)
+    }
 }
 
-fn get_result(success_check: Success, nes: &mut NES, image: &[u8]) -> Result<(), String> {
+fn get_result(
+    success_check: Success,
+    cycles: usize,
+    nes: &mut NES,
+    image: &[u8],
+) -> Result<(), String> {
+    if cycles < 10 {
+        return Err(format!(
+            "Test passed suspiciously quickly, only {cycles} cycles"
+        ));
+    }
+
+    if cycles >= MAX_CYCLES {
+        let pc1 = nes.program_counter();
+        nes.tick();
+        let pc2 = nes.program_counter();
+        nes.tick();
+        let pc3 = nes.program_counter();
+
+        return Err(format!(
+            "Test didn't complete after {MAX_CYCLES} cycles, last 3 program counters were: {pc1} {pc2} {pc3}"
+        ));
+    }
+
     match success_check {
         Success::Never => Err("Always fails".to_owned()),
         Success::Screen(bytes) => {
