@@ -1,13 +1,14 @@
 //! System Functions
 
+use crate::cpu::Tickable;
 use crate::{
-    cpu::{addressing_modes::IncDecAddressingMode, Status},
-    Address, Memory, CPU,
+    cpu::{addressing_modes::IncDecAddressingMode, Status}, Address, Memory,
+    CPU,
 };
 
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn brk(&mut self) {
         self.ignore_argument();
         self.interrupt(INTERRUPT_VECTOR, true)
@@ -42,7 +43,8 @@ mod tests {
     use crate::{
         cpu::{stack, tests::run_instr, Status},
         instructions::{BRK, LSR_ACC, RTI},
-        mem, Address,
+        mem,
+        Address,
     };
 
     #[test]

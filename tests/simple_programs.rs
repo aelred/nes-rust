@@ -1,8 +1,8 @@
 use nes_rust::instructions::*;
-use nes_rust::mem;
 use nes_rust::Address;
 use nes_rust::Memory;
 use nes_rust::CPU;
+use nes_rust::{mem, Tickable};
 
 const PARAM_ADDRESS: u8 = 0x80;
 const RETURN_ADDRESS: u8 = 0xB0;
@@ -18,7 +18,7 @@ macro_rules! run {
     };
 }
 
-fn run<M: Memory>(cpu: &mut CPU<M>, params: &[u8], expected: &[u8]) {
+fn run<M: Memory + Tickable>(cpu: &mut CPU<M>, params: &[u8], expected: &[u8]) {
     for (offset, param) in params.iter().enumerate() {
         cpu.write(
             Address::from_bytes(0, PARAM_ADDRESS) + offset as u16,

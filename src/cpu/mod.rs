@@ -50,7 +50,7 @@ pub struct CPU<M = NESCPUMemory> {
     cycle_count: u8,
 }
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub fn from_memory(mut memory: M) -> Self {
         let lower = memory.read(RESET_VECTOR);
         let higher = memory.read(RESET_VECTOR + 1);
@@ -77,16 +77,20 @@ impl<M: Memory> CPU<M> {
         self.program_counter = address;
     }
 
-    pub fn non_maskable_interrupt(&mut self) {
-        self.non_maskable_interrupt = true;
-    }
-
     pub fn memory(&mut self) -> &mut M {
         &mut self.memory
     }
 
-    pub fn read(&mut self, address: Address) -> u8 {
+    fn increment_cycle_count(&mut self) {
+        let interrupt = self.memory.tick();
+        if interrupt {
+            self.non_maskable_interrupt = true;
+        }
         self.cycle_count += 1;
+    }
+
+    pub fn read(&mut self, address: Address) -> u8 {
+        self.increment_cycle_count();
         self.memory.read(address)
     }
 
@@ -97,7 +101,7 @@ impl<M: Memory> CPU<M> {
     }
 
     pub fn write(&mut self, address: Address, byte: u8) {
-        self.cycle_count += 1;
+        self.increment_cycle_count();
         self.memory.write(address, byte);
     }
 
@@ -296,7 +300,7 @@ impl<M: Memory> CPU<M> {
                 page_cross,
             } => {
                 if page_cross || !readonly {
-                    self.cycle_count += 1;
+                    self.increment_cycle_count();
                 }
                 self.read(address)
             }
@@ -319,7 +323,7 @@ impl<M: Memory> CPU<M> {
             } => {
                 // Redundant read
                 if writeonly {
-                    self.cycle_count += 1;
+                    self.increment_cycle_count();
                 }
                 self.write(address, byte)
             }
@@ -349,7 +353,7 @@ impl<M: Memory> CPU<M> {
 }
 
 trait ReferenceAddressingMode {
-    fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference;
+    fn fetch_ref<M: Memory + Tickable>(self, cpu: &mut CPU<M>) -> Reference;
 }
 
 #[derive(Copy, Clone)]
@@ -410,6 +414,11 @@ impl Status {
     }
 }
 
+pub trait Tickable {
+    /// Tick one CPU cycle. Returns true if NMI fired.
+    fn tick(&mut self) -> bool;
+}
+
 #[cfg(test)]
 mod tests {
     use yare::parameterized;
@@ -431,8 +440,8 @@ mod tests {
 
     #[test]
     fn cpu_initialises_in_default_state() {
-        let mut memory = ArrayMemory::default();
-        let cpu = CPU::from_memory(&mut memory);
+        let memory = ArrayMemory::default();
+        let cpu = CPU::from_memory(memory);
 
         assert_eq!(cpu.program_counter, Address::new(0x00));
         assert_eq!(cpu.accumulator, 0);
@@ -443,11 +452,11 @@ mod tests {
 
     #[test]
     fn cpu_initialises_program_counter_to_reset_vector() {
-        let mut memory = mem! {
+        let memory = mem! {
             0xFFFC => { 0x34, 0x12 }
         };
 
-        let cpu = CPU::from_memory(&mut memory);
+        let cpu = CPU::from_memory(memory);
 
         assert_eq!(cpu.program_counter, Address::new(0x1234));
     }
@@ -575,16 +584,6 @@ mod tests {
         );
 
         assert_eq!(cpu.program_counter, Address::new(0x5678));
-    }
-
-    #[test]
-    fn calling_non_maskable_interrupt_sets_interrupt_flag() {
-        let mut cpu = CPU::from_memory(mem!());
-        cpu.non_maskable_interrupt = false;
-
-        cpu.non_maskable_interrupt();
-
-        assert!(cpu.non_maskable_interrupt);
     }
 
     enum ParameterizedScenario {

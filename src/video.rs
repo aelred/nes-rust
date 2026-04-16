@@ -76,7 +76,17 @@ impl BackBuffer {
     }
 }
 
-#[derive(Debug)]
+impl Default for BackBuffer {
+    fn default() -> Self {
+        Self {
+            back_buffer: Some(Box::new([0; _])),
+            offset: 0,
+            intermediate_buffer: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 struct IntermediateBuffer {
     buffer: AtomicPtr<Buffer>,
     dirty: AtomicBool,

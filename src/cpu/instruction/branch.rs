@@ -1,8 +1,9 @@
 //! Branches
 
+use crate::cpu::Tickable;
 use crate::{cpu::Status, Memory, CPU};
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn bcc(&mut self) {
         self.branch_if(!self.status.contains(Status::CARRY))
     }
@@ -40,9 +41,9 @@ impl<M: Memory> CPU<M> {
         if cond {
             let previous = self.program_counter;
             self.program_counter += offset as u16;
-            self.cycle_count += 1;
+            self.increment_cycle_count();
             if self.program_counter.page_crossed(previous) {
-                self.cycle_count += 1;
+                self.increment_cycle_count();
             }
         }
     }
@@ -53,7 +54,8 @@ mod tests {
     use crate::{
         cpu::{tests::run_instr, Status},
         instructions::{BCC, BCS, BEQ, BMI, BNE, BPL, BVC, BVS},
-        mem, Address,
+        mem,
+        Address,
     };
 
     #[test]

@@ -1,8 +1,9 @@
 //! Jumps & Calls
 
+use crate::cpu::Tickable;
 use crate::{cpu::addressing_modes::JumpAddressingMode, Address, Memory, CPU};
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn jmp(&mut self, addressing_mode: JumpAddressingMode) {
         self.program_counter = addressing_mode.fetch_address(self);
     }
@@ -10,7 +11,7 @@ impl<M: Memory> CPU<M> {
     pub(in crate::cpu) fn jsr(&mut self) {
         let addr = self.fetch_address_at_program_counter();
 
-        self.cycle_count += 1; // Mysterious internal operation happens here
+        self.increment_cycle_count(); // Mysterious internal operation happens here
 
         // For some reason the spec says the pointer must be to the last byte of the JSR
         // instruction...
@@ -40,7 +41,8 @@ mod tests {
             tests::run_instr,
         },
         instructions::{JMP_ABS, JMP_IND, JSR, RTS},
-        mem, Address,
+        mem,
+        Address,
     };
 
     #[test]

@@ -4,8 +4,9 @@ use std::fmt::{Debug, Formatter};
 use log::trace;
 
 use crate::apu::APU;
+use crate::cpu::Tickable;
 use crate::input::{Controller, Input};
-use crate::ppu::{self, PPURegisters};
+use crate::ppu::{self, RealPPU};
 use crate::ArrayMemory;
 use crate::Memory;
 use crate::{cartridge, Address};
@@ -44,29 +45,29 @@ const JOY1_ADDRESS: Address = Address::new(0x4016);
 const APU_FRAME_COUNTER: Address = Address::new(0x4017);
 const PRG_SPACE: Address = Address::new(0x4020);
 
-pub struct NESCPUMemory<PRG = cartridge::PRG, PPU = ppu::PPU, IN = Controller> {
+pub struct NESCPUMemory<PRG = cartridge::PRG, PPU = RealPPU, IN = Controller> {
     internal_ram: [u8; 0x800],
     prg: PRG,
-    ppu_registers: PPU,
+    ppu: PPU,
     apu: APU,
     input: IN,
     the_rest: ArrayMemory, // TODO
 }
 
-impl<PRG: Memory, PPU: PPURegisters, IN: Input> NESCPUMemory<PRG, PPU, IN> {
-    pub fn new(prg: PRG, ppu_registers: PPU, apu: APU, input: IN) -> Self {
+impl<PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<PRG, PPU, IN> {
+    pub fn new(prg: PRG, ppu: PPU, apu: APU, input: IN) -> Self {
         NESCPUMemory {
             internal_ram: [0; 0x800],
             prg,
-            ppu_registers,
+            ppu,
             apu,
             input,
             the_rest: ArrayMemory::default(),
         }
     }
 
-    pub fn ppu_registers(&mut self) -> &mut PPU {
-        &mut self.ppu_registers
+    pub fn ppu(&mut self) -> &mut PPU {
+        &mut self.ppu
     }
 
     pub fn apu(&mut self) -> &mut APU {
@@ -90,7 +91,7 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> NESCPUMemory<PRG, PPU, IN> {
             *byte = self.read(address + offset as u16);
         }
 
-        self.ppu_registers.write_oam_dma(data);
+        self.ppu.write_oam_dma(data);
     }
 }
 
@@ -98,14 +99,14 @@ impl<PRG: Debug, PPU: Debug, IN: Debug> Debug for NESCPUMemory<PRG, PPU, IN> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NESCPUMemory")
             .field("prg", &self.prg)
-            .field("ppu_registers", &self.ppu_registers)
+            .field("ppu_registers", &self.ppu)
             .field("input", &self.input)
             .field("the_rest", &self.the_rest)
             .finish()
     }
 }
 
-impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU, IN> {
+impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<PRG, PPU, IN> {
     fn read(&mut self, address: Address) -> u8 {
         if address >= PRG_SPACE {
             self.prg.read(address)
@@ -117,7 +118,7 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
             self.the_rest.read(address) // TODO
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
-            let ppu_registers = self.ppu_registers.borrow_mut();
+            let ppu_registers = self.ppu.borrow_mut();
             match mirrored {
                 PPU_STATUS => ppu_registers.read_status(),
                 OAM_DATA => ppu_registers.read_oam_data(),
@@ -156,7 +157,7 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
             }
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
-            let ppu_registers = self.ppu_registers.borrow_mut();
+            let ppu_registers = self.ppu.borrow_mut();
             match mirrored {
                 PPU_CONTROL => {
                     ppu_registers.write_control(byte);
@@ -192,9 +193,16 @@ impl<PRG: Memory, PPU: PPURegisters, IN: Input> Memory for NESCPUMemory<PRG, PPU
     }
 }
 
+impl Tickable for NESCPUMemory {
+    fn tick(&mut self) -> bool {
+        self.ppu.tick()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ppu::PPU;
 
     #[test]
     fn can_read_and_write_internal_ram_in_nes_cpu_memory() {
@@ -229,24 +237,24 @@ mod tests {
     fn can_write_ppuctrl_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
         memory.write(Address::new(0x2000), 0x43);
-        assert_eq!(memory.ppu_registers.control, 0x43);
+        assert_eq!(memory.ppu.control, 0x43);
         memory.write(Address::new(0x3ff8), 0x44);
-        assert_eq!(memory.ppu_registers.control, 0x44);
+        assert_eq!(memory.ppu.control, 0x44);
     }
 
     #[test]
     fn can_write_ppumask_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
         memory.write(Address::new(0x2001), 0x43);
-        assert_eq!(memory.ppu_registers.mask, 0x43);
+        assert_eq!(memory.ppu.mask, 0x43);
         memory.write(Address::new(0x3ff9), 0x44);
-        assert_eq!(memory.ppu_registers.mask, 0x44);
+        assert_eq!(memory.ppu.mask, 0x44);
     }
 
     #[test]
     fn can_read_ppustatus_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.status = 0x43;
+        memory.ppu.status = 0x43;
         assert_eq!(memory.read(Address::new(0x2002)), 0x43);
         assert_eq!(memory.read(Address::new(0x3ffa)), 0x43);
     }
@@ -255,15 +263,15 @@ mod tests {
     fn can_write_oamaddr_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
         memory.write(Address::new(0x2003), 0x43);
-        assert_eq!(memory.ppu_registers.oam_address, 0x43);
+        assert_eq!(memory.ppu.oam_address, 0x43);
         memory.write(Address::new(0x3ffb), 0x44);
-        assert_eq!(memory.ppu_registers.oam_address, 0x44);
+        assert_eq!(memory.ppu.oam_address, 0x44);
     }
 
     #[test]
     fn can_read_oamdata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.oam_data = 0x43;
+        memory.ppu.oam_data = 0x43;
         assert_eq!(memory.read(Address::new(0x3ffc)), 0x43);
         assert_eq!(memory.read(Address::new(0x2004)), 0x43);
     }
@@ -272,9 +280,9 @@ mod tests {
     fn can_write_oamdata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
         memory.write(Address::new(0x2004), 0x43);
-        assert_eq!(memory.ppu_registers.oam_data, 0x43);
+        assert_eq!(memory.ppu.oam_data, 0x43);
         memory.write(Address::new(0x3ffc), 0x44);
-        assert_eq!(memory.ppu_registers.oam_data, 0x44);
+        assert_eq!(memory.ppu.oam_data, 0x44);
     }
 
     #[test]
@@ -291,40 +299,40 @@ mod tests {
         }
         memory.write(Address::new(0x4014), 0x02);
 
-        assert_eq!(memory.ppu_registers.oam_dma, expected);
+        assert_eq!(memory.ppu.oam_dma, expected);
     }
 
     #[test]
     fn can_write_ppuscroll_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
         memory.write(Address::new(0x2005), 0x43);
-        assert_eq!(memory.ppu_registers.scroll, 0x43);
+        assert_eq!(memory.ppu.scroll, 0x43);
         memory.write(Address::new(0x3ffd), 0x44);
-        assert_eq!(memory.ppu_registers.scroll, 0x44);
+        assert_eq!(memory.ppu.scroll, 0x44);
     }
 
     #[test]
     fn can_write_ppuaddr_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
         memory.write(Address::new(0x2006), 0x43);
-        assert_eq!(memory.ppu_registers.address, 0x43);
+        assert_eq!(memory.ppu.address, 0x43);
         memory.write(Address::new(0x3ffe), 0x44);
-        assert_eq!(memory.ppu_registers.address, 0x44);
+        assert_eq!(memory.ppu.address, 0x44);
     }
 
     #[test]
     fn can_read_ppudata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
         memory.write(Address::new(0x2007), 0x43);
-        assert_eq!(memory.ppu_registers.data, 0x43);
+        assert_eq!(memory.ppu.data, 0x43);
         memory.write(Address::new(0x3fff), 0x44);
-        assert_eq!(memory.ppu_registers.data, 0x44);
+        assert_eq!(memory.ppu.data, 0x44);
     }
 
     #[test]
     fn can_write_ppudata_in_nes_cpu_memory() {
         let mut memory = nes_cpu_memory();
-        memory.ppu_registers.data = 0x43;
+        memory.ppu.data = 0x43;
         assert_eq!(memory.read(Address::new(0x3fff)), 0x43);
         assert_eq!(memory.read(Address::new(0x2007)), 0x43);
     }
@@ -356,7 +364,7 @@ mod tests {
         assert_eq!(memory.input.0, 52);
     }
 
-    struct MockPPURegisters {
+    struct MockPPU {
         control: u8,
         mask: u8,
         status: u8,
@@ -368,7 +376,13 @@ mod tests {
         oam_dma: [u8; 256],
     }
 
-    impl PPURegisters for MockPPURegisters {
+    impl Tickable for MockPPU {
+        fn tick(&mut self) -> bool {
+            false
+        }
+    }
+
+    impl PPU for MockPPU {
         fn write_control(&mut self, byte: u8) {
             self.control = byte;
         }
@@ -426,8 +440,8 @@ mod tests {
         }
     }
 
-    fn nes_cpu_memory() -> NESCPUMemory<ArrayMemory, MockPPURegisters, MockInput> {
-        let ppu = MockPPURegisters {
+    fn nes_cpu_memory() -> NESCPUMemory<ArrayMemory, MockPPU, MockInput> {
+        let ppu = MockPPU {
             control: 0,
             mask: 0,
             status: 0,

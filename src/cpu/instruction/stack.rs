@@ -1,9 +1,9 @@
 //! Stack Operations
 use crate::Memory;
 
-use crate::cpu::{Status, CPU};
+use crate::cpu::{Status, Tickable, CPU};
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn pla(&mut self) {
         self.ignore_argument();
         self.increment_stack();
@@ -33,7 +33,8 @@ mod tests {
     use crate::{
         cpu::{stack, tests::run_instr, Status},
         instructions::{JSR, PHA, PHP, PLA, PLP, RTS},
-        mem, Address,
+        mem,
+        Address,
     };
 
     #[test]

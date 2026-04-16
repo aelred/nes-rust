@@ -1,11 +1,12 @@
 //! Arithmetic operations
 
+use crate::cpu::Tickable;
 use crate::{
-    cpu::addressing_modes::{CompareAddressingMode, FlexibleAddressingMode},
-    Memory, CPU,
+    cpu::addressing_modes::{CompareAddressingMode, FlexibleAddressingMode}, Memory,
+    CPU,
 };
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn adc(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.add_to_accumulator(value);

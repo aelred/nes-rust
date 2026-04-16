@@ -1,5 +1,5 @@
 use crate::address::Address;
-use crate::cpu::CPU;
+use crate::cpu::{Tickable, CPU};
 use crate::Memory;
 
 use super::Reference;
@@ -16,7 +16,7 @@ macro_rules! def_addressing_modes {
         }
 
         impl ReferenceAddressingMode for $name {
-            fn fetch_ref<M: Memory>(self, cpu: &mut CPU<M>) -> Reference {
+            fn fetch_ref<M: Memory + Tickable>(self, cpu: &mut CPU<M>) -> Reference {
                 match self {
                     $(
                     $name::$mode => cpu.exec_addressing_mode(AddressingMode::$mode),
@@ -127,7 +127,7 @@ def_addressing_modes! {
 }
 
 impl JumpAddressingMode {
-    pub fn fetch_address<M: Memory>(self, cpu: &mut CPU<M>) -> Address {
+    pub fn fetch_address<M: Memory + Tickable>(self, cpu: &mut CPU<M>) -> Address {
         match self {
             JumpAddressingMode::Absolute => cpu.absolute_address(),
             JumpAddressingMode::Indirect => cpu.indirect_address(),
@@ -150,7 +150,7 @@ enum AddressingMode {
     IndirectIndexed,
 }
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     fn exec_addressing_mode(&mut self, addressing_mode: AddressingMode) -> Reference {
         match addressing_mode {
             AddressingMode::Accumulator => {

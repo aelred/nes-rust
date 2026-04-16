@@ -4,21 +4,20 @@ use bitflags::bitflags;
 use control::PatternTable;
 use control::SpriteSize;
 use log::warn;
-pub use registers::PPURegisters;
-
-use crate::Address;
-use crate::Memory;
 
 use self::control::Control;
 use self::mask::Mask;
 pub use self::memory::NESPPUMemory;
 use self::scroll::Scroll;
 use self::status::Status;
+use crate::cpu::Tickable;
+use crate::video::BackBuffer;
+use crate::Address;
+use crate::Memory;
 
 mod control;
 mod mask;
 mod memory;
-mod registers;
 mod scroll;
 mod status;
 
@@ -27,8 +26,33 @@ const SPRITE_PALETTES: Address = Address::new(0x3f10);
 
 const ACTIVE_SPRITES: usize = 8;
 
-pub struct PPU<M = NESPPUMemory> {
+pub trait PPU: Tickable {
+    fn write_control(&mut self, byte: u8);
+
+    fn write_mask(&mut self, byte: u8);
+
+    fn read_status(&mut self) -> u8;
+
+    fn write_oam_address(&mut self, byte: u8);
+
+    fn read_oam_data(&mut self) -> u8;
+
+    fn write_oam_data(&mut self, byte: u8);
+
+    fn write_scroll(&mut self, byte: u8);
+
+    fn write_address(&mut self, byte: u8);
+
+    fn read_data(&mut self) -> u8;
+
+    fn write_data(&mut self, byte: u8);
+
+    fn write_oam_dma(&mut self, bytes: [u8; 256]);
+}
+
+pub struct RealPPU<M = NESPPUMemory> {
     memory: M,
+    video_out: BackBuffer,
     read_buffer: u8,
     object_attribute_memory: [u8; 256],
     scanline: u16,
@@ -51,10 +75,11 @@ pub struct PPU<M = NESPPUMemory> {
     suppress_vblank: bool,
 }
 
-impl<M: Memory> PPU<M> {
-    pub fn with_memory(memory: M) -> Self {
-        PPU {
+impl<M: Memory> RealPPU<M> {
+    pub fn new(memory: M, video_out: BackBuffer) -> Self {
+        Self {
             memory,
+            video_out,
             read_buffer: 0,
             object_attribute_memory: [0; 256],
             scanline: 0,
@@ -73,6 +98,11 @@ impl<M: Memory> PPU<M> {
             oam_address: 0,
             suppress_vblank: false,
         }
+    }
+
+    /// Disconnect video and replace with a no-op video out.
+    pub fn disconnect_video(&mut self) -> BackBuffer {
+        std::mem::take(&mut self.video_out)
     }
 
     fn address(&self) -> Address {
@@ -310,7 +340,7 @@ impl<M: Memory> PPU<M> {
             .intersects(Mask::SHOW_BACKGROUND | Mask::SHOW_SPRITES)
     }
 
-    pub fn tick(&mut self) -> PPUOutput {
+    fn ppu_tick(&mut self) -> PPUOutput {
         let mut interrupt = false;
 
         self.suppress_vblank = false;
@@ -378,7 +408,7 @@ impl<M: Memory> PPU<M> {
     }
 }
 
-impl<M: Debug> Debug for PPU<M> {
+impl<M: Debug> Debug for RealPPU<M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PPU")
             .field("memory", &self.memory)
@@ -495,7 +525,7 @@ fn set_all_bits_to_bit_at_index(byte: u8, index: u8) -> u8 {
     (!((byte >> index) & 1)).wrapping_add(1)
 }
 
-impl<M: Memory> PPURegisters for PPU<M> {
+impl<M: Memory> PPU for RealPPU<M> {
     fn write_control(&mut self, byte: u8) {
         self.control = Control::from_bits(byte);
 
@@ -593,6 +623,26 @@ impl<M: Memory> PPURegisters for PPU<M> {
     }
 }
 
+impl<M: Memory> Tickable for RealPPU<M> {
+    fn tick(&mut self) -> bool {
+        let mut interrupt = false;
+
+        for _ in 0..3 {
+            let output = self.ppu_tick();
+
+            if output.interrupt {
+                interrupt = true;
+            }
+
+            if let Some(color) = output.color {
+                self.video_out.write(color);
+            }
+        }
+
+        interrupt
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub struct Color(u8);
 
@@ -682,23 +732,27 @@ mod tests {
 
     use super::*;
 
+    pub fn ppu_with_memory<M: Memory>(memory: M) -> RealPPU<M> {
+        RealPPU::new(memory, BackBuffer::default())
+    }
+
     #[test]
     fn each_tick_produces_a_color() {
         let memory = ArrayMemory::default();
-        let mut ppu = PPU::with_memory(memory);
-        let _color: Option<Color> = ppu.tick().color;
+        let mut ppu = ppu_with_memory(memory);
+        let _color: Option<Color> = ppu.ppu_tick().color;
     }
 
     #[test]
     fn each_scanline_contains_256_visible_pixels() {
         let memory = ArrayMemory::default();
-        let mut ppu = PPU::with_memory(memory);
+        let mut ppu = ppu_with_memory(memory);
 
         let mut pixels_output = 0;
 
         // Watch for several frames
         for _ in 0..3 * 256 * 240 {
-            match ppu.tick().color {
+            match ppu.ppu_tick().color {
                 None => {
                     if pixels_output != 0 {
                         assert_eq!(pixels_output, 256);
@@ -716,7 +770,7 @@ mod tests {
     #[test]
     fn each_scanline_takes_341_cycles() {
         let memory = ArrayMemory::default();
-        let mut ppu = PPU::with_memory(memory);
+        let mut ppu = ppu_with_memory(memory);
 
         // Watch for many scanlines over multiple frames
         for _ in 0..1000 {
@@ -724,7 +778,7 @@ mod tests {
 
             let scanline = ppu.scanline;
             while ppu.scanline == scanline {
-                ppu.tick();
+                ppu.ppu_tick();
                 cycles += 1;
             }
 
@@ -735,12 +789,12 @@ mod tests {
     #[test]
     fn each_frame_takes_89342_cycles() {
         let memory = ArrayMemory::default();
-        let mut ppu = PPU::with_memory(memory);
+        let mut ppu = ppu_with_memory(memory);
 
         // Watch for multiple frames
         for _ in 0..3 {
             for _ in 0..89342 {
-                ppu.tick();
+                ppu.ppu_tick();
             }
 
             assert_eq!(ppu.scanline, 0);
@@ -748,13 +802,13 @@ mod tests {
         }
 
         // Sanity check that cycle count does indeed change
-        ppu.tick();
+        ppu.ppu_tick();
         assert_ne!(ppu.cycle_count, 0);
     }
 
     #[test]
     fn writing_ppu_control_sets_control() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_control(0b1010_1010);
         assert_eq!(ppu.control, Control::from_bits(0b1010_1010));
@@ -762,7 +816,7 @@ mod tests {
 
     #[test]
     fn writing_ppu_control_sets_temporary_address_to_nametable() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_control(0b0000_0000);
         assert_eq!(ppu.temporary_address, 0b0000_0000_0000_0000);
@@ -776,7 +830,7 @@ mod tests {
 
     #[test]
     fn writing_ppu_control_sets_tile_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_control(0b0000_0000);
         ppu.address = ppu.temporary_address;
@@ -794,7 +848,7 @@ mod tests {
 
     #[test]
     fn writing_ppu_control_sets_attribute_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_control(0b0000_0000);
         ppu.address = ppu.temporary_address;
@@ -812,7 +866,7 @@ mod tests {
 
     #[test]
     fn writing_ppu_mask_sets_mask() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_mask(0b1010_1010);
         assert_eq!(ppu.mask, Mask::from_bits_truncate(0b1010_1010));
@@ -820,7 +874,7 @@ mod tests {
 
     #[test]
     fn reading_ppu_status_returns_status_and_clears_vblank() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
         ppu.status |= Status::VBLANK;
         assert_eq!(ppu.read_status(), 0b1000_0000);
         assert!(!ppu.status.contains(Status::VBLANK));
@@ -828,7 +882,7 @@ mod tests {
 
     #[test]
     fn reading_ppu_status_resets_address_toggle() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_address(0x12);
         ppu.write_address(0x34);
@@ -847,7 +901,7 @@ mod tests {
 
     #[test]
     fn writing_ppu_address_once_sets_masked_upper_bits_of_temporary_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.temporary_address = 0;
         ppu.address = 0;
@@ -861,7 +915,7 @@ mod tests {
 
     #[test]
     fn writing_ppu_address_twice_sets_lower_bits_of_temporary_address_and_transfers_to_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.temporary_address = 0;
         ppu.address = 0;
@@ -876,7 +930,7 @@ mod tests {
 
     #[test]
     fn writing_ppu_address_twice_then_reading_data_reads_data_from_address() {
-        let mut ppu = PPU::with_memory(mem!(0x1234 => 0x54));
+        let mut ppu = ppu_with_memory(mem!(0x1234 => 0x54));
 
         ppu.write_address(0x12);
         ppu.write_address(0x34);
@@ -886,7 +940,7 @@ mod tests {
 
     #[test]
     fn writing_ppu_address_twice_then_writing_data_writes_data_to_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_address(0x12);
         ppu.write_address(0x34);
@@ -896,7 +950,7 @@ mod tests {
 
     #[test]
     fn reading_ppu_data_reads_from_internal_buffer() {
-        let mut ppu = PPU::with_memory(mem! {
+        let mut ppu = ppu_with_memory(mem! {
             0x2000 => {
                 0xAA, 0xBB, 0xCC, 0xDD
             }
@@ -918,7 +972,7 @@ mod tests {
 
     #[test]
     fn reading_ppu_data_from_palette_does_not_use_internal_buffer() {
-        let mut ppu = PPU::with_memory(mem! {
+        let mut ppu = ppu_with_memory(mem! {
             0x3f00 => {
                 0xAA, 0xBB, 0xCC, 0xDD
             }
@@ -940,7 +994,7 @@ mod tests {
 
     #[test]
     fn reading_or_writing_ppu_data_increments_address_by_increment_in_control_register() {
-        let mut ppu = PPU::with_memory(mem! {
+        let mut ppu = ppu_with_memory(mem! {
             0x1234 => { 0x00, 0x64, 0x00, 0x74 }
             0x1254 => { 0x84 }
             0x1274 => { 0x00 }
@@ -970,7 +1024,7 @@ mod tests {
 
     #[test]
     fn writing_oam_address_sets_oam_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_oam_address(0x42);
 
@@ -979,7 +1033,7 @@ mod tests {
 
     #[test]
     fn writing_oam_dma_writes_from_cpu_page_to_oam() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         let mut data = [0; 256];
 
@@ -994,7 +1048,7 @@ mod tests {
 
     #[test]
     fn writing_oam_dma_writes_from_oam_address_and_wraps() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
         ppu.oam_address = 0x42;
 
         let mut data = [0; 256];
@@ -1011,7 +1065,7 @@ mod tests {
 
     #[test]
     fn reading_oam_data_reads_from_oam_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
         ppu.oam_address = 0x42;
         ppu.object_attribute_memory[0x42] = 0x43;
 
@@ -1020,7 +1074,7 @@ mod tests {
 
     #[test]
     fn writing_oam_data_writes_to_oam_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
         ppu.oam_address = 0x42;
 
         ppu.write_oam_data(0x43);
@@ -1030,7 +1084,7 @@ mod tests {
 
     #[test]
     fn writing_oam_data_increments_oam_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
         ppu.oam_address = 0x42;
 
         ppu.write_oam_data(0x07);
@@ -1040,7 +1094,7 @@ mod tests {
 
     #[test]
     fn writing_ppu_scroll_writes_to_temporary_register() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_scroll(0b1111_1101);
         assert_eq!(ppu.temporary_address, 0b1_1111);
@@ -1053,7 +1107,7 @@ mod tests {
 
     #[test]
     fn incrementing_coarse_x_increments_to_next_tile() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.address = 0x41;
         ppu.increment_coarse_x();
@@ -1062,7 +1116,7 @@ mod tests {
 
     #[test]
     fn incrementing_coarse_x_switches_to_next_horizontal_nametable_when_coarse_x_is_31() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.address = 0b1000_0001_1111;
         ppu.increment_coarse_x();
@@ -1075,7 +1129,7 @@ mod tests {
 
     #[test]
     fn incrementing_fine_y_increments_fine_y_by_1() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.address = 0b0011_0000_0000_0000;
         ppu.increment_fine_y();
@@ -1084,7 +1138,7 @@ mod tests {
 
     #[test]
     fn incrementing_fine_y_increments_coarse_y_when_fine_y_is_7() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.address = 0b0111_0000_0010_0000;
         ppu.increment_fine_y();
@@ -1093,7 +1147,7 @@ mod tests {
 
     #[test]
     fn incrementing_fine_y_switches_to_next_vertical_nametable_when_coarse_y_is_29() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.address = 0b0111_0011_1010_0000;
         ppu.increment_fine_y();
@@ -1106,7 +1160,7 @@ mod tests {
 
     #[test]
     fn transfer_horizontal_scroll_transfers_horizontal_scroll_from_temporary_to_address() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
         ppu.address = 0b0010_1010_1010_1010;
         ppu.temporary_address = 0b0100_0100_0101_0101;
 
@@ -1117,7 +1171,7 @@ mod tests {
 
     #[test]
     fn can_get_tile_address_from_scroll() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.address = 0x0ABC;
 
@@ -1126,7 +1180,7 @@ mod tests {
 
     #[test]
     fn can_get_attribute_address_from_scroll() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         ppu.address = 0b0000_0000_0000_0000;
         assert_eq!(ppu.attribute_address(), Address::new(0b0010_0011_1100_0000));
@@ -1143,7 +1197,7 @@ mod tests {
 
     #[test]
     fn loading_sprites_loads_all_sprites_for_a_given_scanline() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         let oam = [
             // y, index, attributes, x
@@ -1191,7 +1245,7 @@ mod tests {
 
     #[test]
     fn when_more_than_eight_sprites_on_scanline_only_first_eight_are_loaded() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         let oam = [
             // y, index, attributes, x
@@ -1253,7 +1307,7 @@ mod tests {
 
     #[test]
     fn loading_sprites_clears_active_sprites() {
-        let mut ppu = PPU::with_memory(mem!());
+        let mut ppu = ppu_with_memory(mem!());
 
         let oam = [29, 3, 3, 3];
         ppu.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
@@ -1273,7 +1327,7 @@ mod tests {
 
     #[test]
     fn can_read_rows_from_nametable() {
-        let mut ppu = PPU::with_memory(mem! {
+        let mut ppu = ppu_with_memory(mem! {
             0x1050 => {
                 // Bit 0
                 0b0000_0001,

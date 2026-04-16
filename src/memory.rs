@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
+use crate::cpu::Tickable;
 use crate::Address;
 
 pub trait Memory: Sized {
@@ -41,12 +42,8 @@ impl Memory for ArrayMemory {
     }
 }
 
-impl<'a, T: Memory> Memory for &'a mut T {
-    fn read(&mut self, address: Address) -> u8 {
-        T::read(self, address)
-    }
-
-    fn write(&mut self, address: Address, byte: u8) {
-        T::write(self, address, byte)
+impl Tickable for ArrayMemory {
+    fn tick(&mut self) -> bool {
+        false
     }
 }

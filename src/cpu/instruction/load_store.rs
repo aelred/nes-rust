@@ -1,13 +1,14 @@
 //! Load/Store Operations
+use crate::cpu::Tickable;
 use crate::{
     cpu::addressing_modes::{
         FlexibleAddressingMode, LAXAddressingMode, LDXAddressingMode, LDYAddressingMode,
         SAXAddressingMode, STXAddressingMode, STYAddressingMode, StoreAddressingMode,
-    },
-    Memory, CPU,
+    }, Memory,
+    CPU,
 };
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn lda(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(value);
@@ -56,7 +57,8 @@ mod tests {
     use crate::{
         cpu::tests::run_instr,
         instructions::{LDA_IMM, LDX_IMM, LDY_IMM, STA_ABS, STX_ABS, STY_ABS},
-        mem, Address,
+        mem,
+        Address,
     };
 
     #[test]

@@ -1,11 +1,13 @@
 #![allow(clippy::upper_case_acronyms)] // Allow upper case acronyms like NES, CPU because I think it's more readable!
 
 pub use crate::address::Address;
+use crate::apu::APU;
 use crate::audio::AudioSink;
 pub use crate::cartridge::Cartridge;
 pub use crate::cpu::instructions;
 pub use crate::cpu::Instruction;
 use crate::cpu::NESCPUMemory;
+pub use crate::cpu::Tickable;
 pub use crate::cpu::CPU;
 pub use crate::i_nes::INes;
 pub use crate::i_nes::INesReadError;
@@ -15,8 +17,7 @@ pub use crate::memory::ArrayMemory;
 pub use crate::memory::Memory;
 pub use crate::ppu::Color;
 use crate::ppu::NESPPUMemory;
-use crate::ppu::PPU;
-use apu::APU;
+use crate::ppu::RealPPU;
 use std::fmt::Debug;
 use video::BackBuffer;
 
@@ -41,15 +42,13 @@ pub const NES_FREQ: f64 = 1_789_773.0;
 #[derive(Debug)]
 pub struct NES {
     cpu: CPU,
-    video_out: BackBuffer,
     audio_out: AudioSink,
 }
 
 impl NES {
     pub fn new(cartridge: Cartridge, video_out: BackBuffer, audio_out: AudioSink) -> Self {
         NES {
-            cpu: Self::cpu_from_cartridge(cartridge),
-            video_out,
+            cpu: Self::cpu_from_cartridge(cartridge, video_out),
             audio_out,
         }
     }
@@ -63,9 +62,10 @@ impl NES {
     }
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        self.cpu = Self::cpu_from_cartridge(cartridge);
+        let mut video_out = self.ppu().disconnect_video();
         // Draw from top left
-        self.video_out.reset();
+        video_out.reset();
+        self.cpu = Self::cpu_from_cartridge(cartridge, video_out);
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
@@ -79,11 +79,6 @@ impl NES {
     pub fn tick(&mut self) -> u8 {
         let cpu_cycles = self.cpu.run_instruction();
 
-        // There are 3 PPU cycles to 1 CPU cycle
-        for _ in 0..3 * cpu_cycles {
-            self.tick_ppu();
-        }
-
         for _ in 0..cpu_cycles {
             self.tick_apu();
         }
@@ -91,20 +86,8 @@ impl NES {
         cpu_cycles
     }
 
-    fn ppu(&mut self) -> &mut PPU {
-        self.cpu.memory().ppu_registers()
-    }
-
-    fn tick_ppu(&mut self) {
-        let output = self.ppu().tick();
-
-        if output.interrupt {
-            self.cpu.non_maskable_interrupt();
-        }
-
-        if let Some(color) = output.color {
-            self.video_out.write(color);
-        }
+    fn ppu(&mut self) -> &mut RealPPU {
+        self.cpu.memory().ppu()
     }
 
     fn tick_apu(&mut self) {
@@ -113,9 +96,9 @@ impl NES {
         self.audio_out.write(wave);
     }
 
-    fn cpu_from_cartridge(cartridge: Cartridge) -> CPU {
+    fn cpu_from_cartridge(cartridge: Cartridge, video_out: BackBuffer) -> CPU {
         let ppu_memory = NESPPUMemory::new(cartridge.chr);
-        let ppu = PPU::with_memory(ppu_memory);
+        let ppu = RealPPU::new(ppu_memory, video_out);
         let controller = Controller::default();
         let apu = APU::default();
 

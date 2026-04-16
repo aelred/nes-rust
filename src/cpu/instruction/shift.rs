@@ -1,11 +1,12 @@
 //! Shifts
 
+use crate::cpu::Tickable;
 use crate::{
-    cpu::{addressing_modes::StoreAddressingMode, ReferenceAddressingMode, Status},
-    Memory, CPU,
+    cpu::{addressing_modes::StoreAddressingMode, ReferenceAddressingMode, Status}, Memory,
+    CPU,
 };
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn asl(&mut self, addressing_mode: impl ReferenceAddressingMode) -> u8 {
         self.shift(addressing_mode, 7, |val, _| val << 1)
     }
@@ -68,7 +69,8 @@ mod tests {
     use crate::{
         cpu::{tests::run_instr, Status},
         instructions::{ASL_ABS, ASL_ACC, LSR_ACC, ROL_ACC, ROR_ACC},
-        mem, Address,
+        mem,
+        Address,
     };
 
     #[test]

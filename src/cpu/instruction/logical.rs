@@ -1,14 +1,15 @@
 //! Logical operations
 
+use crate::cpu::Tickable;
 use crate::{
     cpu::{
         addressing_modes::{BITAddressingMode, FlexibleAddressingMode},
         Status,
-    },
-    Memory, CPU,
+    }, Memory,
+    CPU,
 };
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn and(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(self.accumulator & value);

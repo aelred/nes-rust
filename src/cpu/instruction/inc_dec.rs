@@ -1,14 +1,15 @@
 //! Increments & Decrements
 
+use crate::cpu::Tickable;
 use crate::{
     cpu::{
         addressing_modes::{IncDecAddressingMode, StoreAddressingMode},
         Reference,
-    },
-    Memory, CPU,
+    }, Memory,
+    CPU,
 };
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn inc(&mut self, addressing_mode: IncDecAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.increment(reference);
@@ -72,7 +73,8 @@ mod tests {
     use crate::{
         cpu::{tests::run_instr, Status},
         instructions::{DEC_ABS, DEX, DEY, INC_ABS, INX, INY},
-        mem, Address,
+        mem,
+        Address,
     };
 
     #[test]

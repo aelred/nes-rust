@@ -1,6 +1,6 @@
 use crate::{Address, Memory};
 
-use super::CPU;
+use super::{Tickable, CPU};
 
 pub const BASE: Address = Address::new(0x0100);
 
@@ -29,7 +29,7 @@ impl Default for StackPointer {
     }
 }
 
-impl<M: Memory> CPU<M> {
+impl<M: Memory + Tickable> CPU<M> {
     pub fn push_stack(&mut self, byte: u8) {
         self.write(self.stack_pointer.address(), byte);
         self.stack_pointer.decrement();
@@ -37,7 +37,7 @@ impl<M: Memory> CPU<M> {
 
     pub fn increment_stack(&mut self) {
         self.stack_pointer.increment();
-        self.cycle_count += 1;
+        self.increment_cycle_count();
     }
 
     pub fn pull_and_increment_stack(&mut self) -> u8 {
