@@ -133,11 +133,10 @@ const MAX_CYCLES: usize = 20_000_000;
         "sprite_hit_corners", include_bytes!("sprite_hit_tests/03.corners.nes"),
         Setup::Default, Terminate::Address(0xe635), Success::Screen(include_bytes!("sprite_hit_tests/03.corners.success.png"))
     },
-    // TODO
-    // sprite_hit_flip = {
-    //     "sprite_hit_flip", include_bytes!("sprite_hit_tests/04.flip.nes"),
-    //     Setup::Default, Terminate::Address(0xe635), Success::Never
-    // },
+    sprite_hit_flip = {
+        "sprite_hit_flip", include_bytes!("sprite_hit_tests/04.flip.nes"),
+        Setup::Default, Terminate::Address(0xe5b6), Success::Screen(include_bytes!("sprite_hit_tests/04.flip.success.png"))
+    },
     // TODO
     // sprite_hit_left_clip = {
     //     "sprite_hit_left_clip", include_bytes!("sprite_hit_tests/05.left_clip.nes"),
