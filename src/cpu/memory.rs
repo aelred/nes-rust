@@ -195,13 +195,16 @@ impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<PRG, PPU, IN
 
 impl Tickable for NESCPUMemory {
     fn tick(&mut self) -> bool {
-        self.ppu.tick()
+        let interrupt = self.ppu.tick();
+        self.apu.tick();
+        interrupt
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::AudioSink;
     use crate::ppu::PPU;
 
     #[test]
@@ -454,6 +457,6 @@ mod tests {
         };
         let prg = ArrayMemory::default();
         let input = MockInput(0);
-        NESCPUMemory::new(prg, ppu, APU::default(), input)
+        NESCPUMemory::new(prg, ppu, APU::new(AudioSink::default()), input)
     }
 }

@@ -41,15 +41,14 @@ pub const NES_FREQ: f64 = 1_789_773.0;
 
 #[derive(Debug)]
 pub struct NES {
+    /// The NES emulator owns a CPU that in turn owns other components like the PPU and APU.
     cpu: CPU,
-    audio_out: AudioSink,
 }
 
 impl NES {
     pub fn new(cartridge: Cartridge, video_out: BackBuffer, audio_out: AudioSink) -> Self {
         NES {
-            cpu: Self::cpu_from_cartridge(cartridge, video_out),
-            audio_out,
+            cpu: Self::cpu_from_cartridge(cartridge, video_out, audio_out),
         }
     }
 
@@ -62,10 +61,13 @@ impl NES {
     }
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        let mut video_out = self.ppu().disconnect_video();
+        let mut video_out = self.cpu.memory().ppu().disconnect_video();
         // Draw from top left
         video_out.reset();
-        self.cpu = Self::cpu_from_cartridge(cartridge, video_out);
+
+        let audio_out = self.cpu.memory().apu().disconnect_audio();
+
+        self.cpu = Self::cpu_from_cartridge(cartridge, video_out, audio_out);
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
@@ -77,30 +79,18 @@ impl NES {
     }
 
     pub fn tick(&mut self) -> u8 {
-        let cpu_cycles = self.cpu.run_instruction();
-
-        for _ in 0..cpu_cycles {
-            self.tick_apu();
-        }
-
-        cpu_cycles
+        self.cpu.run_instruction()
     }
 
-    fn ppu(&mut self) -> &mut RealPPU {
-        self.cpu.memory().ppu()
-    }
-
-    fn tick_apu(&mut self) {
-        let apu = self.cpu.memory().apu();
-        let wave = apu.tick();
-        self.audio_out.write(wave);
-    }
-
-    fn cpu_from_cartridge(cartridge: Cartridge, video_out: BackBuffer) -> CPU {
+    fn cpu_from_cartridge(
+        cartridge: Cartridge,
+        video_out: BackBuffer,
+        audio_out: AudioSink,
+    ) -> CPU {
         let ppu_memory = NESPPUMemory::new(cartridge.chr);
         let ppu = RealPPU::new(ppu_memory, video_out);
+        let apu = APU::new(audio_out);
         let controller = Controller::default();
-        let apu = APU::default();
 
         let cpu_memory = NESCPUMemory::new(cartridge.prg, ppu, apu, controller);
         CPU::from_memory(cpu_memory)

@@ -1,4 +1,6 @@
 //! Emulates the APU (audio processing unit)
+use crate::audio::AudioSink;
+use crate::Tickable;
 use bitflags::bitflags;
 use noise::NoiseGenerator;
 use pulse::PulseGenerator;
@@ -9,8 +11,8 @@ mod noise;
 mod pulse;
 mod triangle;
 
-#[derive(Default)]
 pub struct APU {
+    audio_out: AudioSink,
     pulse_1: PulseGenerator,
     pulse_2: PulseGenerator,
     triangle: TriangleGenerator,
@@ -20,40 +22,19 @@ pub struct APU {
     cycles: u16,
 }
 
+impl APU {}
+
 impl APU {
-    pub fn tick(&mut self) -> f32 {
-        let pulse_1 = self.pulse_1.tick();
-        let pulse_2 = self.pulse_2.tick();
-        let triangle = self.triangle.tick();
-        let noise = self.noise.tick();
-
-        let cycles = self.cycles;
-        self.cycles += 1;
-
-        match (self.mode_toggle, cycles) {
-            (_, 7457) | (_, 22371) => {
-                self.pulse_1.clock_envelope();
-                self.pulse_2.clock_envelope();
-                self.noise.clock_envelope();
-                self.triangle.clock_linear_counter();
-            }
-            (_, 14913) | (false, 29829) | (true, 37281) => {
-                self.pulse_1.clock_envelope();
-                self.pulse_2.clock_envelope();
-                self.noise.clock_envelope();
-                self.triangle.clock_linear_counter();
-                self.pulse_1.clock_length_counter();
-                self.pulse_2.clock_length_counter();
-                self.triangle.clock_length_counter();
-                self.noise.clock_length_counter();
-            }
-            (false, 14915) | (true, 37282) => {
-                self.cycles = 0;
-            }
-            _ => {}
+    pub fn new(audio_out: AudioSink) -> Self {
+        Self {
+            audio_out,
+            pulse_1: PulseGenerator::default(),
+            pulse_2: PulseGenerator::default(),
+            triangle: TriangleGenerator::default(),
+            noise: NoiseGenerator::default(),
+            mode_toggle: false,
+            cycles: 0,
         }
-
-        mix(pulse_1, pulse_2, triangle, noise)
     }
 
     pub fn write_pulse_1_flags(&mut self, value: u8) {
@@ -123,6 +104,51 @@ impl APU {
         self.triangle.set_enabled(status.contains(Status::TRIANGLE));
         self.noise.set_enabled(status.contains(Status::NOISE));
     }
+
+    /// Disconnect audio and replace with a no-op audio out.
+    pub fn disconnect_audio(&mut self) -> AudioSink {
+        std::mem::take(&mut self.audio_out)
+    }
+}
+
+impl Tickable for APU {
+    fn tick(&mut self) -> bool {
+        let pulse_1 = self.pulse_1.tick();
+        let pulse_2 = self.pulse_2.tick();
+        let triangle = self.triangle.tick();
+        let noise = self.noise.tick();
+
+        let cycles = self.cycles;
+        self.cycles += 1;
+
+        match (self.mode_toggle, cycles) {
+            (_, 7457) | (_, 22371) => {
+                self.pulse_1.clock_envelope();
+                self.pulse_2.clock_envelope();
+                self.noise.clock_envelope();
+                self.triangle.clock_linear_counter();
+            }
+            (_, 14913) | (false, 29829) | (true, 37281) => {
+                self.pulse_1.clock_envelope();
+                self.pulse_2.clock_envelope();
+                self.noise.clock_envelope();
+                self.triangle.clock_linear_counter();
+                self.pulse_1.clock_length_counter();
+                self.pulse_2.clock_length_counter();
+                self.triangle.clock_length_counter();
+                self.noise.clock_length_counter();
+            }
+            (false, 14915) | (true, 37282) => {
+                self.cycles = 0;
+            }
+            _ => {}
+        }
+
+        let amplitude = mix(pulse_1, pulse_2, triangle, noise);
+        self.audio_out.write(amplitude);
+
+        false
+    }
 }
 
 // Mix output channels, produce a value between 0.0 and 1.0
@@ -171,21 +197,21 @@ bitflags! {
 #[cfg_attr(any(), rustfmt::skip)]
 const LENGTH_COUNTER_TABLE: [u8; 32] = [
     //⬇ Lengths for 90bpm    ⬇ Linearly increasing lengths
-     10, /* semiquaver */     254, 
-     20, /* quaver */           2, 
-     40, /* crotchet */         4, 
-     80, /* minim */            6, 
-    160, /* semibreve */        8, 
+    10, /* semiquaver */     254,
+    20, /* quaver */           2,
+    40, /* crotchet */         4,
+    80, /* minim */            6,
+    160, /* semibreve */        8,
      60, /* dot. crotchet */   10,
-     14, /* trip. quaver */    12, 
-     26, /* trip. crotchet */  14, 
+    14, /* trip. quaver */    12,
+    26, /* trip. crotchet */  14,
     //⬇ Lengths for 75bpm
-     12, /* semiquaver */      16, 
-     24, /* quaver */          18, 
-     48, /* crotchet */        20, 
+    12, /* semiquaver */      16,
+    24, /* quaver */          18,
+    48, /* crotchet */        20,
      96, /* minim */           22,
-    192, /* semibreve */       24, 
-     72, /* dot. crotchet */   26, 
-     16, /* trip. quaver */    28, 
+    192, /* semibreve */       24,
+    72, /* dot. crotchet */   26,
+    16, /* trip. quaver */    28,
      32, /* trip. crotchet */  30,
 ];

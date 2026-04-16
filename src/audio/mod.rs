@@ -61,6 +61,14 @@ impl AudioSink {
     }
 }
 
+impl Default for AudioSink {
+    fn default() -> Self {
+        let (audio_sink, audio_source) = audio_pipeline();
+        audio_source.silence();
+        audio_sink
+    }
+}
+
 /// Source for audio samples to the audio device.
 pub struct AudioSource {
     buffer: RingBufferReader,
