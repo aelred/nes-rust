@@ -59,8 +59,8 @@ pub struct RealPPU<M = NESPPUMemory> {
     cycle_count: u16,
     tile_pattern: ShiftRegister,
     palette_select: ShiftRegister,
-    active_sprites: [ActiveSprite; ACTIVE_SPRITES],
-    active_sprites_has_zero: bool,
+    current_sprites: ActiveSprites,
+    next_sprites: ActiveSprites,
     control: Control,
     status: Status,
     mask: Mask,
@@ -86,8 +86,8 @@ impl<M: Memory> RealPPU<M> {
             cycle_count: 0,
             tile_pattern: ShiftRegister::default(),
             palette_select: ShiftRegister::default(),
-            active_sprites: [ActiveSprite::default(); ACTIVE_SPRITES],
-            active_sprites_has_zero: false,
+            current_sprites: ActiveSprites::default(),
+            next_sprites: ActiveSprites::default(),
             control: Control::default(),
             mask: Mask::default(),
             status: Status::default(),
@@ -152,10 +152,10 @@ impl<M: Memory> RealPPU<M> {
         self.set_scroll(scroll);
     }
 
+    /// Swaps sprites from `next_sprites` into `current_sprites` and load `next_sprites`.
+    /// Load sprites all at once - in a real PPU this is spread over the whole scanline.
     fn load_sprites(&mut self) {
-        if self.scanline == 0 {
-            return;
-        }
+        std::mem::swap(&mut self.current_sprites, &mut self.next_sprites);
 
         let sprite_size = self.control.sprite_size();
         let table = self.control.sprite_pattern_table();
@@ -165,30 +165,31 @@ impl<M: Memory> RealPPU<M> {
             Sprite::new(chunk[3], chunk[0], chunk[1], attributes)
         });
 
-        let scanline = self.scanline - 1;
-
         let sprites_on_scanline = all_sprites.enumerate().filter(|(_, sprite)| {
             let y = sprite.y as u16;
-            scanline >= y && scanline < y + sprite_size.height() as u16
+            self.scanline >= y && self.scanline < y + sprite_size.height() as u16
         });
 
-        self.active_sprites = [ActiveSprite::default(); ACTIVE_SPRITES];
-        self.active_sprites_has_zero = false;
+        self.next_sprites.sprites = [ActiveSprite::default(); ACTIVE_SPRITES];
+        self.next_sprites.has_sprite_zero = false;
 
-        for (dest, (i, src)) in self.active_sprites.iter_mut().zip(sprites_on_scanline) {
-            self.active_sprites_has_zero |= i == 0;
-            *dest = ActiveSprite {
-                sprite: src,
-                ..Default::default()
-            };
+        for (dest, (i, src)) in self
+            .next_sprites
+            .sprites
+            .iter_mut()
+            .zip(sprites_on_scanline)
+        {
+            self.next_sprites.has_sprite_zero |= i == 0;
+            dest.sprite = src;
         }
 
         for i in 0..ACTIVE_SPRITES {
-            let sprite = self.active_sprites[i].sprite;
+            let sprite = self.next_sprites.sprites[i].sprite;
             let attr = sprite.attributes;
 
             // Use wrapping_sub and % to handle default zero'd sprites at y = 0 without branching
-            let y_in_sprite = scanline.wrapping_sub(sprite.y as u16) as u8 % sprite_size.height();
+            let y_in_sprite =
+                self.scanline.wrapping_sub(sprite.y as u16) as u8 % sprite_size.height();
             let y_in_sprite = attr.ver_flip(y_in_sprite, sprite_size);
 
             let (sprite_table, index) = match sprite_size {
@@ -201,8 +202,8 @@ impl<M: Memory> RealPPU<M> {
 
             let (pattern0, pattern1) = self.read_pattern_row(sprite_table, index, y_in_sprite);
 
-            self.active_sprites[i].pattern0 = pattern0;
-            self.active_sprites[i].pattern1 = pattern1;
+            self.next_sprites.sprites[i].pattern0 = pattern0;
+            self.next_sprites.sprites[i].pattern1 = pattern1;
         }
     }
 
@@ -220,7 +221,7 @@ impl<M: Memory> RealPPU<M> {
             background
         };
 
-        if self.active_sprites_has_zero && sprite.index == 0 && background_opaque {
+        if self.current_sprites.has_sprite_zero && sprite.index == 0 && background_opaque {
             self.status |= Status::SPRITE_ZERO_HIT;
         }
 
@@ -243,14 +244,14 @@ impl<M: Memory> RealPPU<M> {
     }
 
     fn sprite_color(&self) -> SelectedSprite {
-        let show_sprites = self.mask.contains(Mask::SHOW_SPRITES) && self.scanline > 0;
+        let show_sprites = self.mask.contains(Mask::SHOW_SPRITES);
 
         // Bitflags for which sprites should be shown, to avoid branches
         let mut show: u8 = 0b0000_0000;
         // All 8 sprites, plus a 9th sprite that will always be 'None'
         let mut results: [(SpriteAttributes, u8); 9] = Default::default();
 
-        for (index, active_sprite) in self.active_sprites.iter().enumerate() {
+        for (index, active_sprite) in self.current_sprites.sprites.iter().enumerate() {
             let x = active_sprite.sprite.x as u16;
             let attr = active_sprite.sprite.attributes;
 
@@ -264,11 +265,8 @@ impl<M: Memory> RealPPU<M> {
 
             let transparent = lower_index == 0;
 
-            let show_sprite = show_sprites
-                && !transparent
-                && self.cycle_count >= x
-                && self.cycle_count < x + 8
-                && self.scanline > active_sprite.sprite.y as u16;
+            let show_sprite =
+                show_sprites && !transparent && self.cycle_count >= x && self.cycle_count < x + 8;
 
             show |= (show_sprite as u8) << index;
 
@@ -417,7 +415,8 @@ impl<M: Debug> Debug for RealPPU<M> {
             .field("cycle_count", &self.cycle_count)
             .field("tile_pattern", &self.tile_pattern)
             .field("palette_select", &self.palette_select)
-            .field("active_sprites", &self.active_sprites)
+            .field("current_sprites", &self.current_sprites)
+            .field("next_sprites", &self.next_sprites)
             .field("control", &self.control)
             .field("status", &self.status)
             .field("mask", &self.mask)
@@ -465,6 +464,13 @@ struct SelectedSprite {
     color_address: Address,
     priority: bool,
     index: usize,
+}
+
+/// Sprites active on a scanline
+#[derive(Debug, Default)]
+struct ActiveSprites {
+    sprites: [ActiveSprite; ACTIVE_SPRITES],
+    has_sprite_zero: bool,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
@@ -1240,7 +1246,7 @@ mod tests {
             ActiveSprite::default(),
         ];
 
-        assert_eq!(ppu.active_sprites, expected);
+        assert_eq!(ppu.next_sprites.sprites, expected);
     }
 
     #[test]
@@ -1302,7 +1308,7 @@ mod tests {
             },
         ];
 
-        assert_eq!(ppu.active_sprites, expected);
+        assert_eq!(ppu.next_sprites.sprites, expected);
     }
 
     #[test]
@@ -1317,12 +1323,12 @@ mod tests {
 
         let cleared = [ActiveSprite::default(); 8];
 
-        assert_ne!(ppu.active_sprites, cleared);
+        assert_ne!(ppu.next_sprites.sprites, cleared);
 
         ppu.scanline = 40;
         ppu.load_sprites();
 
-        assert_eq!(ppu.active_sprites, cleared);
+        assert_eq!(ppu.next_sprites.sprites, cleared);
     }
 
     #[test]
