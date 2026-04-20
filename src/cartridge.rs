@@ -1,8 +1,8 @@
-use std::fmt::{Debug, Formatter};
-
 use crate::mapper::Mapper;
 use crate::Address;
 use crate::Memory;
+use std::fmt::{Debug, Formatter};
+use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 pub struct Cartridge {
@@ -38,6 +38,11 @@ impl Cartridge {
             _ => BankSwitcher::First,
         };
 
+        // TODO: really don't want to use a mutex here...
+        //  it's needed right now because we send the NES to another thread - even though it's only
+        //  used within one thread. Another solution might be to flatten the whole NES structure.
+        let config = Arc::new(Mutex::new(Configuration::default()));
+
         let prg = PRG {
             rom: prg_rom,
             bank_mapping: vec![0, last_bank].into(),
@@ -45,12 +50,14 @@ impl Cartridge {
             bank_switcher,
             ram: [0; 0x2000],
             dirty_ram: false,
+            config: config.clone(),
         };
 
         let chr = CHR {
             chr_rom,
             chr_ram_enabled,
             ppu_ram: [0; 0x800],
+            config,
         };
 
         log::info!(
@@ -75,6 +82,7 @@ pub struct PRG {
     bank_switcher: BankSwitcher,
     ram: [u8; 0x2000],
     dirty_ram: bool,
+    config: Arc<Mutex<Configuration>>,
 }
 
 impl PRG {
@@ -134,36 +142,50 @@ impl Memory for PRG {
                     if reset {
                         *shift_register = 0;
                         *writes = 0;
-                    } else {
-                        *shift_register >>= 1;
-                        *shift_register |= (byte & 1) << 4;
-                        *writes += 1;
-                        if *writes == 5 {
-                            // TODO: support other MMC1 registers
-                            match address.index() {
-                                0x8000..=0x9fff => {
-                                    // TODO: support MMC1 control
-                                }
-                                0xa000..=0xbfff => {
-                                    if *shift_register != 0 {
-                                        todo!("Support MMC1 CHR bank 0");
-                                    }
-                                }
-                                0xc000..=0xdfff => {
-                                    todo!("Support MMC1 CHR bank 1");
-                                }
-                                0xe000..=0xffff => {
-                                    self.bank_mapping[0] = *shift_register & 0b1111;
-                                }
-                                _ => {
-                                    panic!("Out of addressable range: {:?}", address);
-                                }
-                            }
+                        return;
+                    }
 
-                            *shift_register = 0;
-                            *writes = 0;
+                    *shift_register >>= 1;
+                    *shift_register |= (byte & 1) << 4;
+                    *writes += 1;
+
+                    if *writes < 5 {
+                        return;
+                    }
+
+                    let value = *shift_register;
+                    // TODO: support other MMC1 registers
+                    match address.index() {
+                        0x8000..=0x9fff => {
+                            // TODO: also support other control flags
+                            let nametable_mirroring = match value & 0b11 {
+                                0b00 => NametableMirroring::LOWER,
+                                0b01 => NametableMirroring::UPPER,
+                                0b10 => NametableMirroring::HORIZONTAL,
+                                0b11 => NametableMirroring::VERTICAL,
+                                _ => unreachable!(),
+                            };
+
+                            self.config.lock().unwrap().nametable_mirroring = nametable_mirroring;
+                        }
+                        0xa000..=0xbfff => {
+                            if value != 0 {
+                                todo!("Support MMC1 CHR bank 0");
+                            }
+                        }
+                        0xc000..=0xdfff => {
+                            todo!("Support MMC1 CHR bank 1");
+                        }
+                        0xe000..=0xffff => {
+                            self.bank_mapping[0] = value & 0b1111;
+                        }
+                        _ => {
+                            panic!("Out of addressable range: {:?}", address);
                         }
                     }
+
+                    *shift_register = 0;
+                    *writes = 0;
                 }
             },
             _ => {
@@ -182,6 +204,7 @@ impl Default for PRG {
             bank_switcher: BankSwitcher::First,
             ram: [0; _],
             dirty_ram: false,
+            config: Default::default(),
         }
     }
 }
@@ -196,6 +219,21 @@ pub struct CHR {
     chr_rom: Box<[u8]>,
     chr_ram_enabled: bool,
     ppu_ram: [u8; 0x800],
+    config: Arc<Mutex<Configuration>>,
+}
+
+impl CHR {
+    fn map_nametable(&self, address: Address) -> usize {
+        debug_assert!(0x2000 <= address.index() && address.index() <= 0x3eff);
+
+        let mirroring = self.config.lock().unwrap().nametable_mirroring;
+
+        let index = address.index() - 0x2000;
+        let logical_nametable = index / 0x400;
+        let physical_nametable = mirroring.logical_to_physical_nametable(logical_nametable);
+
+        (physical_nametable * 0x400) + (index % 0x400)
+    }
 }
 
 impl Debug for CHR {
@@ -210,7 +248,7 @@ impl Memory for CHR {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x0000..=0x1fff => self.chr_rom[address.index()],
-            0x2000..=0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800],
+            0x2000..=0x3eff => self.ppu_ram[self.map_nametable(address)],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -226,7 +264,7 @@ impl Memory for CHR {
                 );
                 self.chr_rom[address.index()] = byte
             }
-            0x2000..=0x3eff => self.ppu_ram[(address.index() - 0x2000) % 0x800] = byte,
+            0x2000..=0x3eff => self.ppu_ram[self.map_nametable(address)] = byte,
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -240,7 +278,38 @@ impl Default for CHR {
             chr_rom: Box::new([0; 0x2000]),
             chr_ram_enabled: false,
             ppu_ram: [0; _],
+            config: Default::default(),
         }
+    }
+}
+
+/// Configuration shared between the CHR and PRG.
+#[derive(Default, Copy, Clone)]
+struct Configuration {
+    nametable_mirroring: NametableMirroring,
+}
+
+/// Describes how each of four logical nametables are mapped to one of two physical nametables.
+/// 0b0000abcd - where each bit indicates if it maps to the lower or upper nametable.
+#[derive(Copy, Clone)]
+struct NametableMirroring(u8);
+
+impl NametableMirroring {
+    const UPPER: Self = NametableMirroring(0b0000);
+    const LOWER: Self = NametableMirroring(0b1111);
+    const HORIZONTAL: Self = NametableMirroring(0b0011);
+    const VERTICAL: Self = NametableMirroring(0b0101);
+
+    fn logical_to_physical_nametable(&self, logical_nametable: usize) -> usize {
+        assert!(logical_nametable < 4);
+        ((self.0 & (0b1000 >> logical_nametable)) != 0) as usize
+    }
+}
+
+impl Default for NametableMirroring {
+    fn default() -> Self {
+        // TODO: don't have this default, instead use iNES header
+        Self::VERTICAL
     }
 }
 
