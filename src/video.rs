@@ -6,10 +6,7 @@ use std::sync::Arc;
 type Buffer = [u8; WIDTH as usize * HEIGHT as usize * 4];
 
 pub fn display_triple_buffer() -> (FrontBuffer, BackBuffer) {
-    let intermediate_buffer = Arc::new(IntermediateBuffer {
-        buffer: AtomicPtr::new(Box::into_raw(Box::new([0; _]))),
-        dirty: AtomicBool::new(false),
-    });
+    let intermediate_buffer = Arc::new(IntermediateBuffer::default());
 
     let front = FrontBuffer {
         front_buffer: Some(Box::new([0; _])),
@@ -86,7 +83,7 @@ impl Default for BackBuffer {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct IntermediateBuffer {
     buffer: AtomicPtr<Buffer>,
     dirty: AtomicBool,
@@ -107,5 +104,14 @@ impl Drop for IntermediateBuffer {
         // SAFETY: the pointer is always valid and exclusive
         let boxed = unsafe { Box::from_raw(ptr) };
         drop(boxed)
+    }
+}
+
+impl Default for IntermediateBuffer {
+    fn default() -> Self {
+        Self {
+            buffer: AtomicPtr::new(Box::into_raw(Box::new([0; _]))),
+            dirty: AtomicBool::new(false),
+        }
     }
 }
