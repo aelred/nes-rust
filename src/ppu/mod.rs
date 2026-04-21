@@ -347,7 +347,7 @@ impl<M: Memory> RealPPU<M> {
         let rendering = self.rendering();
 
         match (self.scanline, self.cycle_count) {
-            (_, 0) => self.load_sprites(),
+            (0..=239, 0) => self.load_sprites(),
             (241, 1) if !self.suppress_vblank => {
                 // TODO: also suppress NMI the frame after, apparently
                 self.status |= Status::VBLANK;
