@@ -90,14 +90,14 @@ fn run() -> Result<()> {
         }
     })?;
 
-    let controllers = dom.get_elements_by_class_name("controller");
-    for i in 0..controllers.length() {
-        let target: EventTarget = controllers.get_with_index(i).unwrap().into();
-        add_event_listener(&target, "contextmenu", |event: PointerEvent| {
-            event.prevent_default();
-            Ok(())
-        })?;
-    }
+    // let controllers = dom.get_elements_by_class_name("controller");
+    // for i in 0..controllers.length() {
+    //     let target: EventTarget = controllers.get_with_index(i).unwrap().into();
+    //     add_event_listener(&target, "contextmenu", |event: PointerEvent| {
+    //         event.prevent_default();
+    //         Ok(())
+    //     })?;
+    // }
 
     const BUTTONS: [(&str, Buttons); 8] = [
         ("a", Buttons::A),
