@@ -73,7 +73,7 @@ impl WasmAudioProcessor {
 
     /// Unpack from a pointer.
     pub unsafe fn unpack(pointer: usize) -> Self {
-        *Box::from_raw(pointer as *mut _)
+        unsafe { *Box::from_raw(pointer as *mut _) }
     }
 }
 
