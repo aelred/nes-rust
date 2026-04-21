@@ -1,6 +1,6 @@
 [tools]
 just = "1"
-rust = { version = "nightly", targets = "wasm32-unknown-unknown", components = "rust-src" }
+rust = { version = "nightly-2026-04-20", targets = "wasm32-unknown-unknown", components = "rust-src" }
 terraform = "1"
 "cargo:cargo-watch" = "8"
 
