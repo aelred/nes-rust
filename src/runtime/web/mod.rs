@@ -20,10 +20,9 @@ use std::{
 };
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
 use web_sys::{
-    js_sys,
-    js_sys::{ArrayBuffer, Uint8Array},
-    CanvasRenderingContext2d, Document, DragEvent, EventTarget, File, HtmlCanvasElement,
-    HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, PointerEvent, Storage, VisibilityState,
+    js_sys, js_sys::{ArrayBuffer, Uint8Array}, CanvasRenderingContext2d, Document, DragEvent, EventTarget,
+    File, HtmlCanvasElement, HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, PointerEvent,
+    Storage, VisibilityState,
     Window,
 };
 use zip::ZipArchive;
@@ -127,6 +126,15 @@ fn run() -> Result<()> {
             })?;
 
             add_event_listener(&target, "pointerup", {
+                let ctx = ctx.clone();
+                move |event: PointerEvent| {
+                    ctx.borrow_mut().runner.release(*button);
+                    event.prevent_default();
+                    Ok(())
+                }
+            })?;
+
+            add_event_listener(&target, "pointerleave", {
                 let ctx = ctx.clone();
                 move |event: PointerEvent| {
                     ctx.borrow_mut().runner.release(*button);
