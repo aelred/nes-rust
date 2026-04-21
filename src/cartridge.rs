@@ -161,8 +161,8 @@ impl Memory for PRG {
                             let nametable_mirroring = match value & 0b11 {
                                 0b00 => NametableMirroring::LOWER,
                                 0b01 => NametableMirroring::UPPER,
-                                0b10 => NametableMirroring::HORIZONTAL,
-                                0b11 => NametableMirroring::VERTICAL,
+                                0b10 => NametableMirroring::VERTICAL,
+                                0b11 => NametableMirroring::HORIZONTAL,
                                 _ => unreachable!(),
                             };
 
@@ -301,7 +301,6 @@ impl NametableMirroring {
     const VERTICAL: Self = NametableMirroring(0b0101);
 
     fn logical_to_physical_nametable(&self, logical_nametable: usize) -> usize {
-        assert!(logical_nametable < 4);
         ((self.0 & (0b1000 >> logical_nametable)) != 0) as usize
     }
 }
