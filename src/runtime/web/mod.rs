@@ -55,18 +55,10 @@ fn run() -> Result<()> {
         move |_: web_sys::Event| ctx.borrow_mut().set_paused_from_visibility()
     })?;
 
-    // Audio is only allowed to start after user interacts with page
-    add_event_listener(&window, "keydown", {
-        let ctx = ctx.clone();
-        move |_: KeyboardEvent| {
-            ctx.borrow_mut().start_audio();
-            Ok(())
-        }
-    })?;
-
     add_event_listener(&window, "click", {
         let ctx = ctx.clone();
         move |_: MouseEvent| {
+            // Start audio if user clicks anywhere
             ctx.borrow_mut().start_audio();
             Ok(())
         }
@@ -76,7 +68,7 @@ fn run() -> Result<()> {
         let ctx = ctx.clone();
         move |event: KeyboardEvent| {
             let button = keycode_binding(&event.code());
-            ctx.borrow_mut().runner.press(button);
+            ctx.borrow_mut().press(button);
             Ok(())
         }
     })?;
@@ -85,7 +77,7 @@ fn run() -> Result<()> {
         let ctx = ctx.clone();
         move |event: KeyboardEvent| {
             let button = keycode_binding(&event.code());
-            ctx.borrow_mut().runner.release(button);
+            ctx.borrow_mut().release(button);
             Ok(())
         }
     })?;
@@ -132,7 +124,7 @@ fn run() -> Result<()> {
             add_event_listener(&target, "mousedown", {
                 let ctx = ctx.clone();
                 move |event: MouseEvent| {
-                    ctx.borrow_mut().runner.press(*button);
+                    ctx.borrow_mut().press(*button);
                     event.prevent_default();
                     Ok(())
                 }
@@ -141,7 +133,7 @@ fn run() -> Result<()> {
             add_event_listener(&target, "mouseup", {
                 let ctx = ctx.clone();
                 move |event: MouseEvent| {
-                    ctx.borrow_mut().runner.release(*button);
+                    ctx.borrow_mut().release(*button);
                     event.prevent_default();
                     Ok(())
                 }
@@ -153,7 +145,7 @@ fn run() -> Result<()> {
                 move |event: PointerEvent| {
                     if event.pointer_type() == "touch" {
                         window.navigator().vibrate_with_duration(1);
-                        ctx.borrow_mut().runner.press(*button);
+                        ctx.borrow_mut().press(*button);
                     }
                     event.prevent_default();
                     Ok(())
@@ -164,7 +156,7 @@ fn run() -> Result<()> {
                 let ctx = ctx.clone();
                 move |event: PointerEvent| {
                     if event.pointer_type() == "touch" {
-                        ctx.borrow_mut().runner.release(*button);
+                        ctx.borrow_mut().release(*button);
                     }
                     event.prevent_default();
                     Ok(())
@@ -312,6 +304,16 @@ impl NesContext {
             state => bail!("Unrecognised visibility state: {:?}", state),
         };
         Ok(())
+    }
+
+    fn press(&mut self, buttons: Buttons) {
+        // Start audio when interaction begins
+        self.start_audio();
+        self.runner.press(buttons);
+    }
+
+    fn release(&mut self, buttons: Buttons) {
+        self.runner.release(buttons);
     }
 
     fn start_audio(&mut self) {
