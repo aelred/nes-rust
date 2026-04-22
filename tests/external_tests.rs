@@ -152,11 +152,10 @@ const MAX_CYCLES: usize = 20_000_000;
     //     "sprite_hit_screen_bottom", include_bytes!("sprite_hit_tests/07.screen_bottom.nes"),
     //     Setup::Default, Terminate::Address(0xe635), Success::Never
     // },
-    // TODO
-    // sprite_hit_double_height = {
-    //     "sprite_hit_double_height", include_bytes!("sprite_hit_tests/08.double_height.nes"),
-    //     Setup::Default, Terminate::Address(0xe635), Success::Never
-    // },
+    sprite_hit_double_height = {
+        "sprite_hit_double_height", include_bytes!("sprite_hit_tests/08.double_height.nes"),
+        Setup::Default, Terminate::Address(0xe635), Success::Screen(include_bytes!("sprite_hit_tests/08.double_height.success.png"))
+    },
     // TODO
     // sprite_hit_timing_basics = {
     //     "sprite_hit_timing_basics", include_bytes!("sprite_hit_tests/09.timing_basics.nes"),
