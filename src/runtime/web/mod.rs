@@ -22,7 +22,7 @@ use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
 use web_sys::{
     js_sys, js_sys::{ArrayBuffer, Uint8Array}, CanvasRenderingContext2d, Document, DragEvent, EventTarget,
     File, HtmlCanvasElement, HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, PointerEvent,
-    Storage, VisibilityState,
+    Storage, TouchEvent, VisibilityState,
     Window,
 };
 use zip::ZipArchive;
@@ -90,14 +90,15 @@ fn run() -> Result<()> {
         }
     })?;
 
-    // let controllers = dom.get_elements_by_class_name("controller");
-    // for i in 0..controllers.length() {
-    //     let target: EventTarget = controllers.get_with_index(i).unwrap().into();
-    //     add_event_listener(&target, "contextmenu", |event: PointerEvent| {
-    //         event.prevent_default();
-    //         Ok(())
-    //     })?;
-    // }
+    // Disable touchstart which causes haptics on long presses
+    let controllers = dom.get_elements_by_class_name("controller");
+    for i in 0..controllers.length() {
+        let target: EventTarget = controllers.get_with_index(i).unwrap().into();
+        add_event_listener(&target, "touchstart", |event: TouchEvent| {
+            event.prevent_default();
+            Ok(())
+        })?;
+    }
 
     const BUTTONS: [(&str, Buttons); 8] = [
         ("a", Buttons::A),
