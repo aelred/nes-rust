@@ -21,8 +21,8 @@ use std::{
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
 use web_sys::{
     js_sys, js_sys::{ArrayBuffer, Uint8Array}, CanvasRenderingContext2d, Document, DragEvent, Element, EventTarget,
-    File, HtmlCanvasElement, HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, PointerEvent,
-    Storage, TouchEvent, VisibilityState,
+    File, HtmlCanvasElement, HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, Navigator,
+    PointerEvent, Storage, TouchEvent, VisibilityState,
     Window,
 };
 use zip::ZipArchive;
@@ -149,8 +149,10 @@ fn run() -> Result<()> {
 
             add_event_listener(&target, "pointerenter", {
                 let ctx = ctx.clone();
+                let window = window.clone();
                 move |event: PointerEvent| {
                     if event.pointer_type() == "touch" {
+                        window.navigator().vibrate_with_duration(1);
                         ctx.borrow_mut().runner.press(*button);
                     }
                     event.prevent_default();
