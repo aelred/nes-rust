@@ -140,9 +140,12 @@ impl Silencer {
             let close = close.clone();
             move || {
                 while !close.load(Acquire) {
-                    while source.buffer.next(window_size) {}
+                    let mut reads = 0;
+                    while source.buffer.next(window_size) {
+                        reads += 1
+                    }
                     std::thread::sleep(Duration::from_secs_f64(
-                        window_size as f64 / TARGET_AUDIO_FREQ,
+                        (reads * window_size) as f64 / TARGET_AUDIO_FREQ,
                     ));
                 }
                 source
