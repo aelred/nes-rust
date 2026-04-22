@@ -21,8 +21,8 @@ use std::{
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
 use web_sys::{
     js_sys, js_sys::{ArrayBuffer, Uint8Array}, CanvasRenderingContext2d, Document, DragEvent, Element, EventTarget,
-    File, HtmlCanvasElement, HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, Navigator,
-    PointerEvent, Storage, TouchEvent, VisibilityState,
+    File, HtmlCanvasElement, HtmlInputElement, ImageData, KeyboardEvent, MouseEvent, PointerEvent,
+    Storage, TouchEvent, VisibilityState,
     Window,
 };
 use zip::ZipArchive;
