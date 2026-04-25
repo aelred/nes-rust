@@ -11,6 +11,7 @@ mod noise;
 mod pulse;
 mod triangle;
 
+#[derive(Debug)]
 pub struct APU {
     audio_out: AudioSink,
     pulse_1: PulseGenerator,

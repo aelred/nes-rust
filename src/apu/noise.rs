@@ -3,6 +3,7 @@ use bitflags::bitflags;
 
 use super::envelope::Envelope;
 
+#[derive(Debug)]
 // A pseudo-random noise generator
 pub struct NoiseGenerator {
     enabled: bool,

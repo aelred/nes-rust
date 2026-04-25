@@ -1,4 +1,4 @@
-#[derive(Default)]
+#[derive(Default, Debug)]
 // An envelope changes a sound's volume over time.
 // In the NES APU, it can set a constant volume or a decay.
 pub struct Envelope {

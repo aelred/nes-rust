@@ -3,7 +3,7 @@ use bitflags::bitflags;
 
 use super::Length;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 // A 'triangle wave' is a waveform that goes up and down in a triangle shape.
 pub struct TriangleGenerator {
     enabled: bool,

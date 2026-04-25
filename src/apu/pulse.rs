@@ -5,7 +5,7 @@ use super::Length;
 
 use super::envelope::Envelope;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 // A 'pulse wave' is a rectangular wave (alternating from high to low).
 pub struct PulseGenerator {
     enabled: bool,
