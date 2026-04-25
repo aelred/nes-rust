@@ -12,6 +12,16 @@ pub trait Memory: Sized {
     fn write(&mut self, address: Address, byte: u8);
 }
 
+impl<M: Memory> Memory for &mut M {
+    fn read(&mut self, address: Address) -> u8 {
+        (**self).read(address)
+    }
+
+    fn write(&mut self, address: Address, byte: u8) {
+        (**self).write(address, byte);
+    }
+}
+
 pub struct ArrayMemory([u8; 0x10000]);
 
 impl ArrayMemory {

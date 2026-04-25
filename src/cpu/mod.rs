@@ -31,13 +31,13 @@ const NMI_VECTOR: Address = Address::new(0xFFFA);
 const RESET_VECTOR: Address = Address::new(0xFFFC);
 
 #[derive(Debug)]
-pub struct CPU<'a, M = NESCPUMemory> {
-    memory: &'a mut M,
+pub struct CPU<'a, M = NESCPUMemory<'a>> {
+    memory: M,
     state: &'a mut CPUState,
 }
 
 impl<'a, M: Memory + Tickable> CPU<'a, M> {
-    pub fn new(memory: &'a mut M, state: &'a mut CPUState) -> Self {
+    pub fn new(memory: M, state: &'a mut CPUState) -> Self {
         Self { memory, state }
     }
 
@@ -434,6 +434,12 @@ pub trait Tickable {
     fn tick(&mut self) -> bool;
 }
 
+impl<T: Tickable> Tickable for &mut T {
+    fn tick(&mut self) -> bool {
+        (**self).tick()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use yare::parameterized;
@@ -464,7 +470,7 @@ mod tests {
             Self { memory, state }
         }
 
-        pub fn cpu(&mut self) -> CPU<'_, ArrayMemory> {
+        pub fn cpu(&mut self) -> CPU<'_, &'_ mut ArrayMemory> {
             CPU {
                 memory: &mut self.memory,
                 state: &mut self.state,

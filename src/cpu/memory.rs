@@ -1,5 +1,4 @@
 use std::borrow::BorrowMut;
-use std::fmt::{Debug, Formatter};
 
 use log::trace;
 
@@ -45,41 +44,32 @@ const JOY1_ADDRESS: Address = Address::new(0x4016);
 const APU_FRAME_COUNTER: Address = Address::new(0x4017);
 const PRG_SPACE: Address = Address::new(0x4020);
 
-pub struct NESCPUMemory<PRG = cartridge::PRG, PPU = RealPPU, IN = Controller> {
-    internal_ram: [u8; 0x800],
-    prg: PRG,
-    ppu: PPU,
-    apu: APU,
-    input: IN,
-    the_rest: ArrayMemory, // TODO
+pub struct NESCPUMemory<'a, PRG = cartridge::PRG, PPU = RealPPU, IN = Controller> {
+    internal_ram: &'a mut [u8; 0x800],
+    prg: &'a mut PRG,
+    ppu: &'a mut PPU,
+    apu: &'a mut APU,
+    input: &'a mut IN,
+    the_rest: &'a mut ArrayMemory, // TODO
 }
 
-impl<PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<PRG, PPU, IN> {
-    pub fn new(prg: PRG, ppu: PPU, apu: APU, input: IN) -> Self {
-        NESCPUMemory {
-            internal_ram: [0; 0x800],
+impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
+    pub fn new(
+        internal_ram: &'a mut [u8; 0x800],
+        prg: &'a mut PRG,
+        ppu: &'a mut PPU,
+        apu: &'a mut APU,
+        input: &'a mut IN,
+        the_rest: &'a mut ArrayMemory,
+    ) -> Self {
+        Self {
+            internal_ram,
             prg,
             ppu,
             apu,
             input,
-            the_rest: ArrayMemory::default(),
+            the_rest,
         }
-    }
-
-    pub fn ppu(&mut self) -> &mut PPU {
-        &mut self.ppu
-    }
-
-    pub fn apu(&mut self) -> &mut APU {
-        &mut self.apu
-    }
-
-    pub fn input(&mut self) -> &mut IN {
-        &mut self.input
-    }
-
-    pub fn prg(&mut self) -> &mut PRG {
-        &mut self.prg
     }
 
     fn write_oam_data(&mut self, page: u8) {
@@ -95,18 +85,7 @@ impl<PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<PRG, PPU, IN> {
     }
 }
 
-impl<PRG: Debug, PPU: Debug, IN: Debug> Debug for NESCPUMemory<PRG, PPU, IN> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NESCPUMemory")
-            .field("prg", &self.prg)
-            .field("ppu_registers", &self.ppu)
-            .field("input", &self.input)
-            .field("the_rest", &self.the_rest)
-            .finish()
-    }
-}
-
-impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<PRG, PPU, IN> {
+impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<'_, PRG, PPU, IN> {
     fn read(&mut self, address: Address) -> u8 {
         if address >= PRG_SPACE {
             self.prg.read(address)
@@ -193,7 +172,7 @@ impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<PRG, PPU, IN
     }
 }
 
-impl Tickable for NESCPUMemory {
+impl Tickable for NESCPUMemory<'_> {
     fn tick(&mut self) -> bool {
         let interrupt = self.ppu.tick();
         self.apu.tick();
@@ -209,7 +188,8 @@ mod tests {
 
     #[test]
     fn can_read_and_write_internal_ram_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
 
         for value in 0x0..=0x07ff {
             let address = Address::new(value);
@@ -221,7 +201,8 @@ mod tests {
 
     #[test]
     fn nes_cpu_memory_addresses_0x800_to_0x1fff_mirror_internal_ram() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
 
         for value in 0x0800..=0x1fff {
             let address = Address::new(value);
@@ -238,7 +219,8 @@ mod tests {
 
     #[test]
     fn can_write_ppuctrl_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.write(Address::new(0x2000), 0x43);
         assert_eq!(memory.ppu.control, 0x43);
         memory.write(Address::new(0x3ff8), 0x44);
@@ -247,7 +229,8 @@ mod tests {
 
     #[test]
     fn can_write_ppumask_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.write(Address::new(0x2001), 0x43);
         assert_eq!(memory.ppu.mask, 0x43);
         memory.write(Address::new(0x3ff9), 0x44);
@@ -256,7 +239,8 @@ mod tests {
 
     #[test]
     fn can_read_ppustatus_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.ppu.status = 0x43;
         assert_eq!(memory.read(Address::new(0x2002)), 0x43);
         assert_eq!(memory.read(Address::new(0x3ffa)), 0x43);
@@ -264,7 +248,8 @@ mod tests {
 
     #[test]
     fn can_write_oamaddr_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.write(Address::new(0x2003), 0x43);
         assert_eq!(memory.ppu.oam_address, 0x43);
         memory.write(Address::new(0x3ffb), 0x44);
@@ -273,7 +258,8 @@ mod tests {
 
     #[test]
     fn can_read_oamdata_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.ppu.oam_data = 0x43;
         assert_eq!(memory.read(Address::new(0x3ffc)), 0x43);
         assert_eq!(memory.read(Address::new(0x2004)), 0x43);
@@ -281,7 +267,8 @@ mod tests {
 
     #[test]
     fn can_write_oamdata_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.write(Address::new(0x2004), 0x43);
         assert_eq!(memory.ppu.oam_data, 0x43);
         memory.write(Address::new(0x3ffc), 0x44);
@@ -296,7 +283,8 @@ mod tests {
             expected[i] = i as u8;
         }
 
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         for i in 0x0200..=0x02ff {
             memory.write(Address::new(i), expected[i as usize % 256]);
         }
@@ -307,7 +295,8 @@ mod tests {
 
     #[test]
     fn can_write_ppuscroll_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.write(Address::new(0x2005), 0x43);
         assert_eq!(memory.ppu.scroll, 0x43);
         memory.write(Address::new(0x3ffd), 0x44);
@@ -316,7 +305,8 @@ mod tests {
 
     #[test]
     fn can_write_ppuaddr_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.write(Address::new(0x2006), 0x43);
         assert_eq!(memory.ppu.address, 0x43);
         memory.write(Address::new(0x3ffe), 0x44);
@@ -325,7 +315,8 @@ mod tests {
 
     #[test]
     fn can_read_ppudata_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.write(Address::new(0x2007), 0x43);
         assert_eq!(memory.ppu.data, 0x43);
         memory.write(Address::new(0x3fff), 0x44);
@@ -334,7 +325,8 @@ mod tests {
 
     #[test]
     fn can_write_ppudata_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.ppu.data = 0x43;
         assert_eq!(memory.read(Address::new(0x3fff)), 0x43);
         assert_eq!(memory.read(Address::new(0x2007)), 0x43);
@@ -342,7 +334,8 @@ mod tests {
 
     #[test]
     fn can_read_and_write_cartridge_space_in_nes_cpu_memory() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
 
         for value in 0x4020..=0xffff {
             let address = Address::new(value);
@@ -355,14 +348,16 @@ mod tests {
 
     #[test]
     fn reading_from_4016_reads_from_input_device() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.input.0 = 24;
         assert_eq!(memory.read(Address::new(0x4016)), 24);
     }
 
     #[test]
     fn writing_to_4016_writes_to_input_device() {
-        let mut memory = nes_cpu_memory();
+        let mut memory = TestCPUMemory::default();
+        let mut memory = memory.memory();
         memory.write(Address::new(0x4016), 52);
         assert_eq!(memory.input.0, 52);
     }
@@ -443,20 +438,48 @@ mod tests {
         }
     }
 
-    fn nes_cpu_memory() -> NESCPUMemory<ArrayMemory, MockPPU, MockInput> {
-        let ppu = MockPPU {
-            control: 0,
-            mask: 0,
-            status: 0,
-            oam_address: 0,
-            oam_data: 0,
-            scroll: 0,
-            address: 0,
-            data: 0,
-            oam_dma: [0; 256],
-        };
-        let prg = ArrayMemory::default();
-        let input = MockInput(0);
-        NESCPUMemory::new(prg, ppu, APU::new(AudioSink::default()), input)
+    struct TestCPUMemory {
+        internal_ram: [u8; 0x800],
+        prg: ArrayMemory,
+        ppu: MockPPU,
+        apu: APU,
+        input: MockInput,
+        the_rest: ArrayMemory,
+    }
+
+    impl TestCPUMemory {
+        fn memory(&mut self) -> NESCPUMemory<'_, ArrayMemory, MockPPU, MockInput> {
+            NESCPUMemory::new(
+                &mut self.internal_ram,
+                &mut self.prg,
+                &mut self.ppu,
+                &mut self.apu,
+                &mut self.input,
+                &mut self.the_rest,
+            )
+        }
+    }
+
+    impl Default for TestCPUMemory {
+        fn default() -> Self {
+            Self {
+                internal_ram: [0; _],
+                prg: ArrayMemory::default(),
+                ppu: MockPPU {
+                    control: 0,
+                    mask: 0,
+                    status: 0,
+                    oam_address: 0,
+                    oam_data: 0,
+                    scroll: 0,
+                    address: 0,
+                    data: 0,
+                    oam_dma: [0; 256],
+                },
+                apu: APU::new(AudioSink::default()),
+                input: MockInput(0),
+                the_rest: ArrayMemory::default(),
+            }
+        }
     }
 }
