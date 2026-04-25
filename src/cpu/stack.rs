@@ -29,7 +29,7 @@ impl Default for StackPointer {
     }
 }
 
-impl<M: Memory + Tickable> CPU<M> {
+impl<M: Memory + Tickable> CPU<'_, M> {
     pub fn push_stack(&mut self, byte: u8) {
         self.write(self.state.stack_pointer.address(), byte);
         self.state.stack_pointer.decrement();

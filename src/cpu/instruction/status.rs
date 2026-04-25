@@ -3,7 +3,7 @@
 use crate::cpu::Tickable;
 use crate::{cpu::Status, Memory, CPU};
 
-impl<M: Memory + Tickable> CPU<M> {
+impl<M: Memory + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn clc(&mut self) {
         self.ignore_argument();
         self.state.status.remove(Status::CARRY);
@@ -51,7 +51,7 @@ mod tests {
     #[test]
     fn instr_clc_clears_carry_flag() {
         let cpu = run_instr(mem!(CLC), |cpu| {
-            cpu.state.status.insert(Status::CARRY);
+            cpu.status.insert(Status::CARRY);
         });
 
         assert!(!cpu.state.status.contains(Status::CARRY));
@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn instr_cld_clears_decimal_flag() {
         let cpu = run_instr(mem!(CLD), |cpu| {
-            cpu.state.status.insert(Status::DECIMAL);
+            cpu.status.insert(Status::DECIMAL);
         });
 
         assert!(!cpu.state.status.contains(Status::DECIMAL));
@@ -69,7 +69,7 @@ mod tests {
     #[test]
     fn instr_cli_clears_interrupt_disable_flag() {
         let cpu = run_instr(mem!(CLI), |cpu| {
-            cpu.state.status.insert(Status::INTERRUPT_DISABLE);
+            cpu.status.insert(Status::INTERRUPT_DISABLE);
         });
 
         assert!(!cpu.state.status.contains(Status::INTERRUPT_DISABLE));
@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn instr_clv_clears_overflow_flag() {
         let cpu = run_instr(mem!(CLV), |cpu| {
-            cpu.state.status.insert(Status::OVERFLOW);
+            cpu.status.insert(Status::OVERFLOW);
         });
 
         assert!(!cpu.state.status.contains(Status::OVERFLOW));
@@ -87,7 +87,7 @@ mod tests {
     #[test]
     fn instr_sec_sets_carry_flag() {
         let cpu = run_instr(mem!(SEC), |cpu| {
-            cpu.state.status.remove(Status::CARRY);
+            cpu.status.remove(Status::CARRY);
         });
 
         assert!(cpu.state.status.contains(Status::CARRY));
@@ -96,7 +96,7 @@ mod tests {
     #[test]
     fn instr_sed_sets_decimal_flag() {
         let cpu = run_instr(mem!(SED), |cpu| {
-            cpu.state.status.remove(Status::DECIMAL);
+            cpu.status.remove(Status::DECIMAL);
         });
 
         assert!(cpu.state.status.contains(Status::DECIMAL));
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn instr_sei_sets_interrupt_disable_flag() {
         let cpu = run_instr(mem!(SEI), |cpu| {
-            cpu.state.status.remove(Status::INTERRUPT_DISABLE);
+            cpu.status.remove(Status::INTERRUPT_DISABLE);
         });
 
         assert!(cpu.state.status.contains(Status::INTERRUPT_DISABLE));

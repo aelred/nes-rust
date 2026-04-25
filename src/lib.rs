@@ -5,6 +5,7 @@ use crate::apu::APU;
 use crate::audio::AudioSink;
 pub use crate::cartridge::Cartridge;
 pub use crate::cpu::instructions;
+pub use crate::cpu::CPUState;
 pub use crate::cpu::Instruction;
 use crate::cpu::NESCPUMemory;
 pub use crate::cpu::Tickable;
@@ -41,15 +42,17 @@ pub const NES_FREQ: f64 = 1_789_773.0;
 
 #[derive(Debug)]
 pub struct NES {
-    /// The NES emulator owns a CPU that in turn owns other components like the PPU and APU.
-    cpu: CPU,
+    cpu: CPUState,
+    /// The NES emulator owns CPU memory that in turn owns other components like the PPU and APU.
+    /// TODO: flatten this out (WIP)
+    cpu_memory: NESCPUMemory,
 }
 
 impl NES {
     pub fn new(cartridge: Cartridge, video_out: BackBuffer, audio_out: AudioSink) -> Self {
-        NES {
-            cpu: Self::cpu_from_cartridge(cartridge, video_out, audio_out),
-        }
+        let mut cpu_memory = Self::cpu_memory_from_cartridge(cartridge, video_out, audio_out);
+        let cpu = CPUState::from_memory(&mut cpu_memory);
+        Self { cpu_memory, cpu }
     }
 
     pub fn program_counter(&mut self) -> Address {
@@ -61,39 +64,39 @@ impl NES {
     }
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        let mut video_out = self.cpu.memory().ppu().disconnect_video();
+        let mut video_out = self.cpu_memory.ppu().disconnect_video();
         // Draw from top left
         video_out.reset();
 
-        let audio_out = self.cpu.memory().apu().disconnect_audio();
+        let audio_out = self.cpu_memory.apu().disconnect_audio();
 
-        self.cpu = Self::cpu_from_cartridge(cartridge, video_out, audio_out);
+        self.cpu_memory = Self::cpu_memory_from_cartridge(cartridge, video_out, audio_out);
+        self.cpu = CPUState::from_memory(&mut self.cpu_memory);
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
-        self.cpu.read(address)
+        self.cpu_memory.read(address)
     }
 
     pub fn controller(&mut self) -> &mut Controller {
-        self.cpu.memory().input()
+        self.cpu_memory.input()
     }
 
     pub fn tick(&mut self) -> u8 {
-        self.cpu.run_instruction()
+        CPU::new(&mut self.cpu_memory, &mut self.cpu).run_instruction()
     }
 
-    fn cpu_from_cartridge(
+    fn cpu_memory_from_cartridge(
         cartridge: Cartridge,
         video_out: BackBuffer,
         audio_out: AudioSink,
-    ) -> CPU {
+    ) -> NESCPUMemory {
         let ppu_memory = NESPPUMemory::new(cartridge.chr);
         let ppu = RealPPU::new(ppu_memory, video_out);
         let apu = APU::new(audio_out);
         let controller = Controller::default();
 
-        let cpu_memory = NESCPUMemory::new(cartridge.prg, ppu, apu, controller);
-        CPU::from_memory(cpu_memory)
+        NESCPUMemory::new(cartridge.prg, ppu, apu, controller)
     }
 }
 

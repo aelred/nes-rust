@@ -3,7 +3,7 @@
 use crate::cpu::Tickable;
 use crate::{Memory, CPU};
 
-impl<M: Memory + Tickable> CPU<M> {
+impl<M: Memory + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn tax(&mut self) {
         self.ignore_argument();
         self.set_x(self.state.accumulator);
@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn instr_tax_transfers_accumulator_to_x_register() {
         let cpu = run_instr(mem!(TAX), |cpu| {
-            cpu.state.accumulator = 65;
+            cpu.accumulator = 65;
         });
 
         assert_eq!(cpu.state.x, 65);
@@ -55,7 +55,7 @@ mod tests {
     #[test]
     fn instr_tay_transfers_accumulator_to_y_register() {
         let cpu = run_instr(mem!(TAY), |cpu| {
-            cpu.state.accumulator = 65;
+            cpu.accumulator = 65;
         });
 
         assert_eq!(cpu.state.y, 65);
@@ -64,7 +64,7 @@ mod tests {
     #[test]
     fn instr_txa_transfers_x_register_to_accumulator() {
         let cpu = run_instr(mem!(TXA), |cpu| {
-            cpu.state.x = 65;
+            cpu.x = 65;
         });
 
         assert_eq!(cpu.state.accumulator, 65);
@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn instr_tya_transfers_y_register_to_accumulator() {
         let cpu = run_instr(mem!(TYA), |cpu| {
-            cpu.state.y = 65;
+            cpu.y = 65;
         });
 
         assert_eq!(cpu.state.accumulator, 65);
@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn instr_tsx_transfers_stack_pointer_to_x_register() {
         let cpu = run_instr(mem!(TSX), |cpu| {
-            cpu.state.stack_pointer.0 = 65;
+            cpu.stack_pointer.0 = 65;
         });
 
         assert_eq!(cpu.state.x, 65);
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn instr_txs_transfers_x_register_to_stack_pointer() {
         let cpu = run_instr(mem!(TXS), |cpu| {
-            cpu.state.x = 65;
+            cpu.x = 65;
         });
 
         assert_eq!(cpu.state.stack_pointer.0, 65);
@@ -100,9 +100,9 @@ mod tests {
     #[test]
     fn instr_txs_does_not_modify_zero_or_negative_register() {
         let cpu = run_instr(mem!(TXS), |cpu| {
-            cpu.state.x = 65;
-            cpu.state.status.insert(Status::ZERO);
-            cpu.state.status.insert(Status::NEGATIVE);
+            cpu.x = 65;
+            cpu.status.insert(Status::ZERO);
+            cpu.status.insert(Status::NEGATIVE);
         });
 
         assert!(cpu.state.status.contains(Status::ZERO));

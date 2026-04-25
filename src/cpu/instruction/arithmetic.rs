@@ -6,7 +6,7 @@ use crate::{
     CPU,
 };
 
-impl<M: Memory + Tickable> CPU<M> {
+impl<M: Memory + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn adc(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.add_to_accumulator(value);
@@ -44,7 +44,7 @@ mod tests {
     #[test]
     fn instr_adc_adds_numbers() {
         let cpu = run_instr(mem!(ADC_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 42;
+            cpu.accumulator = 42;
         });
 
         assert_eq!(cpu.state.accumulator, 52);
@@ -55,7 +55,7 @@ mod tests {
     #[test]
     fn instr_adc_sets_carry_flag_on_unsigned_overflow() {
         let cpu = run_instr(mem!(ADC_IMM, 255u8), |cpu| {
-            cpu.state.accumulator = 42;
+            cpu.accumulator = 42;
         });
 
         assert_eq!(cpu.state.accumulator, 41);
@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn instr_adc_sets_overflow_flag_on_signed_overflow() {
         let cpu = run_instr(mem!(ADC_IMM, 127u8), |cpu| {
-            cpu.state.accumulator = 42i8 as u8;
+            cpu.accumulator = 42i8 as u8;
         });
 
         assert_eq!(cpu.state.accumulator as i8, -87i8);
@@ -77,8 +77,8 @@ mod tests {
     #[test]
     fn instr_sbc_subtracts_numbers() {
         let cpu = run_instr(mem!(SBC_IMM, 10u8), |cpu| {
-            cpu.state.status.insert(Status::CARRY);
-            cpu.state.accumulator = 42;
+            cpu.status.insert(Status::CARRY);
+            cpu.accumulator = 42;
         });
 
         assert_eq!(cpu.state.accumulator, 32);
@@ -89,8 +89,8 @@ mod tests {
     fn instr_sbc_sets_overflow_bit_when_sign_is_wrong() {
         fn sub(accumulator: i8, value: i8) -> (i8, bool) {
             let cpu = run_instr(mem!(SBC_IMM, value as u8), |cpu| {
-                cpu.state.status.insert(Status::CARRY);
-                cpu.state.accumulator = accumulator as u8;
+                cpu.status.insert(Status::CARRY);
+                cpu.accumulator = accumulator as u8;
             });
 
             (
@@ -112,19 +112,19 @@ mod tests {
     #[test]
     fn instr_cmp_sets_carry_flag_if_accumulator_greater_or_equal_to_operand() {
         let cpu = run_instr(mem!(CMP_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 1;
+            cpu.accumulator = 1;
         });
 
         assert!(!cpu.state.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(CMP_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 10;
+            cpu.accumulator = 10;
         });
 
         assert!(cpu.state.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(CMP_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 100;
+            cpu.accumulator = 100;
         });
 
         assert!(cpu.state.status.contains(Status::CARRY));
@@ -133,19 +133,19 @@ mod tests {
     #[test]
     fn instr_cmp_sets_zero_flag_if_accumulator_equals_operand() {
         let cpu = run_instr(mem!(CMP_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 1;
+            cpu.accumulator = 1;
         });
 
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(CMP_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 10;
+            cpu.accumulator = 10;
         });
 
         assert!(cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(CMP_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 100;
+            cpu.accumulator = 100;
         });
 
         assert!(!cpu.state.status.contains(Status::ZERO));
@@ -154,19 +154,19 @@ mod tests {
     #[test]
     fn instr_cmp_sets_negative_flag_if_bit_7_of_accumulator_sub_operand_is_set() {
         let cpu = run_instr(mem!(CMP_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 1;
+            cpu.accumulator = 1;
         });
 
         assert!(cpu.state.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CMP_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 10;
+            cpu.accumulator = 10;
         });
 
         assert!(!cpu.state.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CMP_IMM, 10u8), |cpu| {
-            cpu.state.accumulator = 100;
+            cpu.accumulator = 100;
         });
 
         assert!(!cpu.state.status.contains(Status::NEGATIVE));
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn instr_cpx_compares_using_x_register() {
         let cpu = run_instr(mem!(CPX_IMM, 10u8), |cpu| {
-            cpu.state.x = 1;
+            cpu.x = 1;
         });
 
         assert!(!cpu.state.status.contains(Status::CARRY));
@@ -183,7 +183,7 @@ mod tests {
         assert!(cpu.state.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CPX_IMM, 10u8), |cpu| {
-            cpu.state.x = 10;
+            cpu.x = 10;
         });
 
         assert!(cpu.state.status.contains(Status::CARRY));
@@ -191,7 +191,7 @@ mod tests {
         assert!(!cpu.state.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CPX_IMM, 10u8), |cpu| {
-            cpu.state.x = 100;
+            cpu.x = 100;
         });
 
         assert!(cpu.state.status.contains(Status::CARRY));
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn instr_cpy_compares_using_y_register() {
         let cpu = run_instr(mem!(CPY_IMM, 10u8), |cpu| {
-            cpu.state.y = 1;
+            cpu.y = 1;
         });
 
         assert!(!cpu.state.status.contains(Status::CARRY));
@@ -210,7 +210,7 @@ mod tests {
         assert!(cpu.state.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CPY_IMM, 10u8), |cpu| {
-            cpu.state.y = 10;
+            cpu.y = 10;
         });
 
         assert!(cpu.state.status.contains(Status::CARRY));
@@ -218,7 +218,7 @@ mod tests {
         assert!(!cpu.state.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(mem!(CPY_IMM, 10u8), |cpu| {
-            cpu.state.y = 100;
+            cpu.y = 100;
         });
 
         assert!(cpu.state.status.contains(Status::CARRY));
@@ -235,8 +235,8 @@ mod tests {
             for y in values.iter() {
                 for carry_in in carry_values.iter() {
                     let cpu = run_instr(mem!(ADC_IMM, *y), |cpu| {
-                        cpu.state.status.set(Status::CARRY, *carry_in);
-                        cpu.state.accumulator = *x;
+                        cpu.status.set(Status::CARRY, *carry_in);
+                        cpu.accumulator = *x;
                     });
 
                     let carry_bit = *carry_in as u16;
@@ -260,8 +260,8 @@ mod tests {
             for y in values.iter() {
                 for carry_in in carry_values.iter() {
                     let cpu = run_instr(mem!(SBC_IMM, *y), |cpu| {
-                        cpu.state.status.set(Status::CARRY, *carry_in);
-                        cpu.state.accumulator = *x;
+                        cpu.status.set(Status::CARRY, *carry_in);
+                        cpu.accumulator = *x;
                     });
 
                     let carry_bit = *carry_in as u16;

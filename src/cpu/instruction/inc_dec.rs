@@ -9,7 +9,7 @@ use crate::{
     CPU,
 };
 
-impl<M: Memory + Tickable> CPU<M> {
+impl<M: Memory + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn inc(&mut self, addressing_mode: IncDecAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.increment(reference);
@@ -71,10 +71,10 @@ impl<M: Memory + Tickable> CPU<M> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        cpu::{tests::run_instr, Status},
-        instructions::{DEC_ABS, DEX, DEY, INC_ABS, INX, INY},
+        cpu::{tests::run_instr, Status}, instructions::{DEC_ABS, DEX, DEY, INC_ABS, INX, INY},
         mem,
         Address,
+        Memory,
     };
 
     #[test]
@@ -87,7 +87,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)), 46);
+        assert_eq!(cpu.memory.read(Address::new(100)), 46);
     }
 
     #[test]
@@ -100,7 +100,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)), 46);
+        assert_eq!(cpu.memory.read(Address::new(100)), 46);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
@@ -111,7 +111,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)), 0);
+        assert_eq!(cpu.memory.read(Address::new(100)), 0);
         assert!(cpu.state.status.contains(Status::ZERO));
     }
 
@@ -125,7 +125,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)), 46);
+        assert_eq!(cpu.memory.read(Address::new(100)), 46);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
@@ -136,14 +136,14 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)) as i8, -9i8);
+        assert_eq!(cpu.memory.read(Address::new(100)) as i8, -9i8);
         assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 
     #[test]
     fn instr_inx_increments_x_register() {
         let cpu = run_instr(mem!(INX), |cpu| {
-            cpu.state.x = 45;
+            cpu.x = 45;
         });
 
         assert_eq!(cpu.state.x, 46);
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn instr_iny_increments_y_register() {
         let cpu = run_instr(mem!(INY), |cpu| {
-            cpu.state.y = 45;
+            cpu.y = 45;
         });
 
         assert_eq!(cpu.state.y, 46);
@@ -168,7 +168,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)), 44);
+        assert_eq!(cpu.memory.read(Address::new(100)), 44);
     }
 
     #[test]
@@ -181,7 +181,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)), 44);
+        assert_eq!(cpu.memory.read(Address::new(100)), 44);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
@@ -192,7 +192,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)), 0);
+        assert_eq!(cpu.memory.read(Address::new(100)), 0);
         assert!(cpu.state.status.contains(Status::ZERO));
     }
 
@@ -206,7 +206,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)), 44);
+        assert_eq!(cpu.memory.read(Address::new(100)), 44);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
@@ -217,14 +217,14 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.read(Address::new(100)) as i8, -1i8);
+        assert_eq!(cpu.memory.read(Address::new(100)) as i8, -1i8);
         assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 
     #[test]
     fn instr_dex_decrements_x_register() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.state.x = 45;
+            cpu.x = 45;
         });
 
         assert_eq!(cpu.state.x, 44);
@@ -233,14 +233,14 @@ mod tests {
     #[test]
     fn instr_dex_sets_zero_flag_based_on_result() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.state.x = 45;
+            cpu.x = 45;
         });
 
         assert_eq!(cpu.state.x, 44);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.state.x = 1;
+            cpu.x = 1;
         });
 
         assert_eq!(cpu.state.x, 0);
@@ -250,14 +250,14 @@ mod tests {
     #[test]
     fn instr_dex_sets_negative_flag_based_on_result() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.state.x = 45;
+            cpu.x = 45;
         });
 
         assert_eq!(cpu.state.x, 44);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.state.x = 0;
+            cpu.x = 0;
         });
 
         assert_eq!(cpu.state.x as i8, -1i8);
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn instr_dey_decrements_y_register() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.state.y = 45;
+            cpu.y = 45;
         });
 
         assert_eq!(cpu.state.y, 44);
@@ -276,14 +276,14 @@ mod tests {
     #[test]
     fn instr_dey_sets_zero_flag_based_on_result() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.state.y = 45;
+            cpu.y = 45;
         });
 
         assert_eq!(cpu.state.y, 44);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.state.y = 1;
+            cpu.y = 1;
         });
 
         assert_eq!(cpu.state.y, 0);
@@ -293,14 +293,14 @@ mod tests {
     #[test]
     fn instr_dey_sets_negative_flag_based_on_result() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.state.y = 45;
+            cpu.y = 45;
         });
 
         assert_eq!(cpu.state.y, 44);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.state.y = 0;
+            cpu.y = 0;
         });
 
         assert_eq!(cpu.state.y as i8, -1i8);

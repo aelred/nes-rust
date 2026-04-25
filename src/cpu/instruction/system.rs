@@ -8,7 +8,7 @@ use crate::{
 
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
-impl<M: Memory + Tickable> CPU<M> {
+impl<M: Memory + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn brk(&mut self) {
         self.ignore_argument();
         self.interrupt(INTERRUPT_VECTOR, true)
@@ -63,20 +63,20 @@ mod tests {
     #[test]
     fn instr_brk_writes_program_counter_and_status_with_break_flag_set_to_stack_pointer() {
         let mut cpu = run_instr(mem!(0x1234 => { BRK }), |cpu| {
-            cpu.state.program_counter = Address::new(0x1234);
-            cpu.state.status = Status::from_bits_truncate(0b1001_1000);
-            cpu.state.stack_pointer.0 = 6;
+            cpu.program_counter = Address::new(0x1234);
+            cpu.status = Status::from_bits_truncate(0b1001_1000);
+            cpu.stack_pointer.0 = 6;
         });
 
-        assert_eq!(cpu.read(stack::BASE + 6), 0x12);
-        assert_eq!(cpu.read(stack::BASE + 5), 0x34);
-        assert_eq!(cpu.read(stack::BASE + 4), 0b1011_1000);
+        assert_eq!(cpu.memory.read(stack::BASE + 6), 0x12);
+        assert_eq!(cpu.memory.read(stack::BASE + 5), 0x34);
+        assert_eq!(cpu.memory.read(stack::BASE + 4), 0b1011_1000);
     }
 
     #[test]
     fn instr_brk_decrements_stack_pointer_by_three_bytes() {
         let cpu = run_instr(mem!(BRK), |cpu| {
-            cpu.state.stack_pointer.0 = 6;
+            cpu.stack_pointer.0 = 6;
         });
 
         assert_eq!(cpu.state.stack_pointer.0, 3);
@@ -85,18 +85,18 @@ mod tests {
     #[test]
     fn instr_brk_sets_break_flag_on_stack() {
         let mut cpu = run_instr(mem!(BRK), |cpu| {
-            cpu.state.status.remove(Status::BREAK);
-            cpu.state.stack_pointer.0 = 6;
+            cpu.status.remove(Status::BREAK);
+            cpu.stack_pointer.0 = 6;
         });
 
-        let status = Status::from_bits_truncate(cpu.read(stack::BASE + 4));
+        let status = Status::from_bits_truncate(cpu.memory.read(stack::BASE + 4));
         assert!(status.contains(Status::BREAK));
     }
 
     #[test]
     fn instr_nop_increments_program_counter() {
         let cpu = run_instr(mem!(20 => LSR_ACC), |cpu| {
-            cpu.state.program_counter = Address::new(20);
+            cpu.program_counter = Address::new(20);
         });
 
         assert_eq!(cpu.state.program_counter, Address::new(21));
@@ -110,7 +110,7 @@ mod tests {
                 stack::BASE + 101 => { 0x56, 0x34, 0x12 }
             ),
             |cpu| {
-                cpu.state.stack_pointer.0 = 100;
+                cpu.stack_pointer.0 = 100;
             },
         );
 
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn instr_rti_increments_stack_pointer_by_three_bytes() {
         let cpu = run_instr(mem!(RTI), |cpu| {
-            cpu.state.stack_pointer.0 = 6;
+            cpu.stack_pointer.0 = 6;
         });
 
         assert_eq!(cpu.state.stack_pointer.0, 9);

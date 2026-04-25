@@ -3,7 +3,7 @@
 use crate::cpu::Tickable;
 use crate::{cpu::Status, Memory, CPU};
 
-impl<M: Memory + Tickable> CPU<M> {
+impl<M: Memory + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn bcc(&mut self) {
         self.branch_if(!self.state.status.contains(Status::CARRY))
     }
@@ -61,8 +61,8 @@ mod tests {
     #[test]
     fn instr_bcc_branches_when_carry_flag_clear() {
         let cpu = run_instr(mem!(90 => { BCC, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.remove(Status::CARRY);
+            cpu.program_counter = Address::new(90);
+            cpu.status.remove(Status::CARRY);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -72,8 +72,8 @@ mod tests {
     #[test]
     fn instr_bcc_does_not_branch_when_carry_flag_set() {
         let cpu = run_instr(mem!(90 => { BCC, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.insert(Status::CARRY);
+            cpu.program_counter = Address::new(90);
+            cpu.status.insert(Status::CARRY);
         });
 
         assert_eq!(cpu.state.program_counter, Address::new(92));
@@ -82,8 +82,8 @@ mod tests {
     #[test]
     fn instr_bcs_does_not_branch_when_carry_flag_clear() {
         let cpu = run_instr(mem!(90 => { BCS, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.remove(Status::CARRY);
+            cpu.program_counter = Address::new(90);
+            cpu.status.remove(Status::CARRY);
         });
 
         assert_eq!(cpu.state.program_counter, Address::new(92));
@@ -92,8 +92,8 @@ mod tests {
     #[test]
     fn instr_bcs_branches_when_carry_flag_set() {
         let cpu = run_instr(mem!(90 => { BCS, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.insert(Status::CARRY);
+            cpu.program_counter = Address::new(90);
+            cpu.status.insert(Status::CARRY);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -103,8 +103,8 @@ mod tests {
     #[test]
     fn instr_beq_does_not_branch_when_zero_flag_clear() {
         let cpu = run_instr(mem!(90 => { BEQ, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.remove(Status::ZERO);
+            cpu.program_counter = Address::new(90);
+            cpu.status.remove(Status::ZERO);
         });
 
         assert_eq!(cpu.state.program_counter, Address::new(92));
@@ -113,8 +113,8 @@ mod tests {
     #[test]
     fn instr_beq_branches_when_zero_flag_set() {
         let cpu = run_instr(mem!(90 => { BEQ, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.insert(Status::ZERO);
+            cpu.program_counter = Address::new(90);
+            cpu.status.insert(Status::ZERO);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -124,8 +124,8 @@ mod tests {
     #[test]
     fn instr_bmi_does_not_branch_when_negative_flag_clear() {
         let cpu = run_instr(mem!(90 => { BMI, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.remove(Status::NEGATIVE);
+            cpu.program_counter = Address::new(90);
+            cpu.status.remove(Status::NEGATIVE);
         });
 
         assert_eq!(cpu.state.program_counter, Address::new(92));
@@ -134,8 +134,8 @@ mod tests {
     #[test]
     fn instr_bmi_branches_when_negative_flag_set() {
         let cpu = run_instr(mem!(90 => { BMI, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.insert(Status::NEGATIVE);
+            cpu.program_counter = Address::new(90);
+            cpu.status.insert(Status::NEGATIVE);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -145,8 +145,8 @@ mod tests {
     #[test]
     fn instr_bne_branches_when_zero_flag_clear() {
         let cpu = run_instr(mem!(90 => { BNE, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.remove(Status::ZERO);
+            cpu.program_counter = Address::new(90);
+            cpu.status.remove(Status::ZERO);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -156,8 +156,8 @@ mod tests {
     #[test]
     fn instr_bne_does_not_branch_when_zero_flag_set() {
         let cpu = run_instr(mem!(90 => { BNE, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.insert(Status::ZERO);
+            cpu.program_counter = Address::new(90);
+            cpu.status.insert(Status::ZERO);
         });
 
         assert_eq!(cpu.state.program_counter, Address::new(92));
@@ -166,8 +166,8 @@ mod tests {
     #[test]
     fn instr_bpl_branches_when_negative_flag_clear() {
         let cpu = run_instr(mem!(90 => { BPL, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.remove(Status::NEGATIVE);
+            cpu.program_counter = Address::new(90);
+            cpu.status.remove(Status::NEGATIVE);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -177,8 +177,8 @@ mod tests {
     #[test]
     fn instr_bpl_does_not_branch_when_negative_flag_set() {
         let cpu = run_instr(mem!(90 => { BPL, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.insert(Status::NEGATIVE);
+            cpu.program_counter = Address::new(90);
+            cpu.status.insert(Status::NEGATIVE);
         });
 
         assert_eq!(cpu.state.program_counter, Address::new(92));
@@ -187,8 +187,8 @@ mod tests {
     #[test]
     fn instr_bvc_branches_when_overflow_flag_clear() {
         let cpu = run_instr(mem!(90 => { BVC, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.remove(Status::OVERFLOW);
+            cpu.program_counter = Address::new(90);
+            cpu.status.remove(Status::OVERFLOW);
         });
 
         // 2 steps ahead because PC also automatically increments
@@ -198,8 +198,8 @@ mod tests {
     #[test]
     fn instr_bvc_does_not_branch_when_overflow_flag_set() {
         let cpu = run_instr(mem!(90 => { BVC, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.insert(Status::OVERFLOW);
+            cpu.program_counter = Address::new(90);
+            cpu.status.insert(Status::OVERFLOW);
         });
 
         assert_eq!(cpu.state.program_counter, Address::new(92));
@@ -208,8 +208,8 @@ mod tests {
     #[test]
     fn instr_bvs_does_not_branch_when_carry_flag_clear() {
         let cpu = run_instr(mem!(90 => { BVS, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.remove(Status::OVERFLOW);
+            cpu.program_counter = Address::new(90);
+            cpu.status.remove(Status::OVERFLOW);
         });
 
         assert_eq!(cpu.state.program_counter, Address::new(92));
@@ -218,8 +218,8 @@ mod tests {
     #[test]
     fn instr_bvs_branches_when_carry_flag_set() {
         let cpu = run_instr(mem!(90 => { BVS, -10i8 as u8 }), |cpu| {
-            cpu.state.program_counter = Address::new(90);
-            cpu.state.status.insert(Status::OVERFLOW);
+            cpu.program_counter = Address::new(90);
+            cpu.status.insert(Status::OVERFLOW);
         });
 
         // 2 steps ahead because PC also automatically increments

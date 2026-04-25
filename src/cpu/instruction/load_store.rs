@@ -8,7 +8,7 @@ use crate::{
     CPU,
 };
 
-impl<M: Memory + Tickable> CPU<M> {
+impl<M: Memory + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn lda(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(value);
@@ -55,10 +55,10 @@ impl<M: Memory + Tickable> CPU<M> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        cpu::tests::run_instr,
-        instructions::{LDA_IMM, LDX_IMM, LDY_IMM, STA_ABS, STX_ABS, STY_ABS},
+        cpu::tests::run_instr, instructions::{LDA_IMM, LDX_IMM, LDY_IMM, STA_ABS, STX_ABS, STY_ABS},
         mem,
         Address,
+        Memory,
     };
 
     #[test]
@@ -85,27 +85,27 @@ mod tests {
     #[test]
     fn instr_sta_stores_accumulator_in_memory() {
         let mut cpu = run_instr(mem!(STA_ABS, 0x32, 0), |cpu| {
-            cpu.state.accumulator = 65;
+            cpu.accumulator = 65;
         });
 
-        assert_eq!(cpu.read(Address::new(0x32)), 65);
+        assert_eq!(cpu.memory.read(Address::new(0x32)), 65);
     }
 
     #[test]
     fn instr_stx_stores_x_register_in_memory() {
         let mut cpu = run_instr(mem!(STX_ABS, 0x32, 0), |cpu| {
-            cpu.state.x = 65;
+            cpu.x = 65;
         });
 
-        assert_eq!(cpu.read(Address::new(0x32)), 65);
+        assert_eq!(cpu.memory.read(Address::new(0x32)), 65);
     }
 
     #[test]
     fn instr_sty_stores_y_register_in_memory() {
         let mut cpu = run_instr(mem!(STY_ABS, 0x32, 0), |cpu| {
-            cpu.state.y = 65;
+            cpu.y = 65;
         });
 
-        assert_eq!(cpu.read(Address::new(0x32)), 65);
+        assert_eq!(cpu.memory.read(Address::new(0x32)), 65);
     }
 }

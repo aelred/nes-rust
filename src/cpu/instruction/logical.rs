@@ -9,7 +9,7 @@ use crate::{
     CPU,
 };
 
-impl<M: Memory + Tickable> CPU<M> {
+impl<M: Memory + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn and(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(self.state.accumulator & value);
@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn instr_and_performs_bitwise_and() {
         let cpu = run_instr(mem!(AND_IMM, 0b1100_u8), |cpu| {
-            cpu.state.accumulator = 0b1010;
+            cpu.accumulator = 0b1010;
         });
 
         assert_eq!(cpu.state.accumulator, 0b1000);
@@ -55,7 +55,7 @@ mod tests {
     #[test]
     fn instr_eor_performs_bitwise_xor() {
         let cpu = run_instr(mem!(EOR_IMM, 0b1100_u8), |cpu| {
-            cpu.state.accumulator = 0b1010;
+            cpu.accumulator = 0b1010;
         });
 
         assert_eq!(cpu.state.accumulator, 0b0110);
@@ -64,7 +64,7 @@ mod tests {
     #[test]
     fn instr_ora_performs_bitwise_or() {
         let cpu = run_instr(mem!(ORA_IMM, 0b1100_u8), |cpu| {
-            cpu.state.accumulator = 0b1010;
+            cpu.accumulator = 0b1010;
         });
 
         assert_eq!(cpu.state.accumulator, 0b1110);
@@ -78,7 +78,7 @@ mod tests {
                 54 => { 0b0000_1111 }
             ),
             |cpu| {
-                cpu.state.accumulator = 0b1111_0000u8;
+                cpu.accumulator = 0b1111_0000u8;
             },
         );
 
@@ -93,7 +93,7 @@ mod tests {
                 54 => { 0b0011_1111 }
             ),
             |cpu| {
-                cpu.state.accumulator = 0b1111_1100u8;
+                cpu.accumulator = 0b1111_1100u8;
             },
         );
 
