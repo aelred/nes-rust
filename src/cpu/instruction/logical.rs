@@ -12,26 +12,26 @@ use crate::{
 impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn and(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
-        self.set_accumulator(self.accumulator & value);
+        self.set_accumulator(self.state.accumulator & value);
     }
 
     pub(in crate::cpu) fn eor(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
-        self.set_accumulator(self.accumulator ^ value);
+        self.set_accumulator(self.state.accumulator ^ value);
     }
 
     pub(in crate::cpu) fn ora(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
-        self.set_accumulator(self.accumulator | value);
+        self.set_accumulator(self.state.accumulator | value);
     }
 
     pub(in crate::cpu) fn bit(&mut self, addressing_mode: BITAddressingMode) {
         let value = self.fetch(addressing_mode);
-        let result = self.accumulator & value;
-        self.status.set(Status::ZERO, result == 0);
-        self.status.set(Status::OVERFLOW, value & (1 << 6) != 0);
-        self.status
-            .set(Status::NEGATIVE, (value as i8).is_negative());
+        let result = self.state.accumulator & value;
+        let status = &mut self.state.status;
+        status.set(Status::ZERO, result == 0);
+        status.set(Status::OVERFLOW, value & (1 << 6) != 0);
+        status.set(Status::NEGATIVE, (value as i8).is_negative());
     }
 }
 
@@ -46,28 +46,28 @@ mod tests {
     #[test]
     fn instr_and_performs_bitwise_and() {
         let cpu = run_instr(mem!(AND_IMM, 0b1100_u8), |cpu| {
-            cpu.accumulator = 0b1010;
+            cpu.state.accumulator = 0b1010;
         });
 
-        assert_eq!(cpu.accumulator, 0b1000);
+        assert_eq!(cpu.state.accumulator, 0b1000);
     }
 
     #[test]
     fn instr_eor_performs_bitwise_xor() {
         let cpu = run_instr(mem!(EOR_IMM, 0b1100_u8), |cpu| {
-            cpu.accumulator = 0b1010;
+            cpu.state.accumulator = 0b1010;
         });
 
-        assert_eq!(cpu.accumulator, 0b0110);
+        assert_eq!(cpu.state.accumulator, 0b0110);
     }
 
     #[test]
     fn instr_ora_performs_bitwise_or() {
         let cpu = run_instr(mem!(ORA_IMM, 0b1100_u8), |cpu| {
-            cpu.accumulator = 0b1010;
+            cpu.state.accumulator = 0b1010;
         });
 
-        assert_eq!(cpu.accumulator, 0b1110);
+        assert_eq!(cpu.state.accumulator, 0b1110);
     }
 
     #[test]
@@ -78,11 +78,11 @@ mod tests {
                 54 => { 0b0000_1111 }
             ),
             |cpu| {
-                cpu.accumulator = 0b1111_0000u8;
+                cpu.state.accumulator = 0b1111_0000u8;
             },
         );
 
-        assert!(cpu.status.contains(Status::ZERO));
+        assert!(cpu.state.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -93,11 +93,11 @@ mod tests {
                 54 => { 0b0011_1111 }
             ),
             |cpu| {
-                cpu.accumulator = 0b1111_1100u8;
+                cpu.state.accumulator = 0b1111_1100u8;
             },
         );
 
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert!(!cpu.state.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -110,7 +110,7 @@ mod tests {
             |_| {},
         );
 
-        assert!(!cpu.status.contains(Status::OVERFLOW));
+        assert!(!cpu.state.status.contains(Status::OVERFLOW));
 
         let cpu = run_instr(
             mem!(
@@ -120,7 +120,7 @@ mod tests {
             |_| {},
         );
 
-        assert!(cpu.status.contains(Status::OVERFLOW));
+        assert!(cpu.state.status.contains(Status::OVERFLOW));
     }
 
     #[test]
@@ -133,7 +133,7 @@ mod tests {
             |_| {},
         );
 
-        assert!(!cpu.status.contains(Status::NEGATIVE));
+        assert!(!cpu.state.status.contains(Status::NEGATIVE));
 
         let cpu = run_instr(
             mem!(
@@ -143,6 +143,6 @@ mod tests {
             |_| {},
         );
 
-        assert!(cpu.status.contains(Status::NEGATIVE));
+        assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 }

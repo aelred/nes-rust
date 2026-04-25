@@ -26,17 +26,17 @@ impl<M: Memory + Tickable> CPU<M> {
     // Unofficial Opcodes
     pub(in crate::cpu) fn slo(&mut self, addressing_mode: StoreAddressingMode) {
         let value = self.asl(addressing_mode);
-        self.set_accumulator(self.accumulator | value);
+        self.set_accumulator(self.state.accumulator | value);
     }
 
     pub(in crate::cpu) fn rla(&mut self, addressing_mode: StoreAddressingMode) {
         let value = self.rol(addressing_mode);
-        self.set_accumulator(self.accumulator & value);
+        self.set_accumulator(self.state.accumulator & value);
     }
 
     pub(in crate::cpu) fn sre(&mut self, addressing_mode: StoreAddressingMode) {
         let value = self.lsr(addressing_mode);
-        self.set_accumulator(self.accumulator ^ value);
+        self.set_accumulator(self.state.accumulator ^ value);
     }
 
     pub(in crate::cpu) fn rra(&mut self, addressing_mode: StoreAddressingMode) {
@@ -51,7 +51,7 @@ impl<M: Memory + Tickable> CPU<M> {
         op: impl FnOnce(u8, u8) -> u8,
     ) -> u8 {
         let reference = self.fetch_ref(addressing_mode);
-        let carry = self.status.contains(Status::CARRY);
+        let carry = self.state.status.contains(Status::CARRY);
 
         let old_value = self.read_reference(reference, false);
         self.set_reference(reference, old_value, false); // Redundant write
@@ -59,7 +59,7 @@ impl<M: Memory + Tickable> CPU<M> {
         let carry = old_value & (1 << carry_bit) != 0;
 
         self.set_reference(reference, new_value, false);
-        self.status.set(Status::CARRY, carry);
+        self.state.status.set(Status::CARRY, carry);
         new_value
     }
 }
@@ -76,21 +76,21 @@ mod tests {
     #[test]
     fn instr_asl_shifts_left() {
         let cpu = run_instr(mem!(ASL_ACC), |cpu| {
-            cpu.accumulator = 0b100;
+            cpu.state.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator, 0b1000);
-        assert!(!cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0b1000);
+        assert!(!cpu.state.status.contains(Status::CARRY));
     }
 
     #[test]
     fn instr_asl_sets_carry_flag_on_overflow() {
         let cpu = run_instr(mem!(ASL_ACC), |cpu| {
-            cpu.accumulator = 0b1010_1010;
+            cpu.state.accumulator = 0b1010_1010;
         });
 
-        assert_eq!(cpu.accumulator, 0b0101_0100);
-        assert!(cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0b0101_0100);
+        assert!(cpu.state.status.contains(Status::CARRY));
     }
 
     #[test]
@@ -109,74 +109,74 @@ mod tests {
     #[test]
     fn instr_lsr_shifts_right() {
         let cpu = run_instr(mem!(LSR_ACC), |cpu| {
-            cpu.accumulator = 0b100;
+            cpu.state.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator, 0b10);
-        assert!(!cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0b10);
+        assert!(!cpu.state.status.contains(Status::CARRY));
     }
 
     #[test]
     fn instr_lsr_sets_carry_flag_on_underflow() {
         let cpu = run_instr(mem!(LSR_ACC), |cpu| {
-            cpu.accumulator = 0b101_0101;
+            cpu.state.accumulator = 0b101_0101;
         });
 
-        assert_eq!(cpu.accumulator, 0b10_1010);
-        assert!(cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0b10_1010);
+        assert!(cpu.state.status.contains(Status::CARRY));
     }
 
     #[test]
     fn instr_rol_rotates_left_with_carry_flag() {
         let cpu = run_instr(mem!(ROL_ACC), |cpu| {
-            cpu.status.remove(Status::CARRY);
-            cpu.accumulator = 0b100;
+            cpu.state.status.remove(Status::CARRY);
+            cpu.state.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator, 0b1000);
-        assert!(!cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0b1000);
+        assert!(!cpu.state.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(ROL_ACC), |cpu| {
-            cpu.status.insert(Status::CARRY);
-            cpu.accumulator = 0b100;
+            cpu.state.status.insert(Status::CARRY);
+            cpu.state.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator, 0b1001);
-        assert!(!cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0b1001);
+        assert!(!cpu.state.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(ROL_ACC), |cpu| {
-            cpu.status.remove(Status::CARRY);
-            cpu.accumulator = 0b1000_0000;
+            cpu.state.status.remove(Status::CARRY);
+            cpu.state.accumulator = 0b1000_0000;
         });
 
-        assert_eq!(cpu.accumulator, 0);
-        assert!(cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0);
+        assert!(cpu.state.status.contains(Status::CARRY));
     }
 
     #[test]
     fn instr_ror_rotates_left_with_carry_flag() {
         let cpu = run_instr(mem!(ROR_ACC), |cpu| {
-            cpu.status.remove(Status::CARRY);
-            cpu.accumulator = 0b100;
+            cpu.state.status.remove(Status::CARRY);
+            cpu.state.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator, 0b10);
-        assert!(!cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0b10);
+        assert!(!cpu.state.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(ROR_ACC), |cpu| {
-            cpu.status.insert(Status::CARRY);
-            cpu.accumulator = 0b100;
+            cpu.state.status.insert(Status::CARRY);
+            cpu.state.accumulator = 0b100;
         });
 
-        assert_eq!(cpu.accumulator, 0b1000_0010);
-        assert!(!cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0b1000_0010);
+        assert!(!cpu.state.status.contains(Status::CARRY));
 
         let cpu = run_instr(mem!(ROR_ACC), |cpu| {
-            cpu.status.remove(Status::CARRY);
-            cpu.accumulator = 0b1;
+            cpu.state.status.remove(Status::CARRY);
+            cpu.state.accumulator = 0b1;
         });
 
-        assert_eq!(cpu.accumulator, 0);
-        assert!(cpu.status.contains(Status::CARRY));
+        assert_eq!(cpu.state.accumulator, 0);
+        assert!(cpu.state.status.contains(Status::CARRY));
     }
 }

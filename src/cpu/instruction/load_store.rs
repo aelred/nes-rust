@@ -26,17 +26,17 @@ impl<M: Memory + Tickable> CPU<M> {
 
     pub(in crate::cpu) fn sta(&mut self, addressing_mode: StoreAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
-        self.write_reference(reference, self.accumulator, true);
+        self.write_reference(reference, self.state.accumulator, true);
     }
 
     pub(in crate::cpu) fn stx(&mut self, addressing_mode: STXAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
-        self.write_reference(reference, self.x, true);
+        self.write_reference(reference, self.state.x, true);
     }
 
     pub(in crate::cpu) fn sty(&mut self, addressing_mode: STYAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
-        self.write_reference(reference, self.y, true);
+        self.write_reference(reference, self.state.y, true);
     }
 
     // Unofficial Opcodes
@@ -48,7 +48,7 @@ impl<M: Memory + Tickable> CPU<M> {
 
     pub(in crate::cpu) fn sax(&mut self, addressing_mode: SAXAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
-        self.write_reference(reference, self.accumulator & self.x, true);
+        self.write_reference(reference, self.state.accumulator & self.state.x, true);
     }
 }
 
@@ -65,27 +65,27 @@ mod tests {
     fn instr_lda_loads_operand_into_accunmulator() {
         let cpu = run_instr(mem!(LDA_IMM, 5u8), |_| {});
 
-        assert_eq!(cpu.accumulator, 5);
+        assert_eq!(cpu.state.accumulator, 5);
     }
 
     #[test]
     fn instr_ldx_loads_operand_into_x_register() {
         let cpu = run_instr(mem!(LDX_IMM, 5u8), |_| {});
 
-        assert_eq!(cpu.x, 5);
+        assert_eq!(cpu.state.x, 5);
     }
 
     #[test]
     fn instr_ldy_loads_operand_into_y_register() {
         let cpu = run_instr(mem!(LDY_IMM, 5u8), |_| {});
 
-        assert_eq!(cpu.y, 5);
+        assert_eq!(cpu.state.y, 5);
     }
 
     #[test]
     fn instr_sta_stores_accumulator_in_memory() {
         let mut cpu = run_instr(mem!(STA_ABS, 0x32, 0), |cpu| {
-            cpu.accumulator = 65;
+            cpu.state.accumulator = 65;
         });
 
         assert_eq!(cpu.read(Address::new(0x32)), 65);
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn instr_stx_stores_x_register_in_memory() {
         let mut cpu = run_instr(mem!(STX_ABS, 0x32, 0), |cpu| {
-            cpu.x = 65;
+            cpu.state.x = 65;
         });
 
         assert_eq!(cpu.read(Address::new(0x32)), 65);
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn instr_sty_stores_y_register_in_memory() {
         let mut cpu = run_instr(mem!(STY_ABS, 0x32, 0), |cpu| {
-            cpu.y = 65;
+            cpu.state.y = 65;
         });
 
         assert_eq!(cpu.read(Address::new(0x32)), 65);

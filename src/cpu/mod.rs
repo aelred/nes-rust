@@ -33,21 +33,7 @@ const RESET_VECTOR: Address = Address::new(0xFFFC);
 #[derive(Debug)]
 pub struct CPU<M = NESCPUMemory> {
     memory: M,
-    /// A - 8-bit accumulator register.
-    accumulator: u8,
-    /// PC - 16-bit program counter register.
-    program_counter: Address,
-    /// X - 8-bit index register.
-    x: u8,
-    /// Y - 8-bit index register.
-    y: u8,
-    /// S - 8-bit stack pointer.
-    stack_pointer: StackPointer,
-    /// P - 7-bit status register.
-    status: Status,
-    non_maskable_interrupt: bool,
-    // Counts cycles taken running the current instruction.
-    cycle_count: u8,
+    state: CPUState,
 }
 
 impl<M: Memory + Tickable> CPU<M> {
@@ -58,23 +44,19 @@ impl<M: Memory + Tickable> CPU<M> {
 
         CPU {
             memory,
-            accumulator: 0,
-            program_counter,
-            x: 0,
-            y: 0,
-            stack_pointer: StackPointer::default(),
-            status: Status::empty(),
-            non_maskable_interrupt: false,
-            cycle_count: 0,
+            state: CPUState {
+                program_counter,
+                ..CPUState::default()
+            },
         }
     }
 
     pub fn program_counter(&self) -> Address {
-        self.program_counter
+        self.state.program_counter
     }
 
     pub fn set_program_counter(&mut self, address: Address) {
-        self.program_counter = address;
+        self.state.program_counter = address;
     }
 
     pub fn memory(&mut self) -> &mut M {
@@ -84,9 +66,9 @@ impl<M: Memory + Tickable> CPU<M> {
     fn increment_cycle_count(&mut self) {
         let interrupt = self.memory.tick();
         if interrupt {
-            self.non_maskable_interrupt = true;
+            self.state.non_maskable_interrupt = true;
         }
-        self.cycle_count += 1;
+        self.state.cycle_count += 1;
     }
 
     pub fn read(&mut self, address: Address) -> u8 {
@@ -106,19 +88,19 @@ impl<M: Memory + Tickable> CPU<M> {
     }
 
     pub fn run_instruction(&mut self) -> u8 {
-        self.cycle_count = 0;
+        self.state.cycle_count = 0;
 
         let instruction = Instruction::from_opcode(self.incr_program_counter());
         trace!("        {:?}", instruction);
 
-        if self.non_maskable_interrupt {
-            self.non_maskable_interrupt = false;
+        if self.state.non_maskable_interrupt {
+            self.state.non_maskable_interrupt = false;
             self.interrupt(NMI_VECTOR, false);
         } else {
             self.handle_instruction(instruction);
         }
 
-        self.cycle_count
+        self.state.cycle_count
     }
 
     fn handle_instruction(&mut self, instruction: Instruction) {
@@ -224,25 +206,25 @@ impl<M: Memory + Tickable> CPU<M> {
     fn interrupt(&mut self, address_vector: Address, break_flag: bool) {
         // For some reason the spec says the pointer must be to the last byte of the BRK
         // instruction...
-        let data = self.program_counter - 1;
+        let data = self.state.program_counter - 1;
 
         self.push_stack(data.higher());
         self.push_stack(data.lower());
         self.push_status(break_flag);
 
-        self.program_counter = self.read_address(address_vector);
+        self.state.program_counter = self.read_address(address_vector);
     }
 
     fn push_status(&mut self, break_flag: bool) {
-        self.status.insert(Status::UNUSED);
-        self.status.set(Status::BREAK, break_flag);
-        self.push_stack(self.status.bits());
+        self.state.status.insert(Status::UNUSED);
+        self.state.status.set(Status::BREAK, break_flag);
+        self.push_stack(self.state.status.bits());
     }
 
     fn add_to_accumulator(&mut self, value: u8) {
-        let accumulator = self.accumulator;
+        let accumulator = self.state.accumulator;
 
-        let carry_in = self.status.contains(Status::CARRY) as u16;
+        let carry_in = self.state.status.contains(Status::CARRY) as u16;
 
         let full_result = u16::from(accumulator)
             .wrapping_add(u16::from(value))
@@ -253,21 +235,15 @@ impl<M: Memory + Tickable> CPU<M> {
 
         // Check if the sign bit has changed
         let overflow = (((accumulator ^ result) & (value ^ result)) as i8).is_negative();
-        self.status.set(Status::OVERFLOW, overflow);
+        self.state.status.set(Status::OVERFLOW, overflow);
 
         self.set_accumulator(result);
-        self.status.set(Status::CARRY, carry_out);
-    }
-
-    fn compare(&mut self, register: u8, value: u8) {
-        let (result, carry) = register.overflowing_sub(value);
-        self.status.set(Status::CARRY, !carry);
-        self.status.set_flags(result);
+        self.state.status.set(Status::CARRY, carry_out);
     }
 
     fn set_reference(&mut self, reference: Reference, value: u8, writeonly: bool) {
         self.write_reference(reference, value, writeonly);
-        self.status.set_flags(value);
+        self.state.status.set_flags(value);
     }
 
     fn set_accumulator(&mut self, value: u8) {
@@ -304,9 +280,9 @@ impl<M: Memory + Tickable> CPU<M> {
                 }
                 self.read(address)
             }
-            Reference::Accumulator => self.accumulator,
-            Reference::X => self.x,
-            Reference::Y => self.y,
+            Reference::Accumulator => self.state.accumulator,
+            Reference::X => self.state.x,
+            Reference::Y => self.state.y,
         }
     }
 
@@ -327,28 +303,70 @@ impl<M: Memory + Tickable> CPU<M> {
                 }
                 self.write(address, byte)
             }
-            Reference::Accumulator => self.accumulator = byte,
-            Reference::X => self.x = byte,
-            Reference::Y => self.y = byte,
+            Reference::Accumulator => self.state.accumulator = byte,
+            Reference::X => self.state.x = byte,
+            Reference::Y => self.state.y = byte,
         };
     }
 
     fn incr_program_counter(&mut self) -> u8 {
-        let data = self.read(self.program_counter);
-        trace!("{}  {:#04x}", self.program_counter, data);
-        self.program_counter += 1u16;
+        let data = self.read(self.state.program_counter);
+        trace!("{}  {:#04x}", self.state.program_counter, data);
+        self.state.program_counter += 1u16;
         data
     }
 
     /// When instructions have no arguments the CPU still reads the value - emulate to make the clock cycle is correct.
     fn ignore_argument(&mut self) {
-        self.read(self.program_counter);
+        self.read(self.state.program_counter);
     }
 
     fn fetch_address_at_program_counter(&mut self) -> Address {
         let lower = self.incr_program_counter();
         let higher = self.incr_program_counter();
         Address::from_bytes(higher, lower)
+    }
+}
+
+#[derive(Debug)]
+struct CPUState {
+    /// A - 8-bit accumulator register.
+    accumulator: u8,
+    /// PC - 16-bit program counter register.
+    program_counter: Address,
+    /// X - 8-bit index register.
+    x: u8,
+    /// Y - 8-bit index register.
+    y: u8,
+    /// S - 8-bit stack pointer.
+    stack_pointer: StackPointer,
+    /// P - 7-bit status register.
+    status: Status,
+    non_maskable_interrupt: bool,
+    // Counts cycles taken running the current instruction.
+    cycle_count: u8,
+}
+
+impl CPUState {
+    fn compare(&mut self, register: u8, value: u8) {
+        let (result, carry) = register.overflowing_sub(value);
+        self.status.set(Status::CARRY, !carry);
+        self.status.set_flags(result);
+    }
+}
+
+impl Default for CPUState {
+    fn default() -> Self {
+        Self {
+            accumulator: 0,
+            program_counter: Address::new(0),
+            x: 0,
+            y: 0,
+            stack_pointer: StackPointer::default(),
+            status: Status::empty(),
+            non_maskable_interrupt: false,
+            cycle_count: 0,
+        }
     }
 }
 
@@ -443,11 +461,11 @@ mod tests {
         let memory = ArrayMemory::default();
         let cpu = CPU::from_memory(memory);
 
-        assert_eq!(cpu.program_counter, Address::new(0x00));
-        assert_eq!(cpu.accumulator, 0);
-        assert_eq!(cpu.x, 0);
-        assert_eq!(cpu.y, 0);
-        assert_eq!(cpu.stack_pointer, StackPointer(0xFF));
+        assert_eq!(cpu.state.program_counter, Address::new(0x00));
+        assert_eq!(cpu.state.accumulator, 0);
+        assert_eq!(cpu.state.x, 0);
+        assert_eq!(cpu.state.y, 0);
+        assert_eq!(cpu.state.stack_pointer, StackPointer(0xFF));
     }
 
     #[test]
@@ -458,116 +476,116 @@ mod tests {
 
         let cpu = CPU::from_memory(memory);
 
-        assert_eq!(cpu.program_counter, Address::new(0x1234));
+        assert_eq!(cpu.state.program_counter, Address::new(0x1234));
     }
 
     #[test]
     fn zero_flag_is_not_set_when_accumulator_is_non_zero() {
         let cpu = run_instr(mem!(ADC_IMM, 1u8), |cpu| {
-            cpu.accumulator = 42;
+            cpu.state.accumulator = 42;
         });
 
-        assert_eq!(cpu.accumulator, 43);
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert_eq!(cpu.state.accumulator, 43);
+        assert!(!cpu.state.status.contains(Status::ZERO));
     }
 
     #[test]
     fn zero_flag_is_set_when_accumulator_is_zero() {
         let cpu = run_instr(mem!(ADC_IMM, 214u8), |cpu| {
-            cpu.accumulator = 42;
+            cpu.state.accumulator = 42;
         });
 
-        assert_eq!(cpu.accumulator, 0);
-        assert!(cpu.status.contains(Status::ZERO));
+        assert_eq!(cpu.state.accumulator, 0);
+        assert!(cpu.state.status.contains(Status::ZERO));
     }
 
     #[test]
     fn negative_flag_is_not_set_when_accumulator_is_positive() {
         let cpu = run_instr(mem!(ADC_IMM, 1u8), |cpu| {
-            cpu.accumulator = 42;
+            cpu.state.accumulator = 42;
         });
 
-        assert_eq!(cpu.accumulator, 43);
-        assert!(!cpu.status.contains(Status::NEGATIVE));
+        assert_eq!(cpu.state.accumulator, 43);
+        assert!(!cpu.state.status.contains(Status::NEGATIVE));
     }
 
     #[test]
     fn negative_flag_is_set_when_accumulator_is_negative() {
         let cpu = run_instr(mem!(ADC_IMM, -1i8 as u8), |cpu| {
-            cpu.accumulator = 0;
+            cpu.state.accumulator = 0;
         });
 
-        assert_eq!(cpu.accumulator as i8, -1i8);
-        assert!(cpu.status.contains(Status::NEGATIVE));
+        assert_eq!(cpu.state.accumulator as i8, -1i8);
+        assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 
     #[test]
     fn program_counter_is_incremented_by_1_when_executing_1_byte_instr() {
         let cpu = run_instr(mem!(100 => ASL_ACC), |cpu| {
-            cpu.program_counter = Address::new(100)
+            cpu.state.program_counter = Address::new(100)
         });
 
-        assert_eq!(cpu.program_counter, Address::new(101));
+        assert_eq!(cpu.state.program_counter, Address::new(101));
     }
 
     #[test]
     fn program_counter_is_incremented_by_2_when_executing_2_byte_instr() {
         let cpu = run_instr(mem!(100 => { ADC_IMM, 0u8 }), |cpu| {
-            cpu.program_counter = Address::new(100)
+            cpu.state.program_counter = Address::new(100)
         });
 
-        assert_eq!(cpu.program_counter, Address::new(102));
+        assert_eq!(cpu.state.program_counter, Address::new(102));
     }
 
     #[test]
     fn program_counter_is_incremented_by_3_when_executing_3_byte_instr() {
         let cpu = run_instr(mem!(100 => { ASL_ABS, 0, 0 }), |cpu| {
-            cpu.program_counter = Address::new(100)
+            cpu.state.program_counter = Address::new(100)
         });
 
-        assert_eq!(cpu.program_counter, Address::new(103));
+        assert_eq!(cpu.state.program_counter, Address::new(103));
     }
 
     #[test]
     fn program_counter_wraps_on_overflow() {
         let cpu = run_instr(mem!(0xffff => NOP), |cpu| {
-            cpu.program_counter = Address::new(0xffff);
+            cpu.state.program_counter = Address::new(0xffff);
         });
 
-        assert_eq!(cpu.program_counter, Address::new(0));
+        assert_eq!(cpu.state.program_counter, Address::new(0));
     }
 
     #[test]
     fn instructions_can_wrap_on_program_counter_overflow() {
         let cpu = run_instr(mem!(0xfffe => { JMP_ABS, 0x34, 0x12 }), |cpu| {
-            cpu.program_counter = Address::new(0xfffe);
+            cpu.state.program_counter = Address::new(0xfffe);
         });
 
-        assert_eq!(cpu.program_counter, Address::new(0x1234));
+        assert_eq!(cpu.state.program_counter, Address::new(0x1234));
     }
 
     #[test]
     fn on_non_maskable_interrupt_reset_interrupt_flag() {
         let cpu = run_instr(mem!(), |cpu| {
-            cpu.non_maskable_interrupt = true;
+            cpu.state.non_maskable_interrupt = true;
         });
 
-        assert!(!cpu.non_maskable_interrupt);
+        assert!(!cpu.state.non_maskable_interrupt);
     }
 
     #[test]
     fn on_non_maskable_interrupt_push_program_counter_and_status_with_clear_break_flag_to_stack() {
         let mut cpu = run_instr(mem!(0x1234 => { INX }), |cpu| {
-            cpu.program_counter = Address::new(0x1234);
-            cpu.status = Status::from_bits_truncate(0b1001_1000);
-            cpu.stack_pointer.0 = 6;
-            cpu.non_maskable_interrupt = true;
+            cpu.state.program_counter = Address::new(0x1234);
+            cpu.state.status = Status::from_bits_truncate(0b1001_1000);
+            cpu.state.stack_pointer.0 = 6;
+            cpu.state.non_maskable_interrupt = true;
         });
 
         assert_eq!(cpu.read(stack::BASE + 6), 0x12);
         assert_eq!(cpu.read(stack::BASE + 5), 0x34);
         assert_eq!(cpu.read(stack::BASE + 4), 0b1010_1000);
-        assert_eq!(cpu.stack_pointer.0, 3);
+        assert_eq!(cpu.state.stack_pointer.0, 3);
     }
 
     #[test]
@@ -578,12 +596,12 @@ mod tests {
                 0xfffa => { 0x78, 0x56 }
             ),
             |cpu| {
-                cpu.program_counter = Address::new(0x1234);
-                cpu.non_maskable_interrupt = true;
+                cpu.state.program_counter = Address::new(0x1234);
+                cpu.state.non_maskable_interrupt = true;
             },
         );
 
-        assert_eq!(cpu.program_counter, Address::new(0x5678));
+        assert_eq!(cpu.state.program_counter, Address::new(0x5678));
     }
 
     enum ParameterizedScenario {
@@ -854,8 +872,8 @@ mod tests {
                 // Make sure a page cross happens with any addressing mode
                 cpu.write(Address::new(0x01), 0x80);
                 cpu.write(Address::new(0x80), 0xFF);
-                cpu.x = 0xFF;
-                cpu.y = 0xFF;
+                cpu.state.x = 0xFF;
+                cpu.state.y = 0xFF;
             }
         };
 
@@ -884,28 +902,28 @@ mod tests {
             }
         ));
 
-        assert_eq!(cpu.program_counter, start);
+        assert_eq!(cpu.state.program_counter, start);
 
         // CPX
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 3);
-        assert_eq!(cpu.program_counter, start + 2);
+        assert_eq!(cpu.state.program_counter, start + 2);
 
         // BNE
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 2, "BNE should be 2 cycles if it doesn't branch");
-        assert_eq!(cpu.program_counter, start + 4);
+        assert_eq!(cpu.state.program_counter, start + 4);
 
         // INC
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 5);
-        assert_eq!(cpu.program_counter, start + 6);
+        assert_eq!(cpu.state.program_counter, start + 6);
         assert_eq!(cpu.memory.read(foo_addr), foo_init + 1);
 
         // BNE (jump to start because no overflow)
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 3, "BNE should be 3 cycles if it branches");
-        assert_eq!(cpu.program_counter, start);
+        assert_eq!(cpu.state.program_counter, start);
 
         // Run same instructions again
         cpu.run_instruction(); // CPX
@@ -914,23 +932,23 @@ mod tests {
         // INC (overflows)
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 5);
-        assert_eq!(cpu.program_counter, start + 6);
+        assert_eq!(cpu.state.program_counter, start + 6);
         assert_eq!(cpu.memory.read(foo_addr), 0, "INC should overflow");
 
         // BNE (don't jump because overflow)
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 2, "BNE should be 2 cycles if it doesn't branch");
-        assert_eq!(cpu.program_counter, start + 8);
+        assert_eq!(cpu.state.program_counter, start + 8);
 
         // INC
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 5);
-        assert_eq!(cpu.program_counter, start + 10);
+        assert_eq!(cpu.state.program_counter, start + 10);
 
         // JMP
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 3);
-        assert_eq!(cpu.program_counter, start);
+        assert_eq!(cpu.state.program_counter, start);
     }
 
     pub fn run_instr<F: FnOnce(&mut CPU<ArrayMemory>)>(

@@ -31,22 +31,22 @@ impl Default for StackPointer {
 
 impl<M: Memory + Tickable> CPU<M> {
     pub fn push_stack(&mut self, byte: u8) {
-        self.write(self.stack_pointer.address(), byte);
-        self.stack_pointer.decrement();
+        self.write(self.state.stack_pointer.address(), byte);
+        self.state.stack_pointer.decrement();
     }
 
     pub fn increment_stack(&mut self) {
-        self.stack_pointer.increment();
+        self.state.stack_pointer.increment();
         self.increment_cycle_count();
     }
 
     pub fn pull_and_increment_stack(&mut self) -> u8 {
-        let stack_address = self.stack_pointer.address();
-        self.stack_pointer.increment();
+        let stack_address = self.state.stack_pointer.address();
+        self.state.stack_pointer.increment();
         self.read(stack_address)
     }
 
     pub fn pull_stack(&mut self) -> u8 {
-        self.read(self.stack_pointer.address())
+        self.read(self.state.stack_pointer.address())
     }
 }

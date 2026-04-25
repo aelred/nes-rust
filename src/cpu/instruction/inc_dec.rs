@@ -45,7 +45,7 @@ impl<M: Memory + Tickable> CPU<M> {
         let reference = self.fetch_ref(addressing_mode);
         self.decrement(reference);
         let value = self.read_reference(reference, false);
-        self.compare(self.accumulator, value);
+        self.state.compare(self.state.accumulator, value);
     }
 
     pub(in crate::cpu) fn isc(&mut self, addressing_mode: StoreAddressingMode) {
@@ -101,7 +101,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 46);
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
             mem!(
@@ -112,7 +112,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 0);
-        assert!(cpu.status.contains(Status::ZERO));
+        assert!(cpu.state.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -126,7 +126,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 46);
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
             mem!(
@@ -137,25 +137,25 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)) as i8, -9i8);
-        assert!(cpu.status.contains(Status::NEGATIVE));
+        assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 
     #[test]
     fn instr_inx_increments_x_register() {
         let cpu = run_instr(mem!(INX), |cpu| {
-            cpu.x = 45;
+            cpu.state.x = 45;
         });
 
-        assert_eq!(cpu.x, 46);
+        assert_eq!(cpu.state.x, 46);
     }
 
     #[test]
     fn instr_iny_increments_y_register() {
         let cpu = run_instr(mem!(INY), |cpu| {
-            cpu.y = 45;
+            cpu.state.y = 45;
         });
 
-        assert_eq!(cpu.y, 46);
+        assert_eq!(cpu.state.y, 46);
     }
 
     #[test]
@@ -182,7 +182,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 44);
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
             mem!(
@@ -193,7 +193,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 0);
-        assert!(cpu.status.contains(Status::ZERO));
+        assert!(cpu.state.status.contains(Status::ZERO));
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)), 44);
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
             mem!(
@@ -218,92 +218,92 @@ mod tests {
         );
 
         assert_eq!(cpu.read(Address::new(100)) as i8, -1i8);
-        assert!(cpu.status.contains(Status::NEGATIVE));
+        assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 
     #[test]
     fn instr_dex_decrements_x_register() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 45;
+            cpu.state.x = 45;
         });
 
-        assert_eq!(cpu.x, 44);
+        assert_eq!(cpu.state.x, 44);
     }
 
     #[test]
     fn instr_dex_sets_zero_flag_based_on_result() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 45;
+            cpu.state.x = 45;
         });
 
-        assert_eq!(cpu.x, 44);
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert_eq!(cpu.state.x, 44);
+        assert!(!cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 1;
+            cpu.state.x = 1;
         });
 
-        assert_eq!(cpu.x, 0);
-        assert!(cpu.status.contains(Status::ZERO));
+        assert_eq!(cpu.state.x, 0);
+        assert!(cpu.state.status.contains(Status::ZERO));
     }
 
     #[test]
     fn instr_dex_sets_negative_flag_based_on_result() {
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 45;
+            cpu.state.x = 45;
         });
 
-        assert_eq!(cpu.x, 44);
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert_eq!(cpu.state.x, 44);
+        assert!(!cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEX), |cpu| {
-            cpu.x = 0;
+            cpu.state.x = 0;
         });
 
-        assert_eq!(cpu.x as i8, -1i8);
-        assert!(cpu.status.contains(Status::NEGATIVE));
+        assert_eq!(cpu.state.x as i8, -1i8);
+        assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 
     #[test]
     fn instr_dey_decrements_y_register() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 45;
+            cpu.state.y = 45;
         });
 
-        assert_eq!(cpu.y, 44);
+        assert_eq!(cpu.state.y, 44);
     }
 
     #[test]
     fn instr_dey_sets_zero_flag_based_on_result() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 45;
+            cpu.state.y = 45;
         });
 
-        assert_eq!(cpu.y, 44);
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert_eq!(cpu.state.y, 44);
+        assert!(!cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 1;
+            cpu.state.y = 1;
         });
 
-        assert_eq!(cpu.y, 0);
-        assert!(cpu.status.contains(Status::ZERO));
+        assert_eq!(cpu.state.y, 0);
+        assert!(cpu.state.status.contains(Status::ZERO));
     }
 
     #[test]
     fn instr_dey_sets_negative_flag_based_on_result() {
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 45;
+            cpu.state.y = 45;
         });
 
-        assert_eq!(cpu.y, 44);
-        assert!(!cpu.status.contains(Status::ZERO));
+        assert_eq!(cpu.state.y, 44);
+        assert!(!cpu.state.status.contains(Status::ZERO));
 
         let cpu = run_instr(mem!(DEY), |cpu| {
-            cpu.y = 0;
+            cpu.state.y = 0;
         });
 
-        assert_eq!(cpu.y as i8, -1i8);
-        assert!(cpu.status.contains(Status::NEGATIVE));
+        assert_eq!(cpu.state.y as i8, -1i8);
+        assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 }

@@ -14,12 +14,12 @@ impl<M: Memory + Tickable> CPU<M> {
     pub(in crate::cpu) fn plp(&mut self) {
         self.ignore_argument();
         self.increment_stack();
-        self.status = Status::from_bits_truncate(self.pull_stack());
+        self.state.status = Status::from_bits_truncate(self.pull_stack());
     }
 
     pub(in crate::cpu) fn pha(&mut self) {
         self.ignore_argument();
-        self.push_stack(self.accumulator)
+        self.push_stack(self.state.accumulator)
     }
 
     pub(in crate::cpu) fn php(&mut self) {
@@ -45,20 +45,20 @@ mod tests {
                 stack::BASE + 7 => { 20 }
             ),
             |cpu| {
-                cpu.stack_pointer.0 = 6;
+                cpu.state.stack_pointer.0 = 6;
             },
         );
 
-        assert_eq!(cpu.accumulator, 20);
+        assert_eq!(cpu.state.accumulator, 20);
     }
 
     #[test]
     fn instr_pla_increments_stack_pointer_by_one_byte() {
         let cpu = run_instr(mem!(PLA), |cpu| {
-            cpu.stack_pointer.0 = 6;
+            cpu.state.stack_pointer.0 = 6;
         });
 
-        assert_eq!(cpu.stack_pointer.0, 7);
+        assert_eq!(cpu.state.stack_pointer.0, 7);
     }
 
     #[test]
@@ -71,23 +71,23 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.status.bits(), 31);
+        assert_eq!(cpu.state.status.bits(), 31);
     }
 
     #[test]
     fn instr_plp_increments_stack_pointer_by_one_byte() {
         let cpu = run_instr(mem!(PLP), |cpu| {
-            cpu.stack_pointer.0 = 6;
+            cpu.state.stack_pointer.0 = 6;
         });
 
-        assert_eq!(cpu.stack_pointer.0, 7);
+        assert_eq!(cpu.state.stack_pointer.0, 7);
     }
 
     #[test]
     fn instr_pha_writes_accumulator_to_stack_pointer() {
         let mut cpu = run_instr(mem!(PHA), |cpu| {
-            cpu.accumulator = 20;
-            cpu.stack_pointer.0 = 6;
+            cpu.state.accumulator = 20;
+            cpu.state.stack_pointer.0 = 6;
         });
 
         assert_eq!(cpu.read(stack::BASE + 6), 20);
@@ -96,17 +96,17 @@ mod tests {
     #[test]
     fn instr_pha_decrements_stack_pointer_by_one_byte() {
         let cpu = run_instr(mem!(PHA), |cpu| {
-            cpu.stack_pointer.0 = 6;
+            cpu.state.stack_pointer.0 = 6;
         });
 
-        assert_eq!(cpu.stack_pointer.0, 5);
+        assert_eq!(cpu.state.stack_pointer.0, 5);
     }
 
     #[test]
     fn instr_php_writes_status_to_stack_pointer_with_break_always_set() {
         let mut cpu = run_instr(mem!(PHP), |cpu| {
-            cpu.status = Status::from_bits_truncate(0b1100_0101);
-            cpu.stack_pointer.0 = 6;
+            cpu.state.status = Status::from_bits_truncate(0b1100_0101);
+            cpu.state.stack_pointer.0 = 6;
         });
 
         assert_eq!(cpu.read(stack::BASE + 6), 0b1111_0101);
@@ -115,32 +115,32 @@ mod tests {
     #[test]
     fn instr_php_decrements_stack_pointer_by_one_byte() {
         let cpu = run_instr(mem!(PHP), |cpu| {
-            cpu.stack_pointer.0 = 6;
+            cpu.state.stack_pointer.0 = 6;
         });
 
-        assert_eq!(cpu.stack_pointer.0, 5);
+        assert_eq!(cpu.state.stack_pointer.0, 5);
     }
 
     #[test]
     fn stack_pointer_wraps_on_overflow() {
         let cpu = run_instr(mem!(PLA), |cpu| {
-            cpu.stack_pointer.0 = 255;
+            cpu.state.stack_pointer.0 = 255;
         });
 
-        assert_eq!(cpu.stack_pointer.0, 0);
+        assert_eq!(cpu.state.stack_pointer.0, 0);
 
         let cpu = run_instr(mem!(PHA), |cpu| {
-            cpu.stack_pointer.0 = 0;
+            cpu.state.stack_pointer.0 = 0;
         });
 
-        assert_eq!(cpu.stack_pointer.0, 255);
+        assert_eq!(cpu.state.stack_pointer.0, 255);
     }
 
     #[test]
     fn stack_operations_wrap_value_on_overflow() {
         let mut cpu = run_instr(mem!(0x1234 => { JSR, 100, 0 }), |cpu| {
-            cpu.stack_pointer.0 = 0;
-            cpu.program_counter = Address::new(0x1234);
+            cpu.state.stack_pointer.0 = 0;
+            cpu.state.program_counter = Address::new(0x1234);
         });
 
         assert_eq!(cpu.read(stack::BASE), 0x12);
@@ -153,11 +153,11 @@ mod tests {
                 stack::BASE + 0xff => { 0x36u8 }
             ),
             |cpu| {
-                cpu.stack_pointer.0 = 0xfe;
-                cpu.program_counter = Address::new(40);
+                cpu.state.stack_pointer.0 = 0xfe;
+                cpu.state.program_counter = Address::new(40);
             },
         );
 
-        assert_eq!(cpu.program_counter, Address::new(0x1237));
+        assert_eq!(cpu.state.program_counter, Address::new(0x1237));
     }
 }
