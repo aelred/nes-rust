@@ -1,7 +1,7 @@
 #![allow(clippy::upper_case_acronyms)] // Allow upper case acronyms like NES, CPU because I think it's more readable!
 
 pub use crate::address::Address;
-use crate::apu::APU;
+use crate::apu::{APUState, APU};
 use crate::audio::AudioSink;
 pub use crate::cartridge::Cartridge;
 pub use crate::cpu::instructions;
@@ -44,13 +44,14 @@ pub struct NES {
     /// TODO: flatten this out (WIP)
     cpu: CPUState,
     ppu: PPUState,
-    apu: APU,
+    apu: APUState,
     cartridge: Cartridge,
     internal_ram: [u8; 0x800],
     controller: Controller,
     additional_memory: ArrayMemory, // TODO: fake memory to support unsupported memory space
     palette_ram: [u8; 0x20],
     video_out: BackBuffer,
+    audio_out: AudioSink,
 }
 
 impl NES {
@@ -58,7 +59,7 @@ impl NES {
         let mut this = Self {
             cpu: CPUState::default(),
             ppu: PPUState::default(),
-            apu: APU::new(audio_out),
+            apu: APUState::default(),
             cartridge,
             internal_ram: [0; _],
             controller: Controller::default(),
@@ -66,6 +67,7 @@ impl NES {
             // Initialise whole palette to black
             palette_ram: [0x0F; _],
             video_out,
+            audio_out,
         };
 
         let (mut cpu_memory, _) = this.build_cpu();
@@ -87,7 +89,7 @@ impl NES {
         // Draw from top left
         video_out.reset();
 
-        let audio_out = self.apu.disconnect_audio();
+        let audio_out = std::mem::take(&mut self.audio_out);
 
         *self = Self::new(cartridge, video_out, audio_out);
     }
@@ -112,11 +114,13 @@ impl NES {
         let ppu_memory = NESPPUMemory::new(&mut self.palette_ram, chr);
         let ppu = RealPPU::new(ppu_memory, &mut self.video_out, &mut self.ppu);
 
+        let apu = APU::new(&mut self.audio_out, &mut self.apu);
+
         let cpu_memory = NESCPUMemory::new(
             &mut self.internal_ram,
             prg,
             ppu,
-            &mut self.apu,
+            apu,
             &mut self.controller,
             &mut self.additional_memory,
         );

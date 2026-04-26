@@ -12,17 +12,14 @@ mod pulse;
 mod triangle;
 
 #[derive(Debug)]
-pub struct APU {
-    audio_out: AudioSink,
-    state: APUState,
+pub struct APU<'a> {
+    audio_out: &'a mut AudioSink,
+    state: &'a mut APUState,
 }
 
-impl APU {
-    pub fn new(audio_out: AudioSink) -> Self {
-        Self {
-            audio_out,
-            state: APUState::default(),
-        }
+impl<'a> APU<'a> {
+    pub fn new(audio_out: &'a mut AudioSink, state: &'a mut APUState) -> Self {
+        Self { audio_out, state }
     }
 
     pub fn write_pulse_1_flags(&mut self, value: u8) {
@@ -98,14 +95,9 @@ impl APU {
             .set_enabled(status.contains(Status::TRIANGLE));
         self.state.noise.set_enabled(status.contains(Status::NOISE));
     }
-
-    /// Disconnect audio and replace with a no-op audio out.
-    pub fn disconnect_audio(&mut self) -> AudioSink {
-        std::mem::take(&mut self.audio_out)
-    }
 }
 
-impl Tickable for APU {
+impl Tickable for APU<'_> {
     fn tick(&mut self) -> bool {
         let pulse_1 = self.state.pulse_1.tick();
         let pulse_2 = self.state.pulse_2.tick();

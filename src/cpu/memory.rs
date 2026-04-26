@@ -49,7 +49,7 @@ pub struct NESCPUMemory<'a, PRG = PRGMemory<'a>, PPU = RealPPU<'a>, IN = Control
     internal_ram: &'a mut [u8; 0x800],
     prg: PRG,
     ppu: PPU,
-    apu: &'a mut APU,
+    apu: APU<'a>,
     input: &'a mut IN,
     the_rest: &'a mut ArrayMemory, // TODO
 }
@@ -59,7 +59,7 @@ impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
         internal_ram: &'a mut [u8; 0x800],
         prg: PRG,
         ppu: PPU,
-        apu: &'a mut APU,
+        apu: APU<'a>,
         input: &'a mut IN,
         the_rest: &'a mut ArrayMemory,
     ) -> Self {
@@ -184,6 +184,7 @@ impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Tickable for NESCPUMemory<'_, PRG, P
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::apu::APUState;
     use crate::audio::AudioSink;
     use crate::ppu::PPU;
 
@@ -443,18 +444,20 @@ mod tests {
         internal_ram: [u8; 0x800],
         prg: ArrayMemory,
         ppu: MockPPU,
-        apu: APU,
+        apu: APUState,
+        audio_sink: AudioSink,
         input: MockInput,
         the_rest: ArrayMemory,
     }
 
     impl TestCPUMemory {
         fn memory(&mut self) -> NESCPUMemory<'_, &mut ArrayMemory, &mut MockPPU, MockInput> {
+            let apu = APU::new(&mut self.audio_sink, &mut self.apu);
             NESCPUMemory::new(
                 &mut self.internal_ram,
                 &mut self.prg,
                 &mut self.ppu,
-                &mut self.apu,
+                apu,
                 &mut self.input,
                 &mut self.the_rest,
             )
@@ -477,7 +480,8 @@ mod tests {
                     data: 0,
                     oam_dma: [0; 256],
                 },
-                apu: APU::new(AudioSink::default()),
+                apu: APUState::default(),
+                audio_sink: AudioSink::default(),
                 input: MockInput(0),
                 the_rest: ArrayMemory::default(),
             }
