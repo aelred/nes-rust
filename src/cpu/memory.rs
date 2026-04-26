@@ -8,7 +8,6 @@ use crate::cpu::Tickable;
 use crate::input::{Controller, Input};
 use crate::ppu::{self, RealPPU};
 use crate::Address;
-use crate::ArrayMemory;
 use crate::Memory;
 
 const PPU_SPACE: Address = Address::new(0x2000);
@@ -22,11 +21,11 @@ const PPU_ADDRESS: Address = Address::new(0x2006);
 const PPU_DATA: Address = Address::new(0x2007);
 const APU_SPACE: Address = Address::new(0x4000);
 const APU_PULSE_1_FLAGS: Address = Address::new(0x4000);
-const _APU_PULSE_1_SWEEP: Address = Address::new(0x4001);
+const APU_PULSE_1_SWEEP: Address = Address::new(0x4001);
 const APU_PULSE_1_TIMER: Address = Address::new(0x4002);
 const APU_PULSE_1_LENGTH: Address = Address::new(0x4003);
 const APU_PULSE_2_FLAGS: Address = Address::new(0x4004);
-const _APU_PULSE_2_SWEEP: Address = Address::new(0x4005);
+const APU_PULSE_2_SWEEP: Address = Address::new(0x4005);
 const APU_PULSE_2_TIMER: Address = Address::new(0x4006);
 const APU_PULSE_2_LENGTH: Address = Address::new(0x4007);
 const APU_TRIANGLE_FLAGS: Address = Address::new(0x4008);
@@ -35,10 +34,10 @@ const APU_TRIANGLE_LENGTH: Address = Address::new(0x400b);
 const APU_NOISE_FLAGS: Address = Address::new(0x400c);
 const APU_NOISE_MODE: Address = Address::new(0x400e);
 const APU_NOISE_LENGTH: Address = Address::new(0x400f);
-const _APU_DMC_FLAGS: Address = Address::new(0x4010);
-const _APU_DMC_DIRECT_LOAD: Address = Address::new(0x4011);
-const _APU_DMC_SAMPLE_ADDRESS: Address = Address::new(0x4012);
-const _APU_DMC_SAMPLE_LENGTH: Address = Address::new(0x4013);
+const APU_DMC_FLAGS: Address = Address::new(0x4010);
+const APU_DMC_DIRECT_LOAD: Address = Address::new(0x4011);
+const APU_DMC_SAMPLE_ADDRESS: Address = Address::new(0x4012);
+const APU_DMC_SAMPLE_LENGTH: Address = Address::new(0x4013);
 const OAM_DMA: Address = Address::new(0x4014);
 const APU_STATUS: Address = Address::new(0x4015);
 const JOY1_ADDRESS: Address = Address::new(0x4016);
@@ -51,7 +50,6 @@ pub struct NESCPUMemory<'a, PRG = PRGMemory<'a>, PPU = RealPPU<'a>, IN = Control
     ppu: PPU,
     apu: APU<'a>,
     input: &'a mut IN,
-    the_rest: &'a mut ArrayMemory, // TODO
 }
 
 impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
@@ -61,7 +59,6 @@ impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
         ppu: PPU,
         apu: APU<'a>,
         input: &'a mut IN,
-        the_rest: &'a mut ArrayMemory,
     ) -> Self {
         Self {
             internal_ram,
@@ -69,7 +66,6 @@ impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
             ppu,
             apu,
             input,
-            the_rest,
         }
     }
 
@@ -95,7 +91,8 @@ impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<'_, PRG, PPU
         } else if address == APU_STATUS {
             self.apu.read_status()
         } else if address >= APU_SPACE {
-            self.the_rest.read(address) // TODO
+            // TODO: is it valid to read this? Maybe this is "open bus" behaviour
+            0
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
             let ppu_registers = self.ppu.borrow_mut();
@@ -120,9 +117,11 @@ impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<'_, PRG, PPU
         } else if address >= APU_SPACE {
             match address {
                 APU_PULSE_1_FLAGS => self.apu.write_pulse_1_flags(byte),
+                APU_PULSE_1_SWEEP => {} // TODO
                 APU_PULSE_1_TIMER => self.apu.write_pulse_1_timer(byte),
                 APU_PULSE_1_LENGTH => self.apu.write_pulse_1_length(byte),
                 APU_PULSE_2_FLAGS => self.apu.write_pulse_2_flags(byte),
+                APU_PULSE_2_SWEEP => {} // TODO
                 APU_PULSE_2_TIMER => self.apu.write_pulse_2_timer(byte),
                 APU_PULSE_2_LENGTH => self.apu.write_pulse_2_length(byte),
                 APU_TRIANGLE_FLAGS => self.apu.write_triangle_flags(byte),
@@ -131,9 +130,13 @@ impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<'_, PRG, PPU
                 APU_NOISE_FLAGS => self.apu.write_noise_flags(byte),
                 APU_NOISE_MODE => self.apu.write_noise_mode(byte),
                 APU_NOISE_LENGTH => self.apu.write_noise_length(byte),
+                APU_DMC_FLAGS => {}          // TODO
+                APU_DMC_DIRECT_LOAD => {}    // TODO
+                APU_DMC_SAMPLE_ADDRESS => {} // TODO
+                APU_DMC_SAMPLE_LENGTH => {}  // TODO
                 APU_FRAME_COUNTER => self.apu.write_frame_counter(byte),
                 APU_STATUS => self.apu.write_status(byte),
-                _ => self.the_rest.write(address, byte), // TODO
+                _ => {} // TODO: maybe some valid addresses not covered
             }
         } else if address >= PPU_SPACE {
             let mirrored = PPU_SPACE + (address.index() % 8) as u16;
@@ -187,6 +190,7 @@ mod tests {
     use crate::apu::APUState;
     use crate::audio::AudioSink;
     use crate::ppu::PPU;
+    use crate::ArrayMemory;
 
     #[test]
     fn can_read_and_write_internal_ram_in_nes_cpu_memory() {
@@ -447,7 +451,6 @@ mod tests {
         apu: APUState,
         audio_sink: AudioSink,
         input: MockInput,
-        the_rest: ArrayMemory,
     }
 
     impl TestCPUMemory {
@@ -459,7 +462,6 @@ mod tests {
                 &mut self.ppu,
                 apu,
                 &mut self.input,
-                &mut self.the_rest,
             )
         }
     }
@@ -483,7 +485,6 @@ mod tests {
                 apu: APUState::default(),
                 audio_sink: AudioSink::default(),
                 input: MockInput(0),
-                the_rest: ArrayMemory::default(),
             }
         }
     }

@@ -48,7 +48,6 @@ pub struct NES {
     controller: Controller,
     palette_ram: [u8; 0x20],
     internal_ram: [u8; 0x800],
-    additional_memory: ArrayMemory, // TODO: fake memory to support unsupported memory space
     video_out: BackBuffer,
     audio_out: AudioSink,
 }
@@ -64,7 +63,6 @@ impl NES {
             // Initialise whole palette to black
             palette_ram: [0x0F; _],
             internal_ram: [0; _],
-            additional_memory: ArrayMemory::default(),
             video_out,
             audio_out,
         };
@@ -115,14 +113,8 @@ impl NES {
 
         let apu = APU::new(&mut self.audio_out, &mut self.apu);
 
-        let cpu_memory = NESCPUMemory::new(
-            &mut self.internal_ram,
-            prg,
-            ppu,
-            apu,
-            &mut self.controller,
-            &mut self.additional_memory,
-        );
+        let cpu_memory =
+            NESCPUMemory::new(&mut self.internal_ram, prg, ppu, apu, &mut self.controller);
         (cpu_memory, &mut self.cpu)
     }
 }
