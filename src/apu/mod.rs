@@ -14,96 +14,89 @@ mod triangle;
 #[derive(Debug)]
 pub struct APU {
     audio_out: AudioSink,
-    pulse_1: PulseGenerator,
-    pulse_2: PulseGenerator,
-    triangle: TriangleGenerator,
-    noise: NoiseGenerator,
-    // APU can run in two "modes", which affect timing and interrupts
-    mode_toggle: bool,
-    cycles: u16,
+    state: APUState,
 }
-
-impl APU {}
 
 impl APU {
     pub fn new(audio_out: AudioSink) -> Self {
         Self {
             audio_out,
-            pulse_1: PulseGenerator::default(),
-            pulse_2: PulseGenerator::default(),
-            triangle: TriangleGenerator::default(),
-            noise: NoiseGenerator::default(),
-            mode_toggle: false,
-            cycles: 0,
+            state: APUState::default(),
         }
     }
 
     pub fn write_pulse_1_flags(&mut self, value: u8) {
-        self.pulse_1.write_flags(value);
+        self.state.pulse_1.write_flags(value);
     }
 
     pub fn write_pulse_1_timer(&mut self, value: u8) {
-        self.pulse_1.write_timer(value);
+        self.state.pulse_1.write_timer(value);
     }
 
     pub fn write_pulse_1_length(&mut self, value: u8) {
-        self.pulse_1.write_length(value);
+        self.state.pulse_1.write_length(value);
     }
 
     pub fn write_pulse_2_flags(&mut self, value: u8) {
-        self.pulse_2.write_flags(value);
+        self.state.pulse_2.write_flags(value);
     }
 
     pub fn write_pulse_2_timer(&mut self, value: u8) {
-        self.pulse_2.write_timer(value);
+        self.state.pulse_2.write_timer(value);
     }
 
     pub fn write_pulse_2_length(&mut self, value: u8) {
-        self.pulse_2.write_length(value);
+        self.state.pulse_2.write_length(value);
     }
 
     pub fn write_triangle_flags(&mut self, value: u8) {
-        self.triangle.write_flags(value);
+        self.state.triangle.write_flags(value);
     }
 
     pub fn write_triangle_timer(&mut self, value: u8) {
-        self.triangle.write_timer(value);
+        self.state.triangle.write_timer(value);
     }
 
     pub fn write_triangle_length(&mut self, value: u8) {
-        self.triangle.write_length(value);
+        self.state.triangle.write_length(value);
     }
 
     pub fn write_noise_flags(&mut self, value: u8) {
-        self.noise.write_flags(value);
+        self.state.noise.write_flags(value);
     }
 
     pub fn write_noise_mode(&mut self, value: u8) {
-        self.noise.write_mode(value);
+        self.state.noise.write_mode(value);
     }
 
     pub fn write_noise_length(&mut self, value: u8) {
-        self.noise.write_length(value);
+        self.state.noise.write_length(value);
     }
 
     pub fn write_frame_counter(&mut self, value: u8) {
         let value = FrameCounter::from_bits_truncate(value);
-        self.mode_toggle = value.contains(FrameCounter::MODE);
+        self.state.mode_toggle = value.contains(FrameCounter::MODE);
     }
 
     pub fn read_status(&mut self) -> u8 {
         let mut status = Status::empty();
-        status.set(Status::PULSE_1, !self.pulse_1.halted());
-        status.set(Status::PULSE_2, !self.pulse_2.halted());
+        status.set(Status::PULSE_1, !self.state.pulse_1.halted());
+        status.set(Status::PULSE_2, !self.state.pulse_2.halted());
         status.bits()
     }
 
     pub fn write_status(&mut self, value: u8) {
         let status = Status::from_bits_truncate(value);
-        self.pulse_1.set_enabled(status.contains(Status::PULSE_1));
-        self.pulse_2.set_enabled(status.contains(Status::PULSE_2));
-        self.triangle.set_enabled(status.contains(Status::TRIANGLE));
-        self.noise.set_enabled(status.contains(Status::NOISE));
+        self.state
+            .pulse_1
+            .set_enabled(status.contains(Status::PULSE_1));
+        self.state
+            .pulse_2
+            .set_enabled(status.contains(Status::PULSE_2));
+        self.state
+            .triangle
+            .set_enabled(status.contains(Status::TRIANGLE));
+        self.state.noise.set_enabled(status.contains(Status::NOISE));
     }
 
     /// Disconnect audio and replace with a no-op audio out.
@@ -114,33 +107,33 @@ impl APU {
 
 impl Tickable for APU {
     fn tick(&mut self) -> bool {
-        let pulse_1 = self.pulse_1.tick();
-        let pulse_2 = self.pulse_2.tick();
-        let triangle = self.triangle.tick();
-        let noise = self.noise.tick();
+        let pulse_1 = self.state.pulse_1.tick();
+        let pulse_2 = self.state.pulse_2.tick();
+        let triangle = self.state.triangle.tick();
+        let noise = self.state.noise.tick();
 
-        let cycles = self.cycles;
-        self.cycles += 1;
+        let cycles = self.state.cycles;
+        self.state.cycles += 1;
 
-        match (self.mode_toggle, cycles) {
+        match (self.state.mode_toggle, cycles) {
             (_, 7457) | (_, 22371) => {
-                self.pulse_1.clock_envelope();
-                self.pulse_2.clock_envelope();
-                self.noise.clock_envelope();
-                self.triangle.clock_linear_counter();
+                self.state.pulse_1.clock_envelope();
+                self.state.pulse_2.clock_envelope();
+                self.state.noise.clock_envelope();
+                self.state.triangle.clock_linear_counter();
             }
             (_, 14913) | (false, 29829) | (true, 37281) => {
-                self.pulse_1.clock_envelope();
-                self.pulse_2.clock_envelope();
-                self.noise.clock_envelope();
-                self.triangle.clock_linear_counter();
-                self.pulse_1.clock_length_counter();
-                self.pulse_2.clock_length_counter();
-                self.triangle.clock_length_counter();
-                self.noise.clock_length_counter();
+                self.state.pulse_1.clock_envelope();
+                self.state.pulse_2.clock_envelope();
+                self.state.noise.clock_envelope();
+                self.state.triangle.clock_linear_counter();
+                self.state.pulse_1.clock_length_counter();
+                self.state.pulse_2.clock_length_counter();
+                self.state.triangle.clock_length_counter();
+                self.state.noise.clock_length_counter();
             }
             (false, 14915) | (true, 37282) => {
-                self.cycles = 0;
+                self.state.cycles = 0;
             }
             _ => {}
         }
@@ -150,6 +143,17 @@ impl Tickable for APU {
 
         false
     }
+}
+
+#[derive(Debug, Default)]
+pub struct APUState {
+    pulse_1: PulseGenerator,
+    pulse_2: PulseGenerator,
+    triangle: TriangleGenerator,
+    noise: NoiseGenerator,
+    // APU can run in two "modes", which affect timing and interrupts
+    mode_toggle: bool,
+    cycles: u16,
 }
 
 // Mix output channels, produce a value between 0.0 and 1.0
