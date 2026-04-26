@@ -105,6 +105,7 @@ impl NES {
         CPU::new(cpu_memory, cpu_state).run_instruction()
     }
 
+    #[inline]
     fn build_cpu(&mut self) -> (NESCPUMemory<'_>, &mut CPUState) {
         let (prg, chr) = self.cartridge.get_prg_chr();
 

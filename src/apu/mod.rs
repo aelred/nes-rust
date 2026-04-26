@@ -18,6 +18,7 @@ pub struct APU<'a> {
 }
 
 impl<'a> APU<'a> {
+    #[inline]
     pub fn new(audio_out: &'a mut AudioSink, state: &'a mut APUState) -> Self {
         Self { audio_out, state }
     }

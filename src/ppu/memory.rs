@@ -14,6 +14,7 @@ pub struct NESPPUMemory<'a, CHR = CHRMemory<'a>> {
 }
 
 impl<'a, CHR> NESPPUMemory<'a, CHR> {
+    #[inline]
     pub fn new(palette_ram: &'a mut [u8; 0x20], chr: CHR) -> Self {
         Self { palette_ram, chr }
     }

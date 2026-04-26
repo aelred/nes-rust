@@ -57,6 +57,7 @@ pub struct RealPPU<'a, M = NESPPUMemory<'a>> {
 }
 
 impl<'a, M: Memory> RealPPU<'a, M> {
+    #[inline]
     pub fn new(memory: M, video_out: &'a mut BackBuffer, state: &'a mut PPUState) -> Self {
         Self {
             memory,

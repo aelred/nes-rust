@@ -53,6 +53,7 @@ pub struct NESCPUMemory<'a, PRG = PRGMemory<'a>, PPU = RealPPU<'a>, IN = Control
 }
 
 impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
+    #[inline]
     pub fn new(
         internal_ram: &'a mut [u8; 0x800],
         prg: PRG,

@@ -37,6 +37,7 @@ pub struct CPU<'a, M = NESCPUMemory<'a>> {
 }
 
 impl<'a, M: Memory + Tickable> CPU<'a, M> {
+    #[inline]
     pub fn new(memory: M, state: &'a mut CPUState) -> Self {
         Self { memory, state }
     }

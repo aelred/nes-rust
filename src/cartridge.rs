@@ -73,6 +73,7 @@ impl Cartridge {
         self.prg.changed_ram()
     }
 
+    #[inline]
     pub fn get_prg_chr(&mut self) -> (PRGMemory<'_>, CHRMemory<'_>) {
         let prg = PRGMemory {
             prg: &mut self.prg,
