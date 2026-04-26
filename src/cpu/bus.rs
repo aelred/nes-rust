@@ -3,12 +3,11 @@ use std::borrow::BorrowMut;
 use log::trace;
 
 use crate::apu::APU;
-use crate::cartridge::PRGMemory;
 use crate::cpu::Tickable;
 use crate::input::{Controller, Input};
 use crate::ppu::{self, RealPPU};
-use crate::Address;
-use crate::Memory;
+use crate::Bus;
+use crate::{cartridge, Address};
 
 const PPU_SPACE: Address = Address::new(0x2000);
 const PPU_CONTROL: Address = Address::new(0x2000);
@@ -44,7 +43,7 @@ const JOY1_ADDRESS: Address = Address::new(0x4016);
 const APU_FRAME_COUNTER: Address = Address::new(0x4017);
 const PRG_SPACE: Address = Address::new(0x4020);
 
-pub struct NESCPUMemory<'a, PRG = PRGMemory<'a>, PPU = RealPPU<'a>, IN = Controller> {
+pub struct CPUBus<'a, PRG = cartridge::PRG<'a>, PPU = RealPPU<'a>, IN = Controller> {
     internal_ram: &'a mut [u8; 0x800],
     prg: PRG,
     ppu: PPU,
@@ -52,7 +51,7 @@ pub struct NESCPUMemory<'a, PRG = PRGMemory<'a>, PPU = RealPPU<'a>, IN = Control
     input: &'a mut IN,
 }
 
-impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
+impl<'a, PRG: Bus, PPU: ppu::PPU, IN: Input> CPUBus<'a, PRG, PPU, IN> {
     #[inline]
     pub fn new(
         internal_ram: &'a mut [u8; 0x800],
@@ -83,7 +82,7 @@ impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
     }
 }
 
-impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<'_, PRG, PPU, IN> {
+impl<PRG: Bus, PPU: ppu::PPU, IN: Input> Bus for CPUBus<'_, PRG, PPU, IN> {
     fn read(&mut self, address: Address) -> u8 {
         if address >= PRG_SPACE {
             self.prg.read(address)
@@ -177,7 +176,7 @@ impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<'_, PRG, PPU
     }
 }
 
-impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Tickable for NESCPUMemory<'_, PRG, PPU, IN> {
+impl<PRG: Bus, PPU: ppu::PPU, IN: Input> Tickable for CPUBus<'_, PRG, PPU, IN> {
     fn tick(&mut self) -> bool {
         let interrupt = self.ppu.tick();
         self.apu.tick();
@@ -194,179 +193,179 @@ mod tests {
     use crate::ArrayMemory;
 
     #[test]
-    fn can_read_and_write_internal_ram_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
+    fn can_read_and_write_internal_ram_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
 
         for value in 0x0..=0x07ff {
             let address = Address::new(value);
 
-            memory.write(address, value as u8);
-            assert_eq!(memory.read(address), value as u8);
+            bus.write(address, value as u8);
+            assert_eq!(bus.read(address), value as u8);
         }
     }
 
     #[test]
-    fn nes_cpu_memory_addresses_0x800_to_0x1fff_mirror_internal_ram() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
+    fn cpu_bus_addresses_0x800_to_0x1fff_mirror_internal_ram() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
 
         for value in 0x0800..=0x1fff {
             let address = Address::new(value);
             let true_address = Address::new(value % 0x0800);
 
-            memory.write(address, value as u8);
-            assert_eq!(memory.read(address), value as u8);
-            assert_eq!(memory.read(true_address), value as u8);
+            bus.write(address, value as u8);
+            assert_eq!(bus.read(address), value as u8);
+            assert_eq!(bus.read(true_address), value as u8);
 
-            memory.write(true_address, (value + 1) as u8);
-            assert_eq!(memory.read(address), (value + 1) as u8);
+            bus.write(true_address, (value + 1) as u8);
+            assert_eq!(bus.read(address), (value + 1) as u8);
         }
     }
 
     #[test]
-    fn can_write_ppuctrl_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.write(Address::new(0x2000), 0x43);
-        assert_eq!(memory.ppu.control, 0x43);
-        memory.write(Address::new(0x3ff8), 0x44);
-        assert_eq!(memory.ppu.control, 0x44);
+    fn can_write_ppuctrl_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.write(Address::new(0x2000), 0x43);
+        assert_eq!(bus.ppu.control, 0x43);
+        bus.write(Address::new(0x3ff8), 0x44);
+        assert_eq!(bus.ppu.control, 0x44);
     }
 
     #[test]
-    fn can_write_ppumask_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.write(Address::new(0x2001), 0x43);
-        assert_eq!(memory.ppu.mask, 0x43);
-        memory.write(Address::new(0x3ff9), 0x44);
-        assert_eq!(memory.ppu.mask, 0x44);
+    fn can_write_ppumask_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.write(Address::new(0x2001), 0x43);
+        assert_eq!(bus.ppu.mask, 0x43);
+        bus.write(Address::new(0x3ff9), 0x44);
+        assert_eq!(bus.ppu.mask, 0x44);
     }
 
     #[test]
-    fn can_read_ppustatus_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.ppu.status = 0x43;
-        assert_eq!(memory.read(Address::new(0x2002)), 0x43);
-        assert_eq!(memory.read(Address::new(0x3ffa)), 0x43);
+    fn can_read_ppustatus_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.ppu.status = 0x43;
+        assert_eq!(bus.read(Address::new(0x2002)), 0x43);
+        assert_eq!(bus.read(Address::new(0x3ffa)), 0x43);
     }
 
     #[test]
-    fn can_write_oamaddr_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.write(Address::new(0x2003), 0x43);
-        assert_eq!(memory.ppu.oam_address, 0x43);
-        memory.write(Address::new(0x3ffb), 0x44);
-        assert_eq!(memory.ppu.oam_address, 0x44);
+    fn can_write_oamaddr_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.write(Address::new(0x2003), 0x43);
+        assert_eq!(bus.ppu.oam_address, 0x43);
+        bus.write(Address::new(0x3ffb), 0x44);
+        assert_eq!(bus.ppu.oam_address, 0x44);
     }
 
     #[test]
-    fn can_read_oamdata_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.ppu.oam_data = 0x43;
-        assert_eq!(memory.read(Address::new(0x3ffc)), 0x43);
-        assert_eq!(memory.read(Address::new(0x2004)), 0x43);
+    fn can_read_oamdata_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.ppu.oam_data = 0x43;
+        assert_eq!(bus.read(Address::new(0x3ffc)), 0x43);
+        assert_eq!(bus.read(Address::new(0x2004)), 0x43);
     }
 
     #[test]
-    fn can_write_oamdata_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.write(Address::new(0x2004), 0x43);
-        assert_eq!(memory.ppu.oam_data, 0x43);
-        memory.write(Address::new(0x3ffc), 0x44);
-        assert_eq!(memory.ppu.oam_data, 0x44);
+    fn can_write_oamdata_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.write(Address::new(0x2004), 0x43);
+        assert_eq!(bus.ppu.oam_data, 0x43);
+        bus.write(Address::new(0x3ffc), 0x44);
+        assert_eq!(bus.ppu.oam_data, 0x44);
     }
 
     #[test]
-    fn can_write_oamdma_in_nes_cpu_memory() {
+    fn can_write_oamdma_in_cpu_bus() {
         let mut expected = [0u8; 256];
         #[allow(clippy::needless_range_loop)] // Cleaner like this
         for i in 0..=255 {
             expected[i] = i as u8;
         }
 
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
         for i in 0x0200..=0x02ff {
-            memory.write(Address::new(i), expected[i as usize % 256]);
+            bus.write(Address::new(i), expected[i as usize % 256]);
         }
-        memory.write(Address::new(0x4014), 0x02);
+        bus.write(Address::new(0x4014), 0x02);
 
-        assert_eq!(memory.ppu.oam_dma, expected);
+        assert_eq!(bus.ppu.oam_dma, expected);
     }
 
     #[test]
-    fn can_write_ppuscroll_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.write(Address::new(0x2005), 0x43);
-        assert_eq!(memory.ppu.scroll, 0x43);
-        memory.write(Address::new(0x3ffd), 0x44);
-        assert_eq!(memory.ppu.scroll, 0x44);
+    fn can_write_ppuscroll_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.write(Address::new(0x2005), 0x43);
+        assert_eq!(bus.ppu.scroll, 0x43);
+        bus.write(Address::new(0x3ffd), 0x44);
+        assert_eq!(bus.ppu.scroll, 0x44);
     }
 
     #[test]
-    fn can_write_ppuaddr_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.write(Address::new(0x2006), 0x43);
-        assert_eq!(memory.ppu.address, 0x43);
-        memory.write(Address::new(0x3ffe), 0x44);
-        assert_eq!(memory.ppu.address, 0x44);
+    fn can_write_ppuaddr_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.write(Address::new(0x2006), 0x43);
+        assert_eq!(bus.ppu.address, 0x43);
+        bus.write(Address::new(0x3ffe), 0x44);
+        assert_eq!(bus.ppu.address, 0x44);
     }
 
     #[test]
-    fn can_read_ppudata_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.write(Address::new(0x2007), 0x43);
-        assert_eq!(memory.ppu.data, 0x43);
-        memory.write(Address::new(0x3fff), 0x44);
-        assert_eq!(memory.ppu.data, 0x44);
+    fn can_read_ppudata_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.write(Address::new(0x2007), 0x43);
+        assert_eq!(bus.ppu.data, 0x43);
+        bus.write(Address::new(0x3fff), 0x44);
+        assert_eq!(bus.ppu.data, 0x44);
     }
 
     #[test]
-    fn can_write_ppudata_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.ppu.data = 0x43;
-        assert_eq!(memory.read(Address::new(0x3fff)), 0x43);
-        assert_eq!(memory.read(Address::new(0x2007)), 0x43);
+    fn can_write_ppudata_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.ppu.data = 0x43;
+        assert_eq!(bus.read(Address::new(0x3fff)), 0x43);
+        assert_eq!(bus.read(Address::new(0x2007)), 0x43);
     }
 
     #[test]
-    fn can_read_and_write_cartridge_space_in_nes_cpu_memory() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
+    fn can_read_and_write_cartridge_space_in_cpu_bus() {
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
 
         for value in 0x4020..=0xffff {
             let address = Address::new(value);
 
-            memory.write(address, value as u8);
-            assert_eq!(memory.read(address), value as u8);
-            assert_eq!(memory.prg.read(address), value as u8);
+            bus.write(address, value as u8);
+            assert_eq!(bus.read(address), value as u8);
+            assert_eq!(bus.prg.read(address), value as u8);
         }
     }
 
     #[test]
     fn reading_from_4016_reads_from_input_device() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.input.0 = 24;
-        assert_eq!(memory.read(Address::new(0x4016)), 24);
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.input.0 = 24;
+        assert_eq!(bus.read(Address::new(0x4016)), 24);
     }
 
     #[test]
     fn writing_to_4016_writes_to_input_device() {
-        let mut memory = TestCPUMemory::default();
-        let mut memory = memory.memory();
-        memory.write(Address::new(0x4016), 52);
-        assert_eq!(memory.input.0, 52);
+        let mut bus = TestCPUBus::default();
+        let mut bus = bus.bus();
+        bus.write(Address::new(0x4016), 52);
+        assert_eq!(bus.input.0, 52);
     }
 
     struct MockPPU {
@@ -445,7 +444,7 @@ mod tests {
         }
     }
 
-    struct TestCPUMemory {
+    struct TestCPUBus {
         internal_ram: [u8; 0x800],
         prg: ArrayMemory,
         ppu: MockPPU,
@@ -454,10 +453,10 @@ mod tests {
         input: MockInput,
     }
 
-    impl TestCPUMemory {
-        fn memory(&mut self) -> NESCPUMemory<'_, &mut ArrayMemory, &mut MockPPU, MockInput> {
+    impl TestCPUBus {
+        fn bus(&mut self) -> CPUBus<'_, &mut ArrayMemory, &mut MockPPU, MockInput> {
             let apu = APU::new(&mut self.audio_sink, &mut self.apu);
-            NESCPUMemory::new(
+            CPUBus::new(
                 &mut self.internal_ram,
                 &mut self.prg,
                 &mut self.ppu,
@@ -467,7 +466,7 @@ mod tests {
         }
     }
 
-    impl Default for TestCPUMemory {
+    impl Default for TestCPUBus {
         fn default() -> Self {
             Self {
                 internal_ram: [0; _],

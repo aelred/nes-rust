@@ -16,30 +16,30 @@ use log::trace;
 use stack::StackPointer;
 
 use crate::address::Address;
-use crate::memory::Memory;
+use crate::bus::Bus;
 
+pub use self::bus::CPUBus;
 pub use self::instruction::instructions;
 pub use self::instruction::Instruction;
-pub use self::memory::NESCPUMemory;
 
 mod addressing_modes;
+mod bus;
 mod instruction;
-mod memory;
 mod stack;
 
 const NMI_VECTOR: Address = Address::new(0xFFFA);
 const RESET_VECTOR: Address = Address::new(0xFFFC);
 
 #[derive(Debug)]
-pub struct CPU<'a, M = NESCPUMemory<'a>> {
-    memory: M,
+pub struct CPU<'a, B = CPUBus<'a>> {
+    bus: B,
     state: &'a mut CPUState,
 }
 
-impl<'a, M: Memory + Tickable> CPU<'a, M> {
+impl<'a, B: Bus + Tickable> CPU<'a, B> {
     #[inline]
-    pub fn new(memory: M, state: &'a mut CPUState) -> Self {
-        Self { memory, state }
+    pub fn new(bus: B, state: &'a mut CPUState) -> Self {
+        Self { bus, state }
     }
 
     pub fn run_instruction(&mut self) -> u8 {
@@ -59,7 +59,7 @@ impl<'a, M: Memory + Tickable> CPU<'a, M> {
     }
 
     fn increment_cycle_count(&mut self) {
-        let interrupt = self.memory.tick();
+        let interrupt = self.bus.tick();
         if interrupt {
             self.state.non_maskable_interrupt = true;
         }
@@ -68,7 +68,7 @@ impl<'a, M: Memory + Tickable> CPU<'a, M> {
 
     fn read(&mut self, address: Address) -> u8 {
         self.increment_cycle_count();
-        self.memory.read(address)
+        self.bus.read(address)
     }
 
     fn read_address(&mut self, address: Address) -> Address {
@@ -79,7 +79,7 @@ impl<'a, M: Memory + Tickable> CPU<'a, M> {
 
     fn write(&mut self, address: Address, byte: u8) {
         self.increment_cycle_count();
-        self.memory.write(address, byte);
+        self.bus.write(address, byte);
     }
 
     fn handle_instruction(&mut self, instruction: Instruction) {
@@ -327,9 +327,9 @@ pub struct CPUState {
 }
 
 impl CPUState {
-    pub fn from_memory(memory: &mut impl Memory) -> Self {
-        let lower = memory.read(RESET_VECTOR);
-        let higher = memory.read(RESET_VECTOR + 1);
+    pub fn from_bus(bus: &mut impl Bus) -> Self {
+        let lower = bus.read(RESET_VECTOR);
+        let higher = bus.read(RESET_VECTOR + 1);
         let program_counter = Address::from_bytes(higher, lower);
 
         Self {
@@ -369,7 +369,7 @@ impl Default for CPUState {
 }
 
 trait ReferenceAddressingMode {
-    fn fetch_ref<M: Memory + Tickable>(self, cpu: &mut CPU<M>) -> Reference;
+    fn fetch_ref<M: Bus + Tickable>(self, cpu: &mut CPU<M>) -> Reference;
 }
 
 #[derive(Copy, Clone)]
@@ -461,21 +461,18 @@ mod tests {
     use super::*;
 
     pub struct TestCPU {
-        pub memory: ArrayMemory,
+        pub bus: ArrayMemory,
         pub state: CPUState,
     }
 
     impl TestCPU {
         pub fn from_memory(mut memory: ArrayMemory) -> Self {
-            let state = CPUState::from_memory(&mut memory);
-            Self { memory, state }
+            let state = CPUState::from_bus(&mut memory);
+            Self { bus: memory, state }
         }
 
         pub fn cpu(&mut self) -> CPU<'_, &'_ mut ArrayMemory> {
-            CPU {
-                memory: &mut self.memory,
-                state: &mut self.state,
-            }
+            CPU::new(&mut self.bus, &mut self.state)
         }
 
         pub fn run_instruction(&mut self) -> u8 {
@@ -486,7 +483,7 @@ mod tests {
     #[test]
     fn cpu_initialises_in_default_state() {
         let mut memory = ArrayMemory::default();
-        let cpu = CPUState::from_memory(&mut memory);
+        let cpu = CPUState::from_bus(&mut memory);
 
         assert_eq!(cpu.program_counter, Address::new(0x00));
         assert_eq!(cpu.accumulator, 0);
@@ -501,7 +498,7 @@ mod tests {
             0xFFFC => { 0x34, 0x12 }
         };
 
-        let cpu = CPUState::from_memory(&mut memory);
+        let cpu = CPUState::from_bus(&mut memory);
 
         assert_eq!(cpu.program_counter, Address::new(0x1234));
     }
@@ -609,9 +606,9 @@ mod tests {
             cpu.non_maskable_interrupt = true;
         });
 
-        assert_eq!(cpu.memory.read(stack::BASE + 6), 0x12);
-        assert_eq!(cpu.memory.read(stack::BASE + 5), 0x34);
-        assert_eq!(cpu.memory.read(stack::BASE + 4), 0b1010_1000);
+        assert_eq!(cpu.bus.read(stack::BASE + 6), 0x12);
+        assert_eq!(cpu.bus.read(stack::BASE + 5), 0x34);
+        assert_eq!(cpu.bus.read(stack::BASE + 4), 0b1010_1000);
         assert_eq!(cpu.state.stack_pointer.0, 3);
     }
 
@@ -897,8 +894,8 @@ mod tests {
             Normal => {}
             PageCross => {
                 // Make sure a page cross happens with any addressing mode
-                cpu.memory.write(Address::new(0x01), 0x80);
-                cpu.memory.write(Address::new(0x80), 0xFF);
+                cpu.bus.write(Address::new(0x01), 0x80);
+                cpu.bus.write(Address::new(0x80), 0xFF);
                 cpu.state.x = 0xFF;
                 cpu.state.y = 0xFF;
             }
@@ -945,7 +942,7 @@ mod tests {
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 5);
         assert_eq!(cpu.state.program_counter, start + 6);
-        assert_eq!(cpu.memory.read(foo_addr), foo_init + 1);
+        assert_eq!(cpu.bus.read(foo_addr), foo_init + 1);
 
         // BNE (jump to start because no overflow)
         let cycles = cpu.run_instruction();
@@ -960,7 +957,7 @@ mod tests {
         let cycles = cpu.run_instruction();
         assert_eq!(cycles, 5);
         assert_eq!(cpu.state.program_counter, start + 6);
-        assert_eq!(cpu.memory.read(foo_addr), 0, "INC should overflow");
+        assert_eq!(cpu.bus.read(foo_addr), 0, "INC should overflow");
 
         // BNE (don't jump because overflow)
         let cycles = cpu.run_instruction();
@@ -985,7 +982,7 @@ mod tests {
 
         cpu.run_instruction();
 
-        hexdump::hexdump(&cpu.memory.slice()[..0x200]);
+        hexdump::hexdump(&cpu.bus.slice()[..0x200]);
 
         cpu
     }

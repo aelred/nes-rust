@@ -1,6 +1,6 @@
 use nes_rust::instructions::*;
 use nes_rust::Address;
-use nes_rust::Memory;
+use nes_rust::Bus;
 use nes_rust::{mem, CPUState, Tickable, CPU};
 
 const PARAM_ADDRESS: u8 = 0x80;
@@ -10,16 +10,16 @@ const HALT_ADDRESS: u8 = 0xFF;
 macro_rules! run {
     ($params:tt -> $expected:expr; $( $expr: tt )*) => {
         let mut memory = mem!($($expr)*);
-        let cpu = CPUState::from_memory(&mut memory);
+        let cpu = CPUState::from_bus(&mut memory);
         let params: Vec<u8> = $params.iter().cloned().collect();
         let expected: Vec<u8> = $expected.iter().cloned().collect();
         run(memory, cpu, &params, &expected);
     };
 }
 
-fn run<M: Memory + Tickable>(mut memory: M, mut cpu: CPUState, params: &[u8], expected: &[u8]) {
+fn run<B: Bus + Tickable>(mut bus: B, mut cpu: CPUState, params: &[u8], expected: &[u8]) {
     for (offset, param) in params.iter().enumerate() {
-        memory.write(
+        bus.write(
             Address::from_bytes(0, PARAM_ADDRESS) + offset as u16,
             *param,
         );
@@ -29,8 +29,8 @@ fn run<M: Memory + Tickable>(mut memory: M, mut cpu: CPUState, params: &[u8], ex
 
     let mut instructions = 0;
 
-    while memory.read(Address::from_bytes(0, HALT_ADDRESS)) == 0 {
-        CPU::new(&mut memory, &mut cpu).run_instruction();
+    while bus.read(Address::from_bytes(0, HALT_ADDRESS)) == 0 {
+        CPU::new(&mut bus, &mut cpu).run_instruction();
 
         instructions += 1;
 
@@ -42,7 +42,7 @@ fn run<M: Memory + Tickable>(mut memory: M, mut cpu: CPUState, params: &[u8], ex
     let mut result: Vec<u8> = vec![];
     for offset in 0..expected.len() {
         let address = Address::from_bytes(0, RETURN_ADDRESS) + offset as u16;
-        result.push(memory.read(address));
+        result.push(bus.read(address));
     }
 
     assert_eq!(result, expected);

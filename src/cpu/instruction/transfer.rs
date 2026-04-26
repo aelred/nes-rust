@@ -1,9 +1,9 @@
 //! Register Transfers
 
 use crate::cpu::Tickable;
-use crate::{Memory, CPU};
+use crate::{Bus, CPU};
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn tax(&mut self) {
         self.ignore_argument();
         self.set_x(self.state.accumulator);

@@ -1,13 +1,13 @@
 use crate::mapper::Mapper;
 use crate::Address;
-use crate::Memory;
+use crate::Bus;
 use std::cell::Cell;
 use std::fmt::{Debug, Formatter};
 
 #[derive(Default, Debug)]
 pub struct Cartridge {
-    prg: PRG,
-    chr: CHR,
+    prg: PRGState,
+    chr: CHRState,
     config: Configuration,
 }
 
@@ -41,7 +41,7 @@ impl Cartridge {
 
         let config = Configuration::default();
 
-        let prg = PRG {
+        let prg = PRGState {
             rom: prg_rom,
             bank_mapping: vec![0, last_bank].into(),
             bank_size: prg_bank_size,
@@ -50,7 +50,7 @@ impl Cartridge {
             dirty_ram: false,
         };
 
-        let chr = CHR {
+        let chr = CHRState {
             chr_rom,
             chr_ram_enabled,
             ppu_ram: [0; 0x800],
@@ -74,21 +74,20 @@ impl Cartridge {
     }
 
     #[inline]
-    pub fn get_prg_chr(&mut self) -> (PRGMemory<'_>, CHRMemory<'_>) {
-        let prg = PRGMemory {
-            prg: &mut self.prg,
+    pub fn get_prg_chr(&mut self) -> (PRG<'_>, CHR<'_>) {
+        let prg = PRG {
+            state: &mut self.prg,
             config: &self.config,
         };
-        let chr = CHRMemory {
-            chr: &mut self.chr,
+        let chr = CHR {
+            state: &mut self.chr,
             config: &self.config,
         };
         (prg, chr)
     }
 }
 
-/// Program memory on a NES cartridge, connected to the CPU
-struct PRG {
+struct PRGState {
     rom: Box<[u8]>,
     bank_mapping: Box<[u8]>,
     bank_size: u16,
@@ -97,7 +96,7 @@ struct PRG {
     dirty_ram: bool,
 }
 
-impl PRG {
+impl PRGState {
     /// Return RAM if it changed since the last call.
     fn changed_ram(&mut self) -> Option<&[u8]> {
         if !self.dirty_ram {
@@ -109,13 +108,13 @@ impl PRG {
     }
 }
 
-impl Debug for PRG {
+impl Debug for PRGState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PRG").finish()
     }
 }
 
-impl Default for PRG {
+impl Default for PRGState {
     fn default() -> Self {
         Self {
             rom: Box::new([0; 0x8000]),
@@ -128,23 +127,24 @@ impl Default for PRG {
     }
 }
 
-pub struct PRGMemory<'a> {
-    prg: &'a mut PRG,
+/// Program memory on a NES cartridge, connected to the CPU
+pub struct PRG<'a> {
+    state: &'a mut PRGState,
     config: &'a Configuration,
 }
 
-impl Memory for PRGMemory<'_> {
+impl Bus for PRG<'_> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
-            0x6000..=0x7fff => self.prg.ram[address.index() - 0x6000],
+            0x6000..=0x7fff => self.state.ram[address.index() - 0x6000],
             0x8000..=0xffff => {
                 let relative_address = address - 0x8000;
-                let bank_index = relative_address.bytes() / self.prg.bank_size;
-                let bank = self.prg.bank_mapping[bank_index as usize];
-                let bank_start = bank_index * self.prg.bank_size;
+                let bank_index = relative_address.bytes() / self.state.bank_size;
+                let bank = self.state.bank_mapping[bank_index as usize];
+                let bank_start = bank_index * self.state.bank_size;
                 let bank_address = relative_address - bank_start;
-                let bank_size = self.prg.bank_size as usize;
-                self.prg.rom[bank as usize * bank_size + (bank_address.index() % bank_size)]
+                let bank_size = self.state.bank_size as usize;
+                self.state.rom[bank as usize * bank_size + (bank_address.index() % bank_size)]
             }
             _ => {
                 panic!("Out of addressable range: {:?}", address);
@@ -155,12 +155,12 @@ impl Memory for PRGMemory<'_> {
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
             0x6000..=0x7fff => {
-                self.prg.dirty_ram = true;
-                self.prg.ram[address.index() - 0x6000] = byte;
+                self.state.dirty_ram = true;
+                self.state.ram[address.index() - 0x6000] = byte;
             }
-            0x8000..=0xffff => match &mut self.prg.bank_switcher {
+            0x8000..=0xffff => match &mut self.state.bank_switcher {
                 BankSwitcher::First => {
-                    self.prg.bank_mapping[0] = byte;
+                    self.state.bank_mapping[0] = byte;
                 }
                 // MMC1 mapper uses a serial interface, where bits are shifted into a shift register.
                 // After 5 writes, the shift register is used to update a register.
@@ -207,7 +207,7 @@ impl Memory for PRGMemory<'_> {
                             todo!("Support MMC1 CHR bank 1");
                         }
                         0xe000..=0xffff => {
-                            self.prg.bank_mapping[0] = value & 0b1111;
+                            self.state.bank_mapping[0] = value & 0b1111;
                         }
                         _ => {
                             panic!("Out of addressable range: {:?}", address);
@@ -230,14 +230,13 @@ enum BankSwitcher {
     MMC1 { shift_register: u8, writes: u8 },
 }
 
-/// Character memory on a NES cartridge, stores pattern tables and is connected to the PPU
-struct CHR {
+struct CHRState {
     chr_rom: Box<[u8]>,
     chr_ram_enabled: bool,
     ppu_ram: [u8; 0x800],
 }
 
-impl Debug for CHR {
+impl Debug for CHRState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CHR")
             .field("chr_ram_enabled", &self.chr_ram_enabled)
@@ -245,7 +244,7 @@ impl Debug for CHR {
     }
 }
 
-impl Default for CHR {
+impl Default for CHRState {
     fn default() -> Self {
         Self {
             chr_rom: Box::new([0; 0x2000]),
@@ -255,12 +254,13 @@ impl Default for CHR {
     }
 }
 
-pub struct CHRMemory<'a> {
-    chr: &'a mut CHR,
+/// Character memory on a NES cartridge, stores pattern tables and is connected to the PPU
+pub struct CHR<'a> {
+    state: &'a mut CHRState,
     config: &'a Configuration,
 }
 
-impl<'a> CHRMemory<'a> {
+impl<'a> CHR<'a> {
     fn map_nametable(&self, address: Address) -> usize {
         debug_assert!(0x2000 <= address.index() && address.index() <= 0x3eff);
 
@@ -274,11 +274,11 @@ impl<'a> CHRMemory<'a> {
     }
 }
 
-impl Memory for CHRMemory<'_> {
+impl Bus for CHR<'_> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
-            0x0000..=0x1fff => self.chr.chr_rom[address.index()],
-            0x2000..=0x3eff => self.chr.ppu_ram[self.map_nametable(address)],
+            0x0000..=0x1fff => self.state.chr_rom[address.index()],
+            0x2000..=0x3eff => self.state.ppu_ram[self.map_nametable(address)],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -289,12 +289,12 @@ impl Memory for CHRMemory<'_> {
         match address.index() {
             0x0000..=0x1fff => {
                 debug_assert!(
-                    self.chr.chr_ram_enabled,
+                    self.state.chr_ram_enabled,
                     "Attempted to write to CHR-ROM, but writing is not enabled"
                 );
-                self.chr.chr_rom[address.index()] = byte
+                self.state.chr_rom[address.index()] = byte
             }
-            0x2000..=0x3eff => self.chr.ppu_ram[self.map_nametable(address)] = byte,
+            0x2000..=0x3eff => self.state.ppu_ram[self.map_nametable(address)] = byte,
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -349,27 +349,27 @@ mod tests {
     #[test]
     fn rom_cartridge_maps_0x6000_through_0x7fff_to_prg_ram() {
         let mut cartridge = nrom_cartridge();
-        let mut prg = PRGMemory {
-            prg: &mut cartridge.prg,
+        let mut prg = PRG {
+            state: &mut cartridge.prg,
             config: &cartridge.config,
         };
 
         for value in 0x6000..=0x7fff {
             prg.write(Address::new(value), value as u8);
             assert_eq!(prg.read(Address::new(value)), value as u8);
-            assert_eq!(prg.prg.ram[value as usize - 0x6000], value as u8);
+            assert_eq!(prg.state.ram[value as usize - 0x6000], value as u8);
         }
     }
 
     #[test]
     fn nrom_cartridge_maps_0x8000_through_0xffff_to_prg_rom() {
         let mut cartridge = nrom_cartridge();
-        let mut prg = PRGMemory {
-            prg: &mut cartridge.prg,
+        let mut prg = PRG {
+            state: &mut cartridge.prg,
             config: &cartridge.config,
         };
 
-        for (i, item) in prg.prg.rom.iter_mut().enumerate() {
+        for (i, item) in prg.state.rom.iter_mut().enumerate() {
             *item = i as u8;
         }
 
@@ -389,8 +389,8 @@ mod tests {
         }
 
         let mut cartridge = Cartridge::new(prg_rom, chr_rom, false, mapper);
-        let mut prg = PRGMemory {
-            prg: &mut cartridge.prg,
+        let mut prg = PRG {
+            state: &mut cartridge.prg,
             config: &cartridge.config,
         };
 
@@ -402,12 +402,12 @@ mod tests {
     #[test]
     fn nrom_cartridge_maps_0x0000_through_0x1fff_to_chr_rom() {
         let mut cartridge = nrom_cartridge();
-        let mut chr = CHRMemory {
-            chr: &mut cartridge.chr,
+        let mut chr = CHR {
+            state: &mut cartridge.chr,
             config: &cartridge.config,
         };
 
-        for (i, item) in chr.chr.chr_rom.iter_mut().enumerate() {
+        for (i, item) in chr.state.chr_rom.iter_mut().enumerate() {
             *item = i as u8;
         }
 
@@ -419,63 +419,63 @@ mod tests {
     #[test]
     fn nrom_cartridge_maps_0x2000_through_0x27ff_to_ppu_ram() {
         let mut cartridge = nrom_cartridge();
-        let mut chr = CHRMemory {
-            chr: &mut cartridge.chr,
+        let mut chr = CHR {
+            state: &mut cartridge.chr,
             config: &cartridge.config,
         };
 
-        for (i, item) in chr.chr.ppu_ram.iter_mut().enumerate() {
+        for (i, item) in chr.state.ppu_ram.iter_mut().enumerate() {
             *item = i as u8;
         }
 
         for value in 0x2000..=0x27ff {
             chr.write(Address::new(value), value as u8);
             assert_eq!(chr.read(Address::new(value)), value as u8);
-            assert_eq!(chr.chr.ppu_ram[value as usize - 0x2000], value as u8);
+            assert_eq!(chr.state.ppu_ram[value as usize - 0x2000], value as u8);
         }
     }
 
     #[test]
     fn nrom_cartridge_mirrors_0x2800_through_0x2fff_to_ppu_ram() {
         let mut cartridge = nrom_cartridge();
-        let mut chr = CHRMemory {
-            chr: &mut cartridge.chr,
+        let mut chr = CHR {
+            state: &mut cartridge.chr,
             config: &cartridge.config,
         };
 
-        for (i, item) in chr.chr.ppu_ram.iter_mut().enumerate() {
+        for (i, item) in chr.state.ppu_ram.iter_mut().enumerate() {
             *item = i as u8;
         }
 
         for value in 0x2800..=0x2fff {
             chr.write(Address::new(value), value as u8);
             assert_eq!(chr.read(Address::new(value)), value as u8);
-            assert_eq!(chr.chr.ppu_ram[value as usize - 0x2800], value as u8);
+            assert_eq!(chr.state.ppu_ram[value as usize - 0x2800], value as u8);
         }
     }
 
     #[test]
     fn nrom_cartridge_mirrors_0x3000_through_0x3eff_to_ppu_ram() {
         let mut cartridge = nrom_cartridge();
-        let mut chr = CHRMemory {
-            chr: &mut cartridge.chr,
+        let mut chr = CHR {
+            state: &mut cartridge.chr,
             config: &cartridge.config,
         };
 
-        for (i, item) in chr.chr.ppu_ram.iter_mut().enumerate() {
+        for (i, item) in chr.state.ppu_ram.iter_mut().enumerate() {
             *item = i as u8;
         }
 
         for value in 0x3000..=0x37ff {
             chr.write(Address::new(value), value as u8);
             assert_eq!(chr.read(Address::new(value)), value as u8);
-            assert_eq!(chr.chr.ppu_ram[value as usize - 0x3000], value as u8);
+            assert_eq!(chr.state.ppu_ram[value as usize - 0x3000], value as u8);
         }
 
         for value in 0x3800..=0x3eff {
             chr.write(Address::new(value), value as u8);
             assert_eq!(chr.read(Address::new(value)), value as u8);
-            assert_eq!(chr.chr.ppu_ram[value as usize - 0x3800], value as u8);
+            assert_eq!(chr.state.ppu_ram[value as usize - 0x3800], value as u8);
         }
     }
 
@@ -483,8 +483,8 @@ mod tests {
     #[should_panic]
     fn nrom_cartridge_cannot_write_to_read_only_memory() {
         let mut cartridge = nrom_cartridge();
-        let mut prg = PRGMemory {
-            prg: &mut cartridge.prg,
+        let mut prg = PRG {
+            state: &mut cartridge.prg,
             config: &cartridge.config,
         };
 

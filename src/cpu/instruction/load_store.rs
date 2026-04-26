@@ -4,11 +4,11 @@ use crate::{
     cpu::addressing_modes::{
         FlexibleAddressingMode, LAXAddressingMode, LDXAddressingMode, LDYAddressingMode,
         SAXAddressingMode, STXAddressingMode, STYAddressingMode, StoreAddressingMode,
-    }, Memory,
+    }, Bus,
     CPU,
 };
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn lda(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(value);
@@ -58,7 +58,7 @@ mod tests {
         cpu::tests::run_instr, instructions::{LDA_IMM, LDX_IMM, LDY_IMM, STA_ABS, STX_ABS, STY_ABS},
         mem,
         Address,
-        Memory,
+        Bus,
     };
 
     #[test]
@@ -88,7 +88,7 @@ mod tests {
             cpu.accumulator = 65;
         });
 
-        assert_eq!(cpu.memory.read(Address::new(0x32)), 65);
+        assert_eq!(cpu.bus.read(Address::new(0x32)), 65);
     }
 
     #[test]
@@ -97,7 +97,7 @@ mod tests {
             cpu.x = 65;
         });
 
-        assert_eq!(cpu.memory.read(Address::new(0x32)), 65);
+        assert_eq!(cpu.bus.read(Address::new(0x32)), 65);
     }
 
     #[test]
@@ -106,6 +106,6 @@ mod tests {
             cpu.y = 65;
         });
 
-        assert_eq!(cpu.memory.read(Address::new(0x32)), 65);
+        assert_eq!(cpu.bus.read(Address::new(0x32)), 65);
     }
 }

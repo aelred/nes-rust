@@ -1,9 +1,9 @@
 //! Jumps & Calls
 
 use crate::cpu::Tickable;
-use crate::{cpu::addressing_modes::JumpAddressingMode, Address, Memory, CPU};
+use crate::{cpu::addressing_modes::JumpAddressingMode, Address, Bus, CPU};
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn jmp(&mut self, addressing_mode: JumpAddressingMode) {
         self.state.program_counter = addressing_mode.fetch_address(self);
     }
@@ -42,7 +42,7 @@ mod tests {
         }, instructions::{JMP_ABS, JMP_IND, JSR, RTS},
         mem,
         Address,
-        Memory,
+        Bus,
     };
 
     #[test]
@@ -86,8 +86,8 @@ mod tests {
         });
 
         // Program counter points to last byte of JSR instruction
-        assert_eq!(cpu.memory.read(stack::BASE + 6), 0x12);
-        assert_eq!(cpu.memory.read(stack::BASE + 5), 0x36);
+        assert_eq!(cpu.bus.read(stack::BASE + 6), 0x12);
+        assert_eq!(cpu.bus.read(stack::BASE + 5), 0x36);
     }
 
     #[test]

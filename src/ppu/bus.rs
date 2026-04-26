@@ -1,19 +1,18 @@
 use std::fmt::Debug;
 
-use crate::cartridge::CHRMemory;
-use crate::Address;
-use crate::Memory;
+use crate::Bus;
+use crate::{cartridge, Address};
 
 const CHR_END: usize = PALETTE_OFFSET - 1;
 const PALETTE_OFFSET: usize = 0x3f00;
 
 #[derive(Debug)]
-pub struct NESPPUMemory<'a, CHR = CHRMemory<'a>> {
+pub struct PPUBus<'a, CHR = cartridge::CHR<'a>> {
     palette_ram: &'a mut [u8; 0x20],
     chr: CHR,
 }
 
-impl<'a, CHR> NESPPUMemory<'a, CHR> {
+impl<'a, CHR> PPUBus<'a, CHR> {
     #[inline]
     pub fn new(palette_ram: &'a mut [u8; 0x20], chr: CHR) -> Self {
         Self { palette_ram, chr }
@@ -28,7 +27,7 @@ impl<'a, CHR> NESPPUMemory<'a, CHR> {
     }
 }
 
-impl<CHR: Memory> Memory for NESPPUMemory<'_, CHR> {
+impl<CHR: Bus> Bus for PPUBus<'_, CHR> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x0000..=CHR_END => self.chr.read(address),
@@ -61,29 +60,29 @@ mod tests {
     #[test]
     fn can_read_cartridge_space_in_nes_ppu_memory() {
         let (mut palette_ram, mut chr) = ([0; _], ArrayMemory::default());
-        let mut memory = NESPPUMemory::new(&mut palette_ram, &mut chr);
+        let mut bus = PPUBus::new(&mut palette_ram, &mut chr);
 
         for value in 0x0000..=0x3eff {
             let address = Address::new(value);
 
-            memory.write(address, value as u8);
-            assert_eq!(memory.read(address), value as u8);
-            assert_eq!(memory.chr.read(address), value as u8);
+            bus.write(address, value as u8);
+            assert_eq!(bus.read(address), value as u8);
+            assert_eq!(bus.chr.read(address), value as u8);
         }
     }
 
     #[test]
     fn can_read_palette_ram_in_nes_ppu_memory() {
         let (mut palette_ram, mut chr) = ([0; _], ArrayMemory::default());
-        let mut memory = NESPPUMemory::new(&mut palette_ram, &mut chr);
+        let mut bus = PPUBus::new(&mut palette_ram, &mut chr);
 
         for value in 0x3f00..=0x3f1f {
             let address = Address::new(value);
 
-            memory.write(address, (value + 1) as u8);
-            assert_eq!(memory.read(address), (value + 1) as u8);
+            bus.write(address, (value + 1) as u8);
+            assert_eq!(bus.read(address), (value + 1) as u8);
             assert_eq!(
-                memory.palette_ram[memory.palette_index(address)],
+                bus.palette_ram[bus.palette_index(address)],
                 (value + 1) as u8
             );
         }
@@ -92,15 +91,15 @@ mod tests {
     #[test]
     fn palette_ram_mirrors_from_0x3f20_to_0x3fff() {
         let (mut palette_ram, mut chr) = ([0; _], ArrayMemory::default());
-        let mut memory = NESPPUMemory::new(&mut palette_ram, &mut chr);
+        let mut bus = PPUBus::new(&mut palette_ram, &mut chr);
 
         for value in 0x3f20..=0x3fff {
             let address = Address::new(value);
 
-            memory.write(address, (value + 1) as u8);
-            assert_eq!(memory.read(address), (value + 1) as u8);
+            bus.write(address, (value + 1) as u8);
+            assert_eq!(bus.read(address), (value + 1) as u8);
             assert_eq!(
-                memory.palette_ram[memory.palette_index(address)],
+                bus.palette_ram[bus.palette_index(address)],
                 (value + 1) as u8
             );
         }
@@ -109,7 +108,7 @@ mod tests {
     #[test]
     fn palette_ram_mirrors_0x3f1x_to_0x3f0x_for_0_4_8_and_c() {
         let (mut palette_ram, mut chr) = ([0; _], ArrayMemory::default());
-        let mut memory = NESPPUMemory::new(&mut palette_ram, &mut chr);
+        let mut bus = PPUBus::new(&mut palette_ram, &mut chr);
 
         let addresses = [
             (0x3f00, 0x3f10),
@@ -122,10 +121,10 @@ mod tests {
             let original_address = Address::new(*original);
             let mirror_address = Address::new(*mirror);
 
-            memory.write(original_address, 42);
-            assert_eq!(memory.read(mirror_address), 42);
-            memory.write(mirror_address, 24);
-            assert_eq!(memory.read(original_address), 24);
+            bus.write(original_address, 42);
+            assert_eq!(bus.read(mirror_address), 42);
+            bus.write(mirror_address, 24);
+            assert_eq!(bus.read(original_address), 24);
         }
     }
 }

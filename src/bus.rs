@@ -3,8 +3,8 @@ use std::fmt::{Debug, Formatter};
 use crate::cpu::Tickable;
 use crate::Address;
 
-pub trait Memory: Sized {
-    /// This method takes a mutable reference because reading from memory can sometimes trigger
+pub trait Bus: Sized {
+    /// This method takes a mutable reference because reading from the bus can sometimes trigger
     /// state changes.
     ///
     /// e.g. when reading from the PPU status register, bit 7 of the register is reset.
@@ -12,7 +12,7 @@ pub trait Memory: Sized {
     fn write(&mut self, address: Address, byte: u8);
 }
 
-impl<M: Memory> Memory for &mut M {
+impl<B: Bus> Bus for &mut B {
     fn read(&mut self, address: Address) -> u8 {
         (**self).read(address)
     }
@@ -42,7 +42,7 @@ impl Debug for ArrayMemory {
     }
 }
 
-impl Memory for ArrayMemory {
+impl Bus for ArrayMemory {
     fn read(&mut self, address: Address) -> u8 {
         self.0[address.index()]
     }

@@ -1,9 +1,9 @@
 //! Stack Operations
-use crate::Memory;
+use crate::Bus;
 
 use crate::cpu::{Status, Tickable, CPU};
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn pla(&mut self) {
         self.ignore_argument();
         self.increment_stack();
@@ -34,7 +34,7 @@ mod tests {
         cpu::{stack, tests::run_instr, Status}, instructions::{JSR, PHA, PHP, PLA, PLP, RTS},
         mem,
         Address,
-        Memory,
+        Bus,
     };
 
     #[test]
@@ -90,7 +90,7 @@ mod tests {
             cpu.stack_pointer.0 = 6;
         });
 
-        assert_eq!(cpu.memory.read(stack::BASE + 6), 20);
+        assert_eq!(cpu.bus.read(stack::BASE + 6), 20);
     }
 
     #[test]
@@ -109,7 +109,7 @@ mod tests {
             cpu.stack_pointer.0 = 6;
         });
 
-        assert_eq!(cpu.memory.read(stack::BASE + 6), 0b1111_0101);
+        assert_eq!(cpu.bus.read(stack::BASE + 6), 0b1111_0101);
     }
 
     #[test]
@@ -143,8 +143,8 @@ mod tests {
             cpu.program_counter = Address::new(0x1234);
         });
 
-        assert_eq!(cpu.memory.read(stack::BASE), 0x12);
-        assert_eq!(cpu.memory.read(stack::BASE + 0xff), 0x36);
+        assert_eq!(cpu.bus.read(stack::BASE), 0x12);
+        assert_eq!(cpu.bus.read(stack::BASE + 0xff), 0x36);
 
         let cpu = run_instr(
             mem!(

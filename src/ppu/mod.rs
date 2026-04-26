@@ -4,19 +4,19 @@ use control::SpriteSize;
 use log::warn;
 use std::fmt::Debug;
 
+pub use self::bus::PPUBus;
 use self::control::Control;
 use self::mask::Mask;
-pub use self::memory::NESPPUMemory;
 use self::scroll::Scroll;
 use self::status::Status;
 use crate::cpu::Tickable;
 use crate::video::BackBuffer;
 use crate::Address;
-use crate::Memory;
+use crate::Bus;
 
+mod bus;
 mod control;
 mod mask;
-mod memory;
 mod scroll;
 mod status;
 
@@ -50,17 +50,17 @@ pub trait PPU: Tickable {
 }
 
 #[derive(Debug)]
-pub struct RealPPU<'a, M = NESPPUMemory<'a>> {
-    memory: M,
+pub struct RealPPU<'a, B = PPUBus<'a>> {
+    bus: B,
     video_out: &'a mut BackBuffer,
     state: &'a mut PPUState,
 }
 
-impl<'a, M: Memory> RealPPU<'a, M> {
+impl<'a, B: Bus> RealPPU<'a, B> {
     #[inline]
-    pub fn new(memory: M, video_out: &'a mut BackBuffer, state: &'a mut PPUState) -> Self {
+    pub fn new(bus: B, video_out: &'a mut BackBuffer, state: &'a mut PPUState) -> Self {
         Self {
-            memory,
+            bus,
             video_out,
             state,
         }
@@ -147,7 +147,7 @@ impl<'a, M: Memory> RealPPU<'a, M> {
             self.state.status |= Status::SPRITE_ZERO_HIT;
         }
 
-        Color(self.memory.read(color_address))
+        Color(self.bus.read(color_address))
     }
 
     fn read_pattern_row(
@@ -165,8 +165,8 @@ impl<'a, M: Memory> RealPPU<'a, M> {
         let pattern_address0 = Address::from(nametable) + index;
         let pattern_address1 = pattern_address0 + 0b1000;
 
-        let pattern0 = self.memory.read(pattern_address0);
-        let pattern1 = self.memory.read(pattern_address1);
+        let pattern0 = self.bus.read(pattern_address0);
+        let pattern1 = self.bus.read(pattern_address1);
 
         (pattern0, pattern1)
     }
@@ -177,8 +177,8 @@ impl<'a, M: Memory> RealPPU<'a, M> {
         let coarse_y = scroll.coarse_y();
         let fine_y = scroll.fine_y();
 
-        let pattern_index = self.memory.read(self.state.tile_address());
-        let attribute_byte = self.memory.read(self.state.attribute_address());
+        let pattern_index = self.bus.read(self.state.tile_address());
+        let attribute_byte = self.bus.read(self.state.attribute_address());
         let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
         let attribute_bit_index1 = attribute_bit_index0 + 1;
 
@@ -528,7 +528,7 @@ fn set_all_bits_to_bit_at_index(byte: u8, index: u8) -> u8 {
     (!((byte >> index) & 1)).wrapping_add(1)
 }
 
-impl<M: Memory> PPU for RealPPU<'_, M> {
+impl<M: Bus> PPU for RealPPU<'_, M> {
     fn write_control(&mut self, byte: u8) {
         self.state.control = Control::from_bits(byte);
 
@@ -601,7 +601,7 @@ impl<M: Memory> PPU for RealPPU<'_, M> {
             warn!("Attempt to read from PPU during rendering");
         }
         let address = self.state.address();
-        let byte = self.memory.read(address);
+        let byte = self.bus.read(address);
         self.state.increment_address();
 
         if address < BACKGROUND_PALETTES {
@@ -617,7 +617,7 @@ impl<M: Memory> PPU for RealPPU<'_, M> {
         if cfg!(debug_assertions) && self.state.rendering() {
             // warn!("Attempt to write to PPU during rendering");
         }
-        self.memory.write(self.state.address(), byte);
+        self.bus.write(self.state.address(), byte);
         self.state.increment_address();
     }
 
@@ -627,7 +627,7 @@ impl<M: Memory> PPU for RealPPU<'_, M> {
     }
 }
 
-impl<M: Memory> Tickable for RealPPU<'_, M> {
+impl<M: Bus> Tickable for RealPPU<'_, M> {
     fn tick(&mut self) -> bool {
         let mut interrupt = false;
 
@@ -980,7 +980,7 @@ mod tests {
         ppu.write_address(0x12);
         ppu.write_address(0x34);
         ppu.write_data(0x54);
-        assert_eq!(ppu.memory.read(Address::new(0x1234)), 0x54);
+        assert_eq!(ppu.bus.read(Address::new(0x1234)), 0x54);
     }
 
     #[test]
@@ -1047,7 +1047,7 @@ mod tests {
         ppu.read_data(); // Dummy read due to internal buffer
         assert_eq!(ppu.read_data(), 0x64);
         ppu.write_data(0x74);
-        assert_eq!(ppu.memory.read(Address::new(0x1237)), 0x74);
+        assert_eq!(ppu.bus.read(Address::new(0x1237)), 0x74);
 
         ppu.write_address(0x12);
         ppu.write_address(0x34);
@@ -1057,7 +1057,7 @@ mod tests {
         ppu.read_data(); // Dummy read due to internal buffer
         assert_eq!(ppu.read_data(), 0x84);
         ppu.write_data(0x94);
-        assert_eq!(ppu.memory.read(Address::new(0x1294)), 0x94);
+        assert_eq!(ppu.bus.read(Address::new(0x1294)), 0x94);
     }
 
     #[test]

@@ -1,9 +1,9 @@
 //! Status Flag Changes
 
 use crate::cpu::Tickable;
-use crate::{cpu::Status, Memory, CPU};
+use crate::{cpu::Status, Bus, CPU};
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn clc(&mut self) {
         self.ignore_argument();
         self.state.status.remove(Status::CARRY);

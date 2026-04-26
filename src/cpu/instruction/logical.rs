@@ -5,11 +5,11 @@ use crate::{
     cpu::{
         addressing_modes::{BITAddressingMode, FlexibleAddressingMode},
         Status,
-    }, Memory,
+    }, Bus,
     CPU,
 };
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn and(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.set_accumulator(self.state.accumulator & value);

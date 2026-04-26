@@ -5,11 +5,11 @@ use crate::{
     cpu::{
         addressing_modes::{IncDecAddressingMode, StoreAddressingMode},
         Reference,
-    }, Memory,
+    }, Bus,
     CPU,
 };
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn inc(&mut self, addressing_mode: IncDecAddressingMode) {
         let reference = self.fetch_ref(addressing_mode);
         self.increment(reference);
@@ -74,7 +74,7 @@ mod tests {
         cpu::{tests::run_instr, Status}, instructions::{DEC_ABS, DEX, DEY, INC_ABS, INX, INY},
         mem,
         Address,
-        Memory,
+        Bus,
     };
 
     #[test]
@@ -87,7 +87,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)), 46);
+        assert_eq!(cpu.bus.read(Address::new(100)), 46);
     }
 
     #[test]
@@ -100,7 +100,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)), 46);
+        assert_eq!(cpu.bus.read(Address::new(100)), 46);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
@@ -111,7 +111,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)), 0);
+        assert_eq!(cpu.bus.read(Address::new(100)), 0);
         assert!(cpu.state.status.contains(Status::ZERO));
     }
 
@@ -125,7 +125,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)), 46);
+        assert_eq!(cpu.bus.read(Address::new(100)), 46);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
@@ -136,7 +136,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)) as i8, -9i8);
+        assert_eq!(cpu.bus.read(Address::new(100)) as i8, -9i8);
         assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 
@@ -168,7 +168,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)), 44);
+        assert_eq!(cpu.bus.read(Address::new(100)), 44);
     }
 
     #[test]
@@ -181,7 +181,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)), 44);
+        assert_eq!(cpu.bus.read(Address::new(100)), 44);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
@@ -192,7 +192,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)), 0);
+        assert_eq!(cpu.bus.read(Address::new(100)), 0);
         assert!(cpu.state.status.contains(Status::ZERO));
     }
 
@@ -206,7 +206,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)), 44);
+        assert_eq!(cpu.bus.read(Address::new(100)), 44);
         assert!(!cpu.state.status.contains(Status::ZERO));
 
         let mut cpu = run_instr(
@@ -217,7 +217,7 @@ mod tests {
             |_| {},
         );
 
-        assert_eq!(cpu.memory.read(Address::new(100)) as i8, -1i8);
+        assert_eq!(cpu.bus.read(Address::new(100)) as i8, -1i8);
         assert!(cpu.state.status.contains(Status::NEGATIVE));
     }
 

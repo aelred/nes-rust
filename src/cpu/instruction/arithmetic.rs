@@ -2,11 +2,11 @@
 
 use crate::cpu::Tickable;
 use crate::{
-    cpu::addressing_modes::{CompareAddressingMode, FlexibleAddressingMode}, Memory,
+    cpu::addressing_modes::{CompareAddressingMode, FlexibleAddressingMode}, Bus,
     CPU,
 };
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn adc(&mut self, addressing_mode: FlexibleAddressingMode) {
         let value = self.fetch(addressing_mode);
         self.add_to_accumulator(value);

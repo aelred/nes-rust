@@ -2,13 +2,13 @@
 
 use crate::cpu::Tickable;
 use crate::{
-    cpu::{addressing_modes::IncDecAddressingMode, Status}, Address, Memory,
+    cpu::{addressing_modes::IncDecAddressingMode, Status}, Address, Bus,
     CPU,
 };
 
 const INTERRUPT_VECTOR: Address = Address::new(0xFFFE);
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn brk(&mut self) {
         self.ignore_argument();
         self.interrupt(INTERRUPT_VECTOR, true)
@@ -68,9 +68,9 @@ mod tests {
             cpu.stack_pointer.0 = 6;
         });
 
-        assert_eq!(cpu.memory.read(stack::BASE + 6), 0x12);
-        assert_eq!(cpu.memory.read(stack::BASE + 5), 0x34);
-        assert_eq!(cpu.memory.read(stack::BASE + 4), 0b1011_1000);
+        assert_eq!(cpu.bus.read(stack::BASE + 6), 0x12);
+        assert_eq!(cpu.bus.read(stack::BASE + 5), 0x34);
+        assert_eq!(cpu.bus.read(stack::BASE + 4), 0b1011_1000);
     }
 
     #[test]
@@ -89,7 +89,7 @@ mod tests {
             cpu.stack_pointer.0 = 6;
         });
 
-        let status = Status::from_bits_truncate(cpu.memory.read(stack::BASE + 4));
+        let status = Status::from_bits_truncate(cpu.bus.read(stack::BASE + 4));
         assert!(status.contains(Status::BREAK));
     }
 

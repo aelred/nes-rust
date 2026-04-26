@@ -1,9 +1,9 @@
 //! Branches
 
 use crate::cpu::Tickable;
-use crate::{cpu::Status, Memory, CPU};
+use crate::{cpu::Status, Bus, CPU};
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub(in crate::cpu) fn bcc(&mut self) {
         self.branch_if(!self.state.status.contains(Status::CARRY))
     }

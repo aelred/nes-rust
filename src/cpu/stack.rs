@@ -1,4 +1,4 @@
-use crate::{Address, Memory};
+use crate::{Address, Bus};
 
 use super::{Tickable, CPU};
 
@@ -29,7 +29,7 @@ impl Default for StackPointer {
     }
 }
 
-impl<M: Memory + Tickable> CPU<'_, M> {
+impl<M: Bus + Tickable> CPU<'_, M> {
     pub fn push_stack(&mut self, byte: u8) {
         self.write(self.state.stack_pointer.address(), byte);
         self.state.stack_pointer.decrement();

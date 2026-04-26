@@ -3,33 +3,33 @@
 pub use crate::address::Address;
 use crate::apu::{APUState, APU};
 use crate::audio::AudioSink;
+pub use crate::bus::ArrayMemory;
+pub use crate::bus::Bus;
 pub use crate::cartridge::Cartridge;
 pub use crate::cpu::instructions;
+use crate::cpu::CPUBus;
 pub use crate::cpu::CPUState;
 pub use crate::cpu::Instruction;
-use crate::cpu::NESCPUMemory;
 pub use crate::cpu::Tickable;
 pub use crate::cpu::CPU;
 pub use crate::i_nes::INes;
 pub use crate::i_nes::INesReadError;
 pub use crate::input::Buttons;
 use crate::input::Controller;
-pub use crate::memory::ArrayMemory;
-pub use crate::memory::Memory;
 pub use crate::ppu::Color;
-use crate::ppu::{NESPPUMemory, PPUState, RealPPU};
+use crate::ppu::{PPUBus, PPUState, RealPPU};
 use std::fmt::Debug;
 use video::BackBuffer;
 
 mod address;
 mod apu;
 pub mod audio;
+mod bus;
 mod cartridge;
 mod cpu;
 mod i_nes;
 mod input;
 mod mapper;
-mod memory;
 mod ppu;
 mod runner;
 pub mod runtime;
@@ -67,8 +67,8 @@ impl NES {
             audio_out,
         };
 
-        let (mut cpu_memory, _) = this.build_cpu();
-        this.cpu = CPUState::from_memory(&mut cpu_memory);
+        let (mut cpu_bus, _) = this.build_cpu();
+        this.cpu = CPUState::from_bus(&mut cpu_bus);
 
         this
     }
@@ -92,8 +92,8 @@ impl NES {
     }
 
     pub fn read_cpu(&mut self, address: Address) -> u8 {
-        let (mut cpu_memory, _) = self.build_cpu();
-        cpu_memory.read(address)
+        let (mut cpu_bus, _) = self.build_cpu();
+        cpu_bus.read(address)
     }
 
     pub fn controller(&mut self) -> &mut Controller {
@@ -101,22 +101,21 @@ impl NES {
     }
 
     pub fn tick(&mut self) -> u8 {
-        let (cpu_memory, cpu_state) = self.build_cpu();
-        CPU::new(cpu_memory, cpu_state).run_instruction()
+        let (cpu_bus, cpu_state) = self.build_cpu();
+        CPU::new(cpu_bus, cpu_state).run_instruction()
     }
 
     #[inline]
-    fn build_cpu(&mut self) -> (NESCPUMemory<'_>, &mut CPUState) {
+    fn build_cpu(&mut self) -> (CPUBus<'_>, &mut CPUState) {
         let (prg, chr) = self.cartridge.get_prg_chr();
 
-        let ppu_memory = NESPPUMemory::new(&mut self.palette_ram, chr);
-        let ppu = RealPPU::new(ppu_memory, &mut self.video_out, &mut self.ppu);
+        let ppu_bus = PPUBus::new(&mut self.palette_ram, chr);
+        let ppu = RealPPU::new(ppu_bus, &mut self.video_out, &mut self.ppu);
 
         let apu = APU::new(&mut self.audio_out, &mut self.apu);
 
-        let cpu_memory =
-            NESCPUMemory::new(&mut self.internal_ram, prg, ppu, apu, &mut self.controller);
-        (cpu_memory, &mut self.cpu)
+        let cpu_bus = CPUBus::new(&mut self.internal_ram, prg, ppu, apu, &mut self.controller);
+        (cpu_bus, &mut self.cpu)
     }
 }
 
@@ -134,7 +133,7 @@ macro_rules! mem {
                 let mut addr: $crate::Address = $crate::Address::from($offset);
                 $(
                     let byte = u8::from($data);
-                    $crate::Memory::write(&mut memory, addr, byte);
+                    $crate::Bus::write(&mut memory, addr, byte);
                     addr += 1u16;
                 )*
             )*
