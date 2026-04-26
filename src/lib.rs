@@ -41,15 +41,14 @@ pub const NES_FREQ: f64 = 1_789_773.0;
 
 #[derive(Debug)]
 pub struct NES {
-    /// TODO: flatten this out (WIP)
     cpu: CPUState,
     ppu: PPUState,
     apu: APUState,
     cartridge: Cartridge,
-    internal_ram: [u8; 0x800],
     controller: Controller,
-    additional_memory: ArrayMemory, // TODO: fake memory to support unsupported memory space
     palette_ram: [u8; 0x20],
+    internal_ram: [u8; 0x800],
+    additional_memory: ArrayMemory, // TODO: fake memory to support unsupported memory space
     video_out: BackBuffer,
     audio_out: AudioSink,
 }
@@ -61,11 +60,11 @@ impl NES {
             ppu: PPUState::default(),
             apu: APUState::default(),
             cartridge,
-            internal_ram: [0; _],
             controller: Controller::default(),
-            additional_memory: ArrayMemory::default(),
             // Initialise whole palette to black
             palette_ram: [0x0F; _],
+            internal_ram: [0; _],
+            additional_memory: ArrayMemory::default(),
             video_out,
             audio_out,
         };
