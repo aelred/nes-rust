@@ -4,7 +4,6 @@ pub use crate::address::Address;
 use crate::apu::APU;
 use crate::audio::AudioSink;
 pub use crate::cartridge::Cartridge;
-use crate::cartridge::PRG;
 pub use crate::cpu::instructions;
 pub use crate::cpu::CPUState;
 pub use crate::cpu::Instruction;
@@ -18,8 +17,7 @@ use crate::input::Controller;
 pub use crate::memory::ArrayMemory;
 pub use crate::memory::Memory;
 pub use crate::ppu::Color;
-use crate::ppu::NESPPUMemory;
-use crate::ppu::RealPPU;
+use crate::ppu::{NESPPUMemory, PPUState, RealPPU};
 use std::fmt::Debug;
 use video::BackBuffer;
 
@@ -45,24 +43,29 @@ pub const NES_FREQ: f64 = 1_789_773.0;
 pub struct NES {
     /// TODO: flatten this out (WIP)
     cpu: CPUState,
-    ppu: RealPPU,
+    ppu: PPUState,
     apu: APU,
+    cartridge: Cartridge,
     internal_ram: [u8; 0x800],
-    prg: PRG,
     controller: Controller,
     additional_memory: ArrayMemory, // TODO: fake memory to support unsupported memory space
+    palette_ram: [u8; 0x20],
+    video_out: BackBuffer,
 }
 
 impl NES {
     pub fn new(cartridge: Cartridge, video_out: BackBuffer, audio_out: AudioSink) -> Self {
         let mut this = Self {
             cpu: CPUState::default(),
-            ppu: RealPPU::new(NESPPUMemory::new(cartridge.chr), video_out),
+            ppu: PPUState::default(),
             apu: APU::new(audio_out),
+            cartridge,
             internal_ram: [0; _],
-            prg: cartridge.prg,
             controller: Controller::default(),
             additional_memory: ArrayMemory::default(),
+            // Initialise whole palette to black
+            palette_ram: [0x0F; _],
+            video_out,
         };
 
         let (mut cpu_memory, _) = this.build_cpu();
@@ -80,7 +83,7 @@ impl NES {
     }
 
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        let mut video_out = self.ppu.disconnect_video();
+        let mut video_out = std::mem::take(&mut self.video_out);
         // Draw from top left
         video_out.reset();
 
@@ -104,10 +107,13 @@ impl NES {
     }
 
     fn build_cpu(&mut self) -> (NESCPUMemory<'_>, &mut CPUState) {
+        let ppu_memory = NESPPUMemory::new(&mut self.palette_ram, &mut self.cartridge.chr);
+        let ppu = RealPPU::new(ppu_memory, &mut self.video_out, &mut self.ppu);
+
         let cpu_memory = NESCPUMemory::new(
             &mut self.internal_ram,
-            &mut self.prg,
-            &mut self.ppu,
+            &mut self.cartridge.prg,
+            ppu,
             &mut self.apu,
             &mut self.controller,
             &mut self.additional_memory,

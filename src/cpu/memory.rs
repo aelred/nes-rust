@@ -44,10 +44,10 @@ const JOY1_ADDRESS: Address = Address::new(0x4016);
 const APU_FRAME_COUNTER: Address = Address::new(0x4017);
 const PRG_SPACE: Address = Address::new(0x4020);
 
-pub struct NESCPUMemory<'a, PRG = cartridge::PRG, PPU = RealPPU, IN = Controller> {
+pub struct NESCPUMemory<'a, PRG = cartridge::PRG, PPU = RealPPU<'a>, IN = Controller> {
     internal_ram: &'a mut [u8; 0x800],
     prg: &'a mut PRG,
-    ppu: &'a mut PPU,
+    ppu: PPU,
     apu: &'a mut APU,
     input: &'a mut IN,
     the_rest: &'a mut ArrayMemory, // TODO
@@ -57,7 +57,7 @@ impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
     pub fn new(
         internal_ram: &'a mut [u8; 0x800],
         prg: &'a mut PRG,
-        ppu: &'a mut PPU,
+        ppu: PPU,
         apu: &'a mut APU,
         input: &'a mut IN,
         the_rest: &'a mut ArrayMemory,
@@ -172,7 +172,7 @@ impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Memory for NESCPUMemory<'_, PRG, PPU
     }
 }
 
-impl Tickable for NESCPUMemory<'_> {
+impl<PRG: Memory, PPU: ppu::PPU, IN: Input> Tickable for NESCPUMemory<'_, PRG, PPU, IN> {
     fn tick(&mut self) -> bool {
         let interrupt = self.ppu.tick();
         self.apu.tick();
@@ -380,7 +380,7 @@ mod tests {
         }
     }
 
-    impl PPU for MockPPU {
+    impl PPU for &mut MockPPU {
         fn write_control(&mut self, byte: u8) {
             self.control = byte;
         }
@@ -448,7 +448,7 @@ mod tests {
     }
 
     impl TestCPUMemory {
-        fn memory(&mut self) -> NESCPUMemory<'_, ArrayMemory, MockPPU, MockInput> {
+        fn memory(&mut self) -> NESCPUMemory<'_, ArrayMemory, &mut MockPPU, MockInput> {
             NESCPUMemory::new(
                 &mut self.internal_ram,
                 &mut self.prg,

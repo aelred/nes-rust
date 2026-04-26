@@ -4,7 +4,7 @@ use crate::Memory;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Cartridge {
     pub prg: PRG,
     pub chr: CHR,

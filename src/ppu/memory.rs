@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use crate::cartridge;
 use crate::Address;
@@ -7,16 +7,15 @@ use crate::Memory;
 const CHR_END: usize = PALETTE_OFFSET - 1;
 const PALETTE_OFFSET: usize = 0x3f00;
 
-pub struct NESPPUMemory<CHR = cartridge::CHR> {
-    palette_ram: [u8; 0x20],
-    chr: CHR,
+#[derive(Debug)]
+pub struct NESPPUMemory<'a, CHR = cartridge::CHR> {
+    palette_ram: &'a mut [u8; 0x20],
+    chr: &'a mut CHR,
 }
 
-impl<CHR> NESPPUMemory<CHR> {
-    pub fn new(chr: CHR) -> Self {
-        // Initialise whole palette to black
-        let palette_ram = [0x0F; _];
-        NESPPUMemory { palette_ram, chr }
+impl<'a, CHR> NESPPUMemory<'a, CHR> {
+    pub fn new(palette_ram: &'a mut [u8; 0x20], chr: &'a mut CHR) -> Self {
+        Self { palette_ram, chr }
     }
 
     fn palette_index(&self, address: Address) -> usize {
@@ -28,15 +27,7 @@ impl<CHR> NESPPUMemory<CHR> {
     }
 }
 
-impl<CHR: Debug> Debug for NESPPUMemory<CHR> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NESPPUMemory")
-            .field("chr", &self.chr)
-            .finish()
-    }
-}
-
-impl<CHR: Memory> Memory for NESPPUMemory<CHR> {
+impl<CHR: Memory> Memory for NESPPUMemory<'_, CHR> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
             0x0000..=CHR_END => self.chr.read(address),
@@ -68,7 +59,8 @@ mod tests {
 
     #[test]
     fn can_read_cartridge_space_in_nes_ppu_memory() {
-        let mut memory = nes_ppu_memory();
+        let (mut palette_ram, mut chr) = ([0; _], ArrayMemory::default());
+        let mut memory = NESPPUMemory::new(&mut palette_ram, &mut chr);
 
         for value in 0x0000..=0x3eff {
             let address = Address::new(value);
@@ -81,7 +73,8 @@ mod tests {
 
     #[test]
     fn can_read_palette_ram_in_nes_ppu_memory() {
-        let mut memory = nes_ppu_memory();
+        let (mut palette_ram, mut chr) = ([0; _], ArrayMemory::default());
+        let mut memory = NESPPUMemory::new(&mut palette_ram, &mut chr);
 
         for value in 0x3f00..=0x3f1f {
             let address = Address::new(value);
@@ -97,7 +90,8 @@ mod tests {
 
     #[test]
     fn palette_ram_mirrors_from_0x3f20_to_0x3fff() {
-        let mut memory = nes_ppu_memory();
+        let (mut palette_ram, mut chr) = ([0; _], ArrayMemory::default());
+        let mut memory = NESPPUMemory::new(&mut palette_ram, &mut chr);
 
         for value in 0x3f20..=0x3fff {
             let address = Address::new(value);
@@ -113,7 +107,8 @@ mod tests {
 
     #[test]
     fn palette_ram_mirrors_0x3f1x_to_0x3f0x_for_0_4_8_and_c() {
-        let mut memory = nes_ppu_memory();
+        let (mut palette_ram, mut chr) = ([0; _], ArrayMemory::default());
+        let mut memory = NESPPUMemory::new(&mut palette_ram, &mut chr);
 
         let addresses = [
             (0x3f00, 0x3f10),
@@ -131,10 +126,5 @@ mod tests {
             memory.write(mirror_address, 24);
             assert_eq!(memory.read(original_address), 24);
         }
-    }
-
-    fn nes_ppu_memory() -> NESPPUMemory<ArrayMemory> {
-        let chr = ArrayMemory::default();
-        NESPPUMemory::new(chr)
     }
 }
