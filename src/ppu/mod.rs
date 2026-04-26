@@ -1,9 +1,8 @@
-use std::fmt::{Debug, Formatter};
-
 use bitflags::bitflags;
 use control::PatternTable;
 use control::SpriteSize;
 use log::warn;
+use std::fmt::Debug;
 
 use self::control::Control;
 use self::mask::Mask;
@@ -50,9 +49,225 @@ pub trait PPU: Tickable {
     fn write_oam_dma(&mut self, bytes: [u8; 256]);
 }
 
+#[derive(Debug)]
 pub struct RealPPU<M = NESPPUMemory> {
     memory: M,
     video_out: BackBuffer,
+    state: PPUState,
+}
+
+impl<M: Memory> RealPPU<M> {
+    pub fn new(memory: M, video_out: BackBuffer) -> Self {
+        Self {
+            memory,
+            video_out,
+            state: PPUState::default(),
+        }
+    }
+
+    /// Disconnect video and replace with a no-op video out.
+    pub fn disconnect_video(&mut self) -> BackBuffer {
+        std::mem::take(&mut self.video_out)
+    }
+
+    /// Swaps sprites from `next_sprites` into `current_sprites` and load `next_sprites`.
+    /// Load sprites all at once - in a real PPU this is spread over the whole scanline.
+    fn load_sprites(&mut self) {
+        std::mem::swap(
+            &mut self.state.current_sprites,
+            &mut self.state.next_sprites,
+        );
+
+        let sprite_size = self.state.control.sprite_size();
+        let table = self.state.control.sprite_pattern_table();
+
+        let all_sprites = self
+            .state
+            .object_attribute_memory
+            .chunks_exact(4)
+            .map(|chunk| {
+                let attributes = SpriteAttributes::from_bits_truncate(chunk[2]);
+                Sprite::new(chunk[3], chunk[0], chunk[1], attributes)
+            });
+
+        let sprites_on_scanline = all_sprites.enumerate().filter(|(_, sprite)| {
+            let y = sprite.y as u16;
+            self.state.scanline >= y && self.state.scanline < y + sprite_size.height() as u16
+        });
+
+        self.state.next_sprites.sprites = [ActiveSprite::default(); ACTIVE_SPRITES];
+        self.state.next_sprites.has_sprite_zero = false;
+
+        for (dest, (i, src)) in self
+            .state
+            .next_sprites
+            .sprites
+            .iter_mut()
+            .zip(sprites_on_scanline)
+        {
+            self.state.next_sprites.has_sprite_zero |= i == 0;
+            dest.sprite = src;
+        }
+
+        for i in 0..ACTIVE_SPRITES {
+            let sprite = self.state.next_sprites.sprites[i].sprite;
+            let attr = sprite.attributes;
+
+            // Use wrapping_sub and % to handle default zero'd sprites at y = 0 without branching
+            let y_in_sprite =
+                self.state.scanline.wrapping_sub(sprite.y as u16) as u8 % sprite_size.height();
+            let y_in_sprite = attr.ver_flip(y_in_sprite, sprite_size);
+
+            let (sprite_table, index) = match sprite_size {
+                SpriteSize::_8x8 => (table, sprite.tile_index),
+                SpriteSize::_8x16 => (
+                    PatternTable::from((sprite.tile_index & 0b1) == 1),
+                    sprite.tile_index & 0b1111_1110,
+                ),
+            };
+
+            let (pattern0, pattern1) = self.read_pattern_row(sprite_table, index, y_in_sprite);
+
+            self.state.next_sprites.sprites[i].pattern0 = pattern0;
+            self.state.next_sprites.sprites[i].pattern1 = pattern1;
+        }
+    }
+
+    fn next_color(&mut self) -> Color {
+        let sprite = self.state.sprite_color();
+        let (background, background_opaque) = self.state.background_color();
+
+        let color_address = if sprite.visible && sprite.priority {
+            sprite.color_address
+        } else if background_opaque {
+            background
+        } else if sprite.visible {
+            sprite.color_address
+        } else {
+            background
+        };
+
+        if self.state.current_sprites.has_sprite_zero && sprite.index == 0 && background_opaque {
+            self.state.status |= Status::SPRITE_ZERO_HIT;
+        }
+
+        Color(self.memory.read(color_address))
+    }
+
+    fn read_pattern_row(
+        &mut self,
+        nametable: PatternTable,
+        pattern_index: u8,
+        row: u8,
+    ) -> (u8, u8) {
+        debug_assert!(row < 16, "expected row < 16, but row = {}", row);
+        // For 8x16 sprites, shift bit pattern to fetch lower tile:
+        // row = 0b0000_abcd => 0b000a_0bcd
+        let row = row & 0b0111 | ((row & 0b1000) << 1);
+
+        let index = u16::from(pattern_index) << 4 | u16::from(row);
+        let pattern_address0 = Address::from(nametable) + index;
+        let pattern_address1 = pattern_address0 + 0b1000;
+
+        let pattern0 = self.memory.read(pattern_address0);
+        let pattern1 = self.memory.read(pattern_address1);
+
+        (pattern0, pattern1)
+    }
+
+    fn read_next_tile(&mut self) {
+        let scroll = self.state.scroll();
+        let coarse_x = scroll.coarse_x();
+        let coarse_y = scroll.coarse_y();
+        let fine_y = scroll.fine_y();
+
+        let pattern_index = self.memory.read(self.state.tile_address());
+        let attribute_byte = self.memory.read(self.state.attribute_address());
+        let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
+        let attribute_bit_index1 = attribute_bit_index0 + 1;
+
+        let table = self.state.control.background_pattern_table();
+        let (pattern0, pattern1) = self.read_pattern_row(table, pattern_index, fine_y);
+
+        self.state.tile_pattern.set_next_bytes(pattern0, pattern1);
+
+        let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
+        let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
+
+        self.state.palette_select.set_next_bytes(palette0, palette1);
+    }
+
+    fn ppu_tick(&mut self) -> PPUOutput {
+        let mut interrupt = false;
+
+        self.state.suppress_vblank = false;
+
+        let in_bounds = self.state.scanline < 240 && self.state.cycle_count < 256;
+        let rendering = self.state.rendering();
+
+        match (self.state.scanline, self.state.cycle_count) {
+            (0..=239, 0) => self.load_sprites(),
+            (241, 1) if !self.state.suppress_vblank => {
+                // TODO: also suppress NMI the frame after, apparently
+                self.state.status |= Status::VBLANK;
+
+                if self.state.control.nmi_on_vblank() {
+                    interrupt = true;
+                }
+            }
+            (261, 1) => {
+                // TODO: The VBLANK is much too long
+                self.state.status -= Status::VBLANK | Status::SPRITE_ZERO_HIT;
+                if rendering {
+                    self.state
+                        .set_address(Address::new(self.state.temporary_address));
+                }
+            }
+            (0..=239, 256) if rendering => self.state.increment_fine_y(),
+            (0..=239, 257) if rendering => self.state.transfer_horizontal_scroll(),
+            _ => {}
+        }
+
+        // TODO: not sure about these conditions
+        // A tile is fetched every 8 cycles.
+        // The 1st and 2nd tiles are fetched at the of the previous scanline, filling the 16-bit shift registers.
+        // The first cycle is idle, so the 3rd tile is fetched at cycle 8.
+        let preparing_next_scanline = (self.state.scanline < 240 || self.state.scanline == 261)
+            && self.state.cycle_count >= 328;
+        if rendering
+            && ((in_bounds && self.state.cycle_count > 0) || preparing_next_scanline)
+            && self.state.cycle_count % 8 == 0
+        {
+            self.read_next_tile();
+            self.state.increment_coarse_x();
+        }
+
+        let color = in_bounds.then(|| self.next_color());
+
+        // Don't shift registers in the last 4 bits, or everything goes out of alignment.
+        // Oddly, the cycle count in a scanline isn't divisible by 8.
+        if self.state.cycle_count < 336 {
+            self.state.tile_pattern.shift();
+            self.state.palette_select.shift();
+        }
+
+        if self.state.cycle_count < 340 {
+            self.state.cycle_count += 1;
+        } else {
+            self.state.cycle_count = 0;
+            if self.state.scanline < 261 {
+                self.state.scanline += 1;
+            } else {
+                self.state.scanline = 0;
+            }
+        };
+
+        PPUOutput { color, interrupt }
+    }
+}
+
+#[derive(Debug)]
+struct PPUState {
     read_buffer: u8,
     object_attribute_memory: [u8; 256],
     scanline: u16,
@@ -75,36 +290,7 @@ pub struct RealPPU<M = NESPPUMemory> {
     suppress_vblank: bool,
 }
 
-impl<M: Memory> RealPPU<M> {
-    pub fn new(memory: M, video_out: BackBuffer) -> Self {
-        Self {
-            memory,
-            video_out,
-            read_buffer: 0,
-            object_attribute_memory: [0; 256],
-            scanline: 0,
-            cycle_count: 0,
-            tile_pattern: ShiftRegister::default(),
-            palette_select: ShiftRegister::default(),
-            current_sprites: ActiveSprites::default(),
-            next_sprites: ActiveSprites::default(),
-            control: Control::default(),
-            mask: Mask::default(),
-            status: Status::default(),
-            address: 0,
-            temporary_address: 0,
-            write_lower: false,
-            fine_x: 0,
-            oam_address: 0,
-            suppress_vblank: false,
-        }
-    }
-
-    /// Disconnect video and replace with a no-op video out.
-    pub fn disconnect_video(&mut self) -> BackBuffer {
-        std::mem::take(&mut self.video_out)
-    }
-
+impl PPUState {
     fn address(&self) -> Address {
         Address::new(self.address)
     }
@@ -150,82 +336,6 @@ impl<M: Memory> RealPPU<M> {
         let temporary_scroll = Scroll::new(self.temporary_address);
         scroll.set_horizontal(temporary_scroll);
         self.set_scroll(scroll);
-    }
-
-    /// Swaps sprites from `next_sprites` into `current_sprites` and load `next_sprites`.
-    /// Load sprites all at once - in a real PPU this is spread over the whole scanline.
-    fn load_sprites(&mut self) {
-        std::mem::swap(&mut self.current_sprites, &mut self.next_sprites);
-
-        let sprite_size = self.control.sprite_size();
-        let table = self.control.sprite_pattern_table();
-
-        let all_sprites = self.object_attribute_memory.chunks_exact(4).map(|chunk| {
-            let attributes = SpriteAttributes::from_bits_truncate(chunk[2]);
-            Sprite::new(chunk[3], chunk[0], chunk[1], attributes)
-        });
-
-        let sprites_on_scanline = all_sprites.enumerate().filter(|(_, sprite)| {
-            let y = sprite.y as u16;
-            self.scanline >= y && self.scanline < y + sprite_size.height() as u16
-        });
-
-        self.next_sprites.sprites = [ActiveSprite::default(); ACTIVE_SPRITES];
-        self.next_sprites.has_sprite_zero = false;
-
-        for (dest, (i, src)) in self
-            .next_sprites
-            .sprites
-            .iter_mut()
-            .zip(sprites_on_scanline)
-        {
-            self.next_sprites.has_sprite_zero |= i == 0;
-            dest.sprite = src;
-        }
-
-        for i in 0..ACTIVE_SPRITES {
-            let sprite = self.next_sprites.sprites[i].sprite;
-            let attr = sprite.attributes;
-
-            // Use wrapping_sub and % to handle default zero'd sprites at y = 0 without branching
-            let y_in_sprite =
-                self.scanline.wrapping_sub(sprite.y as u16) as u8 % sprite_size.height();
-            let y_in_sprite = attr.ver_flip(y_in_sprite, sprite_size);
-
-            let (sprite_table, index) = match sprite_size {
-                SpriteSize::_8x8 => (table, sprite.tile_index),
-                SpriteSize::_8x16 => (
-                    PatternTable::from((sprite.tile_index & 0b1) == 1),
-                    sprite.tile_index & 0b1111_1110,
-                ),
-            };
-
-            let (pattern0, pattern1) = self.read_pattern_row(sprite_table, index, y_in_sprite);
-
-            self.next_sprites.sprites[i].pattern0 = pattern0;
-            self.next_sprites.sprites[i].pattern1 = pattern1;
-        }
-    }
-
-    fn next_color(&mut self) -> Color {
-        let sprite = self.sprite_color();
-        let (background, background_opaque) = self.background_color();
-
-        let color_address = if sprite.visible && sprite.priority {
-            sprite.color_address
-        } else if background_opaque {
-            background
-        } else if sprite.visible {
-            sprite.color_address
-        } else {
-            background
-        };
-
-        if self.current_sprites.has_sprite_zero && sprite.index == 0 && background_opaque {
-            self.status |= Status::SPRITE_ZERO_HIT;
-        }
-
-        Color(self.memory.read(color_address))
     }
 
     fn background_color(&self) -> (Address, bool) {
@@ -290,142 +400,33 @@ impl<M: Memory> RealPPU<M> {
         }
     }
 
-    fn read_pattern_row(
-        &mut self,
-        nametable: PatternTable,
-        pattern_index: u8,
-        row: u8,
-    ) -> (u8, u8) {
-        debug_assert!(row < 16, "expected row < 16, but row = {}", row);
-        // For 8x16 sprites, shift bit pattern to fetch lower tile:
-        // row = 0b0000_abcd => 0b000a_0bcd
-        let row = row & 0b0111 | ((row & 0b1000) << 1);
-
-        let index = u16::from(pattern_index) << 4 | u16::from(row);
-        let pattern_address0 = Address::from(nametable) + index;
-        let pattern_address1 = pattern_address0 + 0b1000;
-
-        let pattern0 = self.memory.read(pattern_address0);
-        let pattern1 = self.memory.read(pattern_address1);
-
-        (pattern0, pattern1)
-    }
-
-    fn read_next_tile(&mut self) {
-        let scroll = self.scroll();
-        let coarse_x = scroll.coarse_x();
-        let coarse_y = scroll.coarse_y();
-        let fine_y = scroll.fine_y();
-
-        let pattern_index = self.memory.read(self.tile_address());
-        let attribute_byte = self.memory.read(self.attribute_address());
-        let attribute_bit_index0 = (coarse_y & 2) << 1 | (coarse_x & 2);
-        let attribute_bit_index1 = attribute_bit_index0 + 1;
-
-        let table = self.control.background_pattern_table();
-        let (pattern0, pattern1) = self.read_pattern_row(table, pattern_index, fine_y);
-
-        self.tile_pattern.set_next_bytes(pattern0, pattern1);
-
-        let palette0 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index0);
-        let palette1 = set_all_bits_to_bit_at_index(attribute_byte, attribute_bit_index1);
-
-        self.palette_select.set_next_bytes(palette0, palette1);
-    }
-
     fn rendering(&self) -> bool {
         self.mask
             .intersects(Mask::SHOW_BACKGROUND | Mask::SHOW_SPRITES)
     }
-
-    fn ppu_tick(&mut self) -> PPUOutput {
-        let mut interrupt = false;
-
-        self.suppress_vblank = false;
-
-        let in_bounds = self.scanline < 240 && self.cycle_count < 256;
-        let rendering = self.rendering();
-
-        match (self.scanline, self.cycle_count) {
-            (0..=239, 0) => self.load_sprites(),
-            (241, 1) if !self.suppress_vblank => {
-                // TODO: also suppress NMI the frame after, apparently
-                self.status |= Status::VBLANK;
-
-                if self.control.nmi_on_vblank() {
-                    interrupt = true;
-                }
-            }
-            (261, 1) => {
-                // TODO: The VBLANK is much too long
-                self.status -= Status::VBLANK | Status::SPRITE_ZERO_HIT;
-                if rendering {
-                    self.set_address(Address::new(self.temporary_address));
-                }
-            }
-            (0..=239, 256) if rendering => self.increment_fine_y(),
-            (0..=239, 257) if rendering => self.transfer_horizontal_scroll(),
-            _ => {}
-        }
-
-        // TODO: not sure about these conditions
-        // A tile is fetched every 8 cycles.
-        // The 1st and 2nd tiles are fetched at the of the previous scanline, filling the 16-bit shift registers.
-        // The first cycle is idle, so the 3rd tile is fetched at cycle 8.
-        let preparing_next_scanline =
-            (self.scanline < 240 || self.scanline == 261) && self.cycle_count >= 328;
-        if rendering
-            && ((in_bounds && self.cycle_count > 0) || preparing_next_scanline)
-            && self.cycle_count % 8 == 0
-        {
-            self.read_next_tile();
-            self.increment_coarse_x();
-        }
-
-        let color = in_bounds.then(|| self.next_color());
-
-        // Don't shift registers in the last 4 bits, or everything goes out of alignment.
-        // Oddly, the cycle count in a scanline isn't divisible by 8.
-        if self.cycle_count < 336 {
-            self.tile_pattern.shift();
-            self.palette_select.shift();
-        }
-
-        if self.cycle_count < 340 {
-            self.cycle_count += 1;
-        } else {
-            self.cycle_count = 0;
-            if self.scanline < 261 {
-                self.scanline += 1;
-            } else {
-                self.scanline = 0;
-            }
-        };
-
-        PPUOutput { color, interrupt }
-    }
 }
 
-impl<M: Debug> Debug for RealPPU<M> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PPU")
-            .field("memory", &self.memory)
-            .field("read_buffer", &self.read_buffer)
-            .field("scanline", &self.scanline)
-            .field("cycle_count", &self.cycle_count)
-            .field("tile_pattern", &self.tile_pattern)
-            .field("palette_select", &self.palette_select)
-            .field("current_sprites", &self.current_sprites)
-            .field("next_sprites", &self.next_sprites)
-            .field("control", &self.control)
-            .field("status", &self.status)
-            .field("mask", &self.mask)
-            .field("address", &self.address)
-            .field("temporary_address", &self.temporary_address)
-            .field("write_lower", &self.write_lower)
-            .field("fine_x", &self.fine_x)
-            .field("oam_address", &self.oam_address)
-            .finish()
+impl Default for PPUState {
+    fn default() -> Self {
+        Self {
+            read_buffer: 0,
+            object_attribute_memory: [0; 256],
+            scanline: 0,
+            cycle_count: 0,
+            tile_pattern: ShiftRegister::default(),
+            palette_select: ShiftRegister::default(),
+            current_sprites: ActiveSprites::default(),
+            next_sprites: ActiveSprites::default(),
+            control: Control::default(),
+            mask: Mask::default(),
+            status: Status::default(),
+            address: 0,
+            temporary_address: 0,
+            write_lower: false,
+            fine_x: 0,
+            oam_address: 0,
+            suppress_vblank: false,
+        }
     }
 }
 
@@ -533,82 +534,83 @@ fn set_all_bits_to_bit_at_index(byte: u8, index: u8) -> u8 {
 
 impl<M: Memory> PPU for RealPPU<M> {
     fn write_control(&mut self, byte: u8) {
-        self.control = Control::from_bits(byte);
+        self.state.control = Control::from_bits(byte);
 
         // Set bits of temporary address to nametable
-        self.temporary_address &= 0b1111_0011_1111_1111;
-        self.temporary_address |= u16::from(self.control.nametable_select()) << 10;
+        self.state.temporary_address &= 0b1111_0011_1111_1111;
+        self.state.temporary_address |= u16::from(self.state.control.nametable_select()) << 10;
     }
 
     fn write_mask(&mut self, byte: u8) {
-        self.mask = Mask::from_bits_truncate(byte);
+        self.state.mask = Mask::from_bits_truncate(byte);
     }
 
     fn read_status(&mut self) -> u8 {
-        self.write_lower = false;
-        self.suppress_vblank = true;
-        let bits = self.status.bits();
-        self.status.remove(Status::VBLANK);
+        self.state.write_lower = false;
+        self.state.suppress_vblank = true;
+        let bits = self.state.status.bits();
+        self.state.status.remove(Status::VBLANK);
         bits
     }
 
     fn write_oam_address(&mut self, byte: u8) {
-        self.oam_address = byte;
+        self.state.oam_address = byte;
     }
 
     fn read_oam_data(&mut self) -> u8 {
-        self.object_attribute_memory[self.oam_address as usize]
+        self.state.object_attribute_memory[self.state.oam_address as usize]
     }
 
     fn write_oam_data(&mut self, byte: u8) {
-        self.object_attribute_memory[self.oam_address as usize] = byte;
-        self.oam_address = self.oam_address.wrapping_add(1);
+        self.state.object_attribute_memory[self.state.oam_address as usize] = byte;
+        self.state.oam_address = self.state.oam_address.wrapping_add(1);
     }
 
     fn write_scroll(&mut self, byte: u8) {
         let fine = byte & 0b111;
         let coarse = (byte & 0b1111_1000) >> 3;
-        let mut scroll = Scroll::from_bits_truncate(self.temporary_address);
+        let mut scroll = Scroll::from_bits_truncate(self.state.temporary_address);
 
-        if self.write_lower {
+        if self.state.write_lower {
             scroll.set_coarse_y(coarse);
             scroll.set_fine_y(fine);
         } else {
             scroll.set_coarse_x(coarse);
-            self.fine_x = fine;
+            self.state.fine_x = fine;
         }
 
-        self.temporary_address = scroll.bits();
-        self.write_lower = !self.write_lower;
+        self.state.temporary_address = scroll.bits();
+        self.state.write_lower = !self.state.write_lower;
     }
 
     fn write_address(&mut self, byte: u8) {
-        if self.rendering() {
+        if self.state.rendering() {
             // warn!("Attempt to write address to PPU during rendering");
         }
-        if self.write_lower {
-            self.temporary_address &= 0b1111_1111_0000_0000;
-            self.temporary_address |= u16::from(byte);
-            self.set_address(Address::new(self.temporary_address));
+        if self.state.write_lower {
+            self.state.temporary_address &= 0b1111_1111_0000_0000;
+            self.state.temporary_address |= u16::from(byte);
+            self.state
+                .set_address(Address::new(self.state.temporary_address));
         } else {
-            self.temporary_address &= 0b0000_0000_1111_1111;
-            self.temporary_address |= u16::from(byte & 0b0011_1111) << 8;
+            self.state.temporary_address &= 0b0000_0000_1111_1111;
+            self.state.temporary_address |= u16::from(byte & 0b0011_1111) << 8;
         }
 
-        self.write_lower = !self.write_lower;
+        self.state.write_lower = !self.state.write_lower;
     }
 
     fn read_data(&mut self) -> u8 {
-        if cfg!(debug_assertions) && self.rendering() {
+        if cfg!(debug_assertions) && self.state.rendering() {
             warn!("Attempt to read from PPU during rendering");
         }
-        let address = self.address();
+        let address = self.state.address();
         let byte = self.memory.read(address);
-        self.increment_address();
+        self.state.increment_address();
 
         if address < BACKGROUND_PALETTES {
-            let buffer = self.read_buffer;
-            self.read_buffer = byte;
+            let buffer = self.state.read_buffer;
+            self.state.read_buffer = byte;
             buffer
         } else {
             byte
@@ -616,16 +618,16 @@ impl<M: Memory> PPU for RealPPU<M> {
     }
 
     fn write_data(&mut self, byte: u8) {
-        if cfg!(debug_assertions) && self.rendering() {
+        if cfg!(debug_assertions) && self.state.rendering() {
             // warn!("Attempt to write to PPU during rendering");
         }
-        self.memory.write(self.address(), byte);
-        self.increment_address();
+        self.memory.write(self.state.address(), byte);
+        self.state.increment_address();
     }
 
     fn write_oam_dma(&mut self, mut bytes: [u8; 256]) {
-        bytes.rotate_right(self.oam_address as usize);
-        self.object_attribute_memory = bytes;
+        bytes.rotate_right(self.state.oam_address as usize);
+        self.state.object_attribute_memory = bytes;
     }
 }
 
@@ -782,8 +784,8 @@ mod tests {
         for _ in 0..1000 {
             let mut cycles = 0;
 
-            let scanline = ppu.scanline;
-            while ppu.scanline == scanline {
+            let scanline = ppu.state.scanline;
+            while ppu.state.scanline == scanline {
                 ppu.ppu_tick();
                 cycles += 1;
             }
@@ -803,13 +805,13 @@ mod tests {
                 ppu.ppu_tick();
             }
 
-            assert_eq!(ppu.scanline, 0);
-            assert_eq!(ppu.cycle_count, 0);
+            assert_eq!(ppu.state.scanline, 0);
+            assert_eq!(ppu.state.cycle_count, 0);
         }
 
         // Sanity check that cycle count does indeed change
         ppu.ppu_tick();
-        assert_ne!(ppu.cycle_count, 0);
+        assert_ne!(ppu.state.cycle_count, 0);
     }
 
     #[test]
@@ -817,7 +819,7 @@ mod tests {
         let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_control(0b1010_1010);
-        assert_eq!(ppu.control, Control::from_bits(0b1010_1010));
+        assert_eq!(ppu.state.control, Control::from_bits(0b1010_1010));
     }
 
     #[test]
@@ -825,13 +827,13 @@ mod tests {
         let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_control(0b0000_0000);
-        assert_eq!(ppu.temporary_address, 0b0000_0000_0000_0000);
+        assert_eq!(ppu.state.temporary_address, 0b0000_0000_0000_0000);
         ppu.write_control(0b0000_0001);
-        assert_eq!(ppu.temporary_address, 0b0000_0100_0000_0000);
+        assert_eq!(ppu.state.temporary_address, 0b0000_0100_0000_0000);
         ppu.write_control(0b0000_0010);
-        assert_eq!(ppu.temporary_address, 0b0000_1000_0000_0000);
+        assert_eq!(ppu.state.temporary_address, 0b0000_1000_0000_0000);
         ppu.write_control(0b0000_0011);
-        assert_eq!(ppu.temporary_address, 0b0000_1100_0000_0000);
+        assert_eq!(ppu.state.temporary_address, 0b0000_1100_0000_0000);
     }
 
     #[test]
@@ -839,17 +841,17 @@ mod tests {
         let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_control(0b0000_0000);
-        ppu.address = ppu.temporary_address;
-        assert_eq!(ppu.tile_address(), Address::new(0x2000));
+        ppu.state.address = ppu.state.temporary_address;
+        assert_eq!(ppu.state.tile_address(), Address::new(0x2000));
         ppu.write_control(0b0000_0001);
-        ppu.address = ppu.temporary_address;
-        assert_eq!(ppu.tile_address(), Address::new(0x2400));
+        ppu.state.address = ppu.state.temporary_address;
+        assert_eq!(ppu.state.tile_address(), Address::new(0x2400));
         ppu.write_control(0b0000_0010);
-        ppu.address = ppu.temporary_address;
-        assert_eq!(ppu.tile_address(), Address::new(0x2800));
+        ppu.state.address = ppu.state.temporary_address;
+        assert_eq!(ppu.state.tile_address(), Address::new(0x2800));
         ppu.write_control(0b0000_0011);
-        ppu.address = ppu.temporary_address;
-        assert_eq!(ppu.tile_address(), Address::new(0x2c00));
+        ppu.state.address = ppu.state.temporary_address;
+        assert_eq!(ppu.state.tile_address(), Address::new(0x2c00));
     }
 
     #[test]
@@ -857,17 +859,17 @@ mod tests {
         let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_control(0b0000_0000);
-        ppu.address = ppu.temporary_address;
-        assert_eq!(ppu.attribute_address(), Address::new(0x23c0));
+        ppu.state.address = ppu.state.temporary_address;
+        assert_eq!(ppu.state.attribute_address(), Address::new(0x23c0));
         ppu.write_control(0b0000_0001);
-        ppu.address = ppu.temporary_address;
-        assert_eq!(ppu.attribute_address(), Address::new(0x27c0));
+        ppu.state.address = ppu.state.temporary_address;
+        assert_eq!(ppu.state.attribute_address(), Address::new(0x27c0));
         ppu.write_control(0b0000_0010);
-        ppu.address = ppu.temporary_address;
-        assert_eq!(ppu.attribute_address(), Address::new(0x2bc0));
+        ppu.state.address = ppu.state.temporary_address;
+        assert_eq!(ppu.state.attribute_address(), Address::new(0x2bc0));
         ppu.write_control(0b0000_0011);
-        ppu.address = ppu.temporary_address;
-        assert_eq!(ppu.attribute_address(), Address::new(0x2fc0));
+        ppu.state.address = ppu.state.temporary_address;
+        assert_eq!(ppu.state.attribute_address(), Address::new(0x2fc0));
     }
 
     #[test]
@@ -875,15 +877,15 @@ mod tests {
         let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_mask(0b1010_1010);
-        assert_eq!(ppu.mask, Mask::from_bits_truncate(0b1010_1010));
+        assert_eq!(ppu.state.mask, Mask::from_bits_truncate(0b1010_1010));
     }
 
     #[test]
     fn reading_ppu_status_returns_status_and_clears_vblank() {
         let mut ppu = ppu_with_memory(mem!());
-        ppu.status |= Status::VBLANK;
+        ppu.state.status |= Status::VBLANK;
         assert_eq!(ppu.read_status(), 0b1000_0000);
-        assert!(!ppu.status.contains(Status::VBLANK));
+        assert!(!ppu.state.status.contains(Status::VBLANK));
     }
 
     #[test]
@@ -894,7 +896,7 @@ mod tests {
         ppu.write_address(0x34);
         ppu.write_address(0x06);
 
-        assert_eq!(ppu.temporary_address, 0x0634);
+        assert_eq!(ppu.state.temporary_address, 0x0634);
 
         ppu.write_address(0x00);
         ppu.write_address(0x12);
@@ -902,36 +904,36 @@ mod tests {
         ppu.write_address(0x34);
         ppu.write_address(0x56);
 
-        assert_eq!(ppu.temporary_address, 0x3456);
+        assert_eq!(ppu.state.temporary_address, 0x3456);
     }
 
     #[test]
     fn writing_ppu_address_once_sets_masked_upper_bits_of_temporary_address() {
         let mut ppu = ppu_with_memory(mem!());
 
-        ppu.temporary_address = 0;
-        ppu.address = 0;
-        ppu.write_lower = false;
+        ppu.state.temporary_address = 0;
+        ppu.state.address = 0;
+        ppu.state.write_lower = false;
 
         ppu.write_address(0b1110_1010);
 
-        assert_eq!(ppu.temporary_address, 0b0010_1010_0000_0000);
-        assert_eq!(ppu.address, 0);
+        assert_eq!(ppu.state.temporary_address, 0b0010_1010_0000_0000);
+        assert_eq!(ppu.state.address, 0);
     }
 
     #[test]
     fn writing_ppu_address_twice_sets_lower_bits_of_temporary_address_and_transfers_to_address() {
         let mut ppu = ppu_with_memory(mem!());
 
-        ppu.temporary_address = 0;
-        ppu.address = 0;
-        ppu.write_lower = false;
+        ppu.state.temporary_address = 0;
+        ppu.state.address = 0;
+        ppu.state.write_lower = false;
 
         ppu.write_address(0b1110_1010);
         ppu.write_address(0b0101_0101);
 
-        assert_eq!(ppu.temporary_address, 0b0010_1010_0101_0101);
-        assert_eq!(ppu.address, 0b0010_1010_0101_0101);
+        assert_eq!(ppu.state.temporary_address, 0b0010_1010_0101_0101);
+        assert_eq!(ppu.state.address, 0b0010_1010_0101_0101);
     }
 
     #[test]
@@ -1034,7 +1036,7 @@ mod tests {
 
         ppu.write_oam_address(0x42);
 
-        assert_eq!(ppu.oam_address, 0x42);
+        assert_eq!(ppu.state.oam_address, 0x42);
     }
 
     #[test]
@@ -1049,13 +1051,13 @@ mod tests {
 
         ppu.write_oam_dma(data);
 
-        assert_eq!(ppu.object_attribute_memory.to_vec(), data.to_vec());
+        assert_eq!(ppu.state.object_attribute_memory.to_vec(), data.to_vec());
     }
 
     #[test]
     fn writing_oam_dma_writes_from_oam_address_and_wraps() {
         let mut ppu = ppu_with_memory(mem!());
-        ppu.oam_address = 0x42;
+        ppu.state.oam_address = 0x42;
 
         let mut data = [0; 256];
 
@@ -1066,14 +1068,14 @@ mod tests {
         ppu.write_oam_dma(data);
 
         data.rotate_right(0x42);
-        assert_eq!(ppu.object_attribute_memory.to_vec(), data.to_vec());
+        assert_eq!(ppu.state.object_attribute_memory.to_vec(), data.to_vec());
     }
 
     #[test]
     fn reading_oam_data_reads_from_oam_address() {
         let mut ppu = ppu_with_memory(mem!());
-        ppu.oam_address = 0x42;
-        ppu.object_attribute_memory[0x42] = 0x43;
+        ppu.state.oam_address = 0x42;
+        ppu.state.object_attribute_memory[0x42] = 0x43;
 
         assert_eq!(ppu.read_oam_data(), 0x43);
     }
@@ -1081,21 +1083,21 @@ mod tests {
     #[test]
     fn writing_oam_data_writes_to_oam_address() {
         let mut ppu = ppu_with_memory(mem!());
-        ppu.oam_address = 0x42;
+        ppu.state.oam_address = 0x42;
 
         ppu.write_oam_data(0x43);
 
-        assert_eq!(ppu.object_attribute_memory[0x42], 0x43);
+        assert_eq!(ppu.state.object_attribute_memory[0x42], 0x43);
     }
 
     #[test]
     fn writing_oam_data_increments_oam_address() {
         let mut ppu = ppu_with_memory(mem!());
-        ppu.oam_address = 0x42;
+        ppu.state.oam_address = 0x42;
 
         ppu.write_oam_data(0x07);
 
-        assert_eq!(ppu.oam_address, 0x43);
+        assert_eq!(ppu.state.oam_address, 0x43);
     }
 
     #[test]
@@ -1103,17 +1105,17 @@ mod tests {
         let mut ppu = ppu_with_memory(mem!());
 
         ppu.write_scroll(0b1111_1101);
-        assert_eq!(ppu.temporary_address, 0b1_1111);
-        assert_eq!(ppu.fine_x, 0b101);
+        assert_eq!(ppu.state.temporary_address, 0b1_1111);
+        assert_eq!(ppu.state.fine_x, 0b101);
 
         ppu.write_scroll(0b1010_1111);
-        assert_eq!(ppu.temporary_address, 0b0111_0010_1011_1111);
-        assert_eq!(ppu.fine_x, 0b101);
+        assert_eq!(ppu.state.temporary_address, 0b0111_0010_1011_1111);
+        assert_eq!(ppu.state.fine_x, 0b101);
     }
 
     #[test]
     fn incrementing_coarse_x_increments_to_next_tile() {
-        let mut ppu = ppu_with_memory(mem!());
+        let mut ppu = PPUState::default();
 
         ppu.address = 0x41;
         ppu.increment_coarse_x();
@@ -1122,7 +1124,7 @@ mod tests {
 
     #[test]
     fn incrementing_coarse_x_switches_to_next_horizontal_nametable_when_coarse_x_is_31() {
-        let mut ppu = ppu_with_memory(mem!());
+        let mut ppu = PPUState::default();
 
         ppu.address = 0b1000_0001_1111;
         ppu.increment_coarse_x();
@@ -1135,7 +1137,7 @@ mod tests {
 
     #[test]
     fn incrementing_fine_y_increments_fine_y_by_1() {
-        let mut ppu = ppu_with_memory(mem!());
+        let mut ppu = PPUState::default();
 
         ppu.address = 0b0011_0000_0000_0000;
         ppu.increment_fine_y();
@@ -1144,7 +1146,7 @@ mod tests {
 
     #[test]
     fn incrementing_fine_y_increments_coarse_y_when_fine_y_is_7() {
-        let mut ppu = ppu_with_memory(mem!());
+        let mut ppu = PPUState::default();
 
         ppu.address = 0b0111_0000_0010_0000;
         ppu.increment_fine_y();
@@ -1153,7 +1155,7 @@ mod tests {
 
     #[test]
     fn incrementing_fine_y_switches_to_next_vertical_nametable_when_coarse_y_is_29() {
-        let mut ppu = ppu_with_memory(mem!());
+        let mut ppu = PPUState::default();
 
         ppu.address = 0b0111_0011_1010_0000;
         ppu.increment_fine_y();
@@ -1166,7 +1168,7 @@ mod tests {
 
     #[test]
     fn transfer_horizontal_scroll_transfers_horizontal_scroll_from_temporary_to_address() {
-        let mut ppu = ppu_with_memory(mem!());
+        let mut ppu = PPUState::default();
         ppu.address = 0b0010_1010_1010_1010;
         ppu.temporary_address = 0b0100_0100_0101_0101;
 
@@ -1177,7 +1179,7 @@ mod tests {
 
     #[test]
     fn can_get_tile_address_from_scroll() {
-        let mut ppu = ppu_with_memory(mem!());
+        let mut ppu = PPUState::default();
 
         ppu.address = 0x0ABC;
 
@@ -1186,7 +1188,7 @@ mod tests {
 
     #[test]
     fn can_get_attribute_address_from_scroll() {
-        let mut ppu = ppu_with_memory(mem!());
+        let mut ppu = PPUState::default();
 
         ppu.address = 0b0000_0000_0000_0000;
         assert_eq!(ppu.attribute_address(), Address::new(0b0010_0011_1100_0000));
@@ -1217,9 +1219,9 @@ mod tests {
         ]
         .as_flattened();
 
-        ppu.object_attribute_memory[..oam.len()].copy_from_slice(oam);
+        ppu.state.object_attribute_memory[..oam.len()].copy_from_slice(oam);
 
-        ppu.scanline = 30;
+        ppu.state.scanline = 30;
 
         ppu.load_sprites();
 
@@ -1246,7 +1248,7 @@ mod tests {
             ActiveSprite::default(),
         ];
 
-        assert_eq!(ppu.next_sprites.sprites, expected);
+        assert_eq!(ppu.state.next_sprites.sprites, expected);
     }
 
     #[test]
@@ -1259,9 +1261,9 @@ mod tests {
             6, 26, 7, 7, 7, 27, 8, 8, 8,
         ];
 
-        ppu.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
+        ppu.state.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
 
-        ppu.scanline = 30;
+        ppu.state.scanline = 30;
 
         ppu.load_sprites();
 
@@ -1308,7 +1310,7 @@ mod tests {
             },
         ];
 
-        assert_eq!(ppu.next_sprites.sprites, expected);
+        assert_eq!(ppu.state.next_sprites.sprites, expected);
     }
 
     #[test]
@@ -1316,19 +1318,19 @@ mod tests {
         let mut ppu = ppu_with_memory(mem!());
 
         let oam = [29, 3, 3, 3];
-        ppu.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
+        ppu.state.object_attribute_memory[..oam.len()].copy_from_slice(&oam);
 
-        ppu.scanline = 30;
+        ppu.state.scanline = 30;
         ppu.load_sprites();
 
         let cleared = [ActiveSprite::default(); 8];
 
-        assert_ne!(ppu.next_sprites.sprites, cleared);
+        assert_ne!(ppu.state.next_sprites.sprites, cleared);
 
-        ppu.scanline = 40;
+        ppu.state.scanline = 40;
         ppu.load_sprites();
 
-        assert_eq!(ppu.next_sprites.sprites, cleared);
+        assert_eq!(ppu.state.next_sprites.sprites, cleared);
     }
 
     #[test]
