@@ -1,13 +1,14 @@
 use crate::mapper::Mapper;
 use crate::Address;
 use crate::Memory;
+use std::cell::Cell;
 use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, Mutex};
 
 #[derive(Default, Debug)]
 pub struct Cartridge {
-    pub prg: PRG,
-    pub chr: CHR,
+    prg: PRG,
+    chr: CHR,
+    config: Configuration,
 }
 
 impl Cartridge {
@@ -38,10 +39,7 @@ impl Cartridge {
             _ => BankSwitcher::First,
         };
 
-        // TODO: really don't want to use a mutex here...
-        //  it's needed right now because we send the NES to another thread - even though it's only
-        //  used within one thread. Another solution might be to flatten the whole NES structure.
-        let config = Arc::new(Mutex::new(Configuration::default()));
+        let config = Configuration::default();
 
         let prg = PRG {
             rom: prg_rom,
@@ -50,14 +48,12 @@ impl Cartridge {
             bank_switcher,
             ram: [0; 0x2000],
             dirty_ram: false,
-            config: config.clone(),
         };
 
         let chr = CHR {
             chr_rom,
             chr_ram_enabled,
             ppu_ram: [0; 0x800],
-            config,
         };
 
         log::info!(
@@ -66,28 +62,43 @@ impl Cartridge {
             prg_bank_size
         );
 
-        Cartridge { prg, chr }
+        Cartridge { prg, chr, config }
     }
 
     pub fn set_ram(&mut self, ram: &[u8]) {
         self.prg.ram.copy_from_slice(ram);
     }
+
+    pub fn changed_ram(&mut self) -> Option<&[u8]> {
+        self.prg.changed_ram()
+    }
+
+    pub fn get_prg_chr(&mut self) -> (PRGMemory<'_>, CHRMemory<'_>) {
+        let prg = PRGMemory {
+            prg: &mut self.prg,
+            config: &self.config,
+        };
+        let chr = CHRMemory {
+            chr: &mut self.chr,
+            config: &self.config,
+        };
+        (prg, chr)
+    }
 }
 
 /// Program memory on a NES cartridge, connected to the CPU
-pub struct PRG {
+struct PRG {
     rom: Box<[u8]>,
     bank_mapping: Box<[u8]>,
     bank_size: u16,
     bank_switcher: BankSwitcher,
     ram: [u8; 0x2000],
     dirty_ram: bool,
-    config: Arc<Mutex<Configuration>>,
 }
 
 impl PRG {
     /// Return RAM if it changed since the last call.
-    pub fn changed_ram(&mut self) -> Option<&[u8]> {
+    fn changed_ram(&mut self) -> Option<&[u8]> {
         if !self.dirty_ram {
             return None;
         }
@@ -103,18 +114,36 @@ impl Debug for PRG {
     }
 }
 
-impl Memory for PRG {
+impl Default for PRG {
+    fn default() -> Self {
+        Self {
+            rom: Box::new([0; 0x8000]),
+            bank_mapping: Box::new([0]),
+            bank_size: 0x8000,
+            bank_switcher: BankSwitcher::First,
+            ram: [0; _],
+            dirty_ram: false,
+        }
+    }
+}
+
+pub struct PRGMemory<'a> {
+    prg: &'a mut PRG,
+    config: &'a Configuration,
+}
+
+impl Memory for PRGMemory<'_> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
-            0x6000..=0x7fff => self.ram[address.index() - 0x6000],
+            0x6000..=0x7fff => self.prg.ram[address.index() - 0x6000],
             0x8000..=0xffff => {
                 let relative_address = address - 0x8000;
-                let bank_index = relative_address.bytes() / self.bank_size;
-                let bank = self.bank_mapping[bank_index as usize];
-                let bank_start = bank_index * self.bank_size;
+                let bank_index = relative_address.bytes() / self.prg.bank_size;
+                let bank = self.prg.bank_mapping[bank_index as usize];
+                let bank_start = bank_index * self.prg.bank_size;
                 let bank_address = relative_address - bank_start;
-                let bank_size = self.bank_size as usize;
-                self.rom[bank as usize * bank_size + (bank_address.index() % bank_size)]
+                let bank_size = self.prg.bank_size as usize;
+                self.prg.rom[bank as usize * bank_size + (bank_address.index() % bank_size)]
             }
             _ => {
                 panic!("Out of addressable range: {:?}", address);
@@ -125,12 +154,12 @@ impl Memory for PRG {
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
             0x6000..=0x7fff => {
-                self.dirty_ram = true;
-                self.ram[address.index() - 0x6000] = byte;
+                self.prg.dirty_ram = true;
+                self.prg.ram[address.index() - 0x6000] = byte;
             }
-            0x8000..=0xffff => match &mut self.bank_switcher {
+            0x8000..=0xffff => match &mut self.prg.bank_switcher {
                 BankSwitcher::First => {
-                    self.bank_mapping[0] = byte;
+                    self.prg.bank_mapping[0] = byte;
                 }
                 // MMC1 mapper uses a serial interface, where bits are shifted into a shift register.
                 // After 5 writes, the shift register is used to update a register.
@@ -166,7 +195,7 @@ impl Memory for PRG {
                                 _ => unreachable!(),
                             };
 
-                            self.config.lock().unwrap().nametable_mirroring = nametable_mirroring;
+                            self.config.nametable_mirroring.set(nametable_mirroring);
                         }
                         0xa000..=0xbfff => {
                             if value != 0 {
@@ -177,7 +206,7 @@ impl Memory for PRG {
                             todo!("Support MMC1 CHR bank 1");
                         }
                         0xe000..=0xffff => {
-                            self.bank_mapping[0] = value & 0b1111;
+                            self.prg.bank_mapping[0] = value & 0b1111;
                         }
                         _ => {
                             panic!("Out of addressable range: {:?}", address);
@@ -195,45 +224,16 @@ impl Memory for PRG {
     }
 }
 
-impl Default for PRG {
-    fn default() -> Self {
-        Self {
-            rom: Box::new([0; 0x8000]),
-            bank_mapping: Box::new([0]),
-            bank_size: 0x8000,
-            bank_switcher: BankSwitcher::First,
-            ram: [0; _],
-            dirty_ram: false,
-            config: Default::default(),
-        }
-    }
-}
-
 enum BankSwitcher {
     First,
     MMC1 { shift_register: u8, writes: u8 },
 }
 
 /// Character memory on a NES cartridge, stores pattern tables and is connected to the PPU
-pub struct CHR {
+struct CHR {
     chr_rom: Box<[u8]>,
     chr_ram_enabled: bool,
     ppu_ram: [u8; 0x800],
-    config: Arc<Mutex<Configuration>>,
-}
-
-impl CHR {
-    fn map_nametable(&self, address: Address) -> usize {
-        debug_assert!(0x2000 <= address.index() && address.index() <= 0x3eff);
-
-        let mirroring = self.config.lock().unwrap().nametable_mirroring;
-
-        let index = address.index() - 0x2000;
-        let logical_nametable = index / 0x400;
-        let physical_nametable = mirroring.logical_to_physical_nametable(logical_nametable);
-
-        (physical_nametable * 0x400) + (index % 0x400)
-    }
 }
 
 impl Debug for CHR {
@@ -244,11 +244,40 @@ impl Debug for CHR {
     }
 }
 
-impl Memory for CHR {
+impl Default for CHR {
+    fn default() -> Self {
+        Self {
+            chr_rom: Box::new([0; 0x2000]),
+            chr_ram_enabled: false,
+            ppu_ram: [0; _],
+        }
+    }
+}
+
+pub struct CHRMemory<'a> {
+    chr: &'a mut CHR,
+    config: &'a Configuration,
+}
+
+impl<'a> CHRMemory<'a> {
+    fn map_nametable(&self, address: Address) -> usize {
+        debug_assert!(0x2000 <= address.index() && address.index() <= 0x3eff);
+
+        let mirroring = self.config.nametable_mirroring.get();
+
+        let index = address.index() - 0x2000;
+        let logical_nametable = index / 0x400;
+        let physical_nametable = mirroring.logical_to_physical_nametable(logical_nametable);
+
+        (physical_nametable * 0x400) + (index % 0x400)
+    }
+}
+
+impl Memory for CHRMemory<'_> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
-            0x0000..=0x1fff => self.chr_rom[address.index()],
-            0x2000..=0x3eff => self.ppu_ram[self.map_nametable(address)],
+            0x0000..=0x1fff => self.chr.chr_rom[address.index()],
+            0x2000..=0x3eff => self.chr.ppu_ram[self.map_nametable(address)],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -259,12 +288,12 @@ impl Memory for CHR {
         match address.index() {
             0x0000..=0x1fff => {
                 debug_assert!(
-                    self.chr_ram_enabled,
+                    self.chr.chr_ram_enabled,
                     "Attempted to write to CHR-ROM, but writing is not enabled"
                 );
-                self.chr_rom[address.index()] = byte
+                self.chr.chr_rom[address.index()] = byte
             }
-            0x2000..=0x3eff => self.ppu_ram[self.map_nametable(address)] = byte,
+            0x2000..=0x3eff => self.chr.ppu_ram[self.map_nametable(address)] = byte,
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -272,26 +301,15 @@ impl Memory for CHR {
     }
 }
 
-impl Default for CHR {
-    fn default() -> Self {
-        Self {
-            chr_rom: Box::new([0; 0x2000]),
-            chr_ram_enabled: false,
-            ppu_ram: [0; _],
-            config: Default::default(),
-        }
-    }
-}
-
 /// Configuration shared between the CHR and PRG.
-#[derive(Default, Copy, Clone)]
+#[derive(Debug, Default, Clone)]
 struct Configuration {
-    nametable_mirroring: NametableMirroring,
+    nametable_mirroring: Cell<NametableMirroring>,
 }
 
 /// Describes how each of four logical nametables are mapped to one of two physical nametables.
 /// 0b0000abcd - where each bit indicates if it maps to the lower or upper nametable.
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 struct NametableMirroring(u8);
 
 impl NametableMirroring {
@@ -329,20 +347,28 @@ mod tests {
 
     #[test]
     fn rom_cartridge_maps_0x6000_through_0x7fff_to_prg_ram() {
-        let mut prg = nrom_cartridge().prg;
+        let mut cartridge = nrom_cartridge();
+        let mut prg = PRGMemory {
+            prg: &mut cartridge.prg,
+            config: &cartridge.config,
+        };
 
         for value in 0x6000..=0x7fff {
             prg.write(Address::new(value), value as u8);
             assert_eq!(prg.read(Address::new(value)), value as u8);
-            assert_eq!(prg.ram[value as usize - 0x6000], value as u8);
+            assert_eq!(prg.prg.ram[value as usize - 0x6000], value as u8);
         }
     }
 
     #[test]
     fn nrom_cartridge_maps_0x8000_through_0xffff_to_prg_rom() {
-        let mut prg = nrom_cartridge().prg;
+        let mut cartridge = nrom_cartridge();
+        let mut prg = PRGMemory {
+            prg: &mut cartridge.prg,
+            config: &cartridge.config,
+        };
 
-        for (i, item) in prg.rom.iter_mut().enumerate() {
+        for (i, item) in prg.prg.rom.iter_mut().enumerate() {
             *item = i as u8;
         }
 
@@ -361,7 +387,11 @@ mod tests {
             *item = i as u8;
         }
 
-        let mut prg = Cartridge::new(prg_rom, chr_rom, false, mapper).prg;
+        let mut cartridge = Cartridge::new(prg_rom, chr_rom, false, mapper);
+        let mut prg = PRGMemory {
+            prg: &mut cartridge.prg,
+            config: &cartridge.config,
+        };
 
         for value in 0xc000..=0xffff {
             assert_eq!(prg.read(Address::new(value)), value as u8);
@@ -370,9 +400,13 @@ mod tests {
 
     #[test]
     fn nrom_cartridge_maps_0x0000_through_0x1fff_to_chr_rom() {
-        let mut chr = nrom_cartridge().chr;
+        let mut cartridge = nrom_cartridge();
+        let mut chr = CHRMemory {
+            chr: &mut cartridge.chr,
+            config: &cartridge.config,
+        };
 
-        for (i, item) in chr.chr_rom.iter_mut().enumerate() {
+        for (i, item) in chr.chr.chr_rom.iter_mut().enumerate() {
             *item = i as u8;
         }
 
@@ -383,59 +417,76 @@ mod tests {
 
     #[test]
     fn nrom_cartridge_maps_0x2000_through_0x27ff_to_ppu_ram() {
-        let mut chr = nrom_cartridge().chr;
+        let mut cartridge = nrom_cartridge();
+        let mut chr = CHRMemory {
+            chr: &mut cartridge.chr,
+            config: &cartridge.config,
+        };
 
-        for (i, item) in chr.ppu_ram.iter_mut().enumerate() {
+        for (i, item) in chr.chr.ppu_ram.iter_mut().enumerate() {
             *item = i as u8;
         }
 
         for value in 0x2000..=0x27ff {
             chr.write(Address::new(value), value as u8);
             assert_eq!(chr.read(Address::new(value)), value as u8);
-            assert_eq!(chr.ppu_ram[value as usize - 0x2000], value as u8);
+            assert_eq!(chr.chr.ppu_ram[value as usize - 0x2000], value as u8);
         }
     }
 
     #[test]
     fn nrom_cartridge_mirrors_0x2800_through_0x2fff_to_ppu_ram() {
-        let mut chr = nrom_cartridge().chr;
+        let mut cartridge = nrom_cartridge();
+        let mut chr = CHRMemory {
+            chr: &mut cartridge.chr,
+            config: &cartridge.config,
+        };
 
-        for (i, item) in chr.ppu_ram.iter_mut().enumerate() {
+        for (i, item) in chr.chr.ppu_ram.iter_mut().enumerate() {
             *item = i as u8;
         }
 
         for value in 0x2800..=0x2fff {
             chr.write(Address::new(value), value as u8);
             assert_eq!(chr.read(Address::new(value)), value as u8);
-            assert_eq!(chr.ppu_ram[value as usize - 0x2800], value as u8);
+            assert_eq!(chr.chr.ppu_ram[value as usize - 0x2800], value as u8);
         }
     }
 
     #[test]
     fn nrom_cartridge_mirrors_0x3000_through_0x3eff_to_ppu_ram() {
-        let mut chr = nrom_cartridge().chr;
+        let mut cartridge = nrom_cartridge();
+        let mut chr = CHRMemory {
+            chr: &mut cartridge.chr,
+            config: &cartridge.config,
+        };
 
-        for (i, item) in chr.ppu_ram.iter_mut().enumerate() {
+        for (i, item) in chr.chr.ppu_ram.iter_mut().enumerate() {
             *item = i as u8;
         }
 
         for value in 0x3000..=0x37ff {
             chr.write(Address::new(value), value as u8);
             assert_eq!(chr.read(Address::new(value)), value as u8);
-            assert_eq!(chr.ppu_ram[value as usize - 0x3000], value as u8);
+            assert_eq!(chr.chr.ppu_ram[value as usize - 0x3000], value as u8);
         }
 
         for value in 0x3800..=0x3eff {
             chr.write(Address::new(value), value as u8);
             assert_eq!(chr.read(Address::new(value)), value as u8);
-            assert_eq!(chr.ppu_ram[value as usize - 0x3800], value as u8);
+            assert_eq!(chr.chr.ppu_ram[value as usize - 0x3800], value as u8);
         }
     }
 
     #[test]
     #[should_panic]
     fn nrom_cartridge_cannot_write_to_read_only_memory() {
-        let mut prg = nrom_cartridge().prg;
+        let mut cartridge = nrom_cartridge();
+        let mut prg = PRGMemory {
+            prg: &mut cartridge.prg,
+            config: &cartridge.config,
+        };
+
         prg.write(Address::new(0x5000), 10);
     }
 

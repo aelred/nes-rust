@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::cartridge;
+use crate::cartridge::CHRMemory;
 use crate::Address;
 use crate::Memory;
 
@@ -8,13 +8,13 @@ const CHR_END: usize = PALETTE_OFFSET - 1;
 const PALETTE_OFFSET: usize = 0x3f00;
 
 #[derive(Debug)]
-pub struct NESPPUMemory<'a, CHR = cartridge::CHR> {
+pub struct NESPPUMemory<'a, CHR = CHRMemory<'a>> {
     palette_ram: &'a mut [u8; 0x20],
-    chr: &'a mut CHR,
+    chr: CHR,
 }
 
 impl<'a, CHR> NESPPUMemory<'a, CHR> {
-    pub fn new(palette_ram: &'a mut [u8; 0x20], chr: &'a mut CHR) -> Self {
+    pub fn new(palette_ram: &'a mut [u8; 0x20], chr: CHR) -> Self {
         Self { palette_ram, chr }
     }
 

@@ -107,12 +107,14 @@ impl NES {
     }
 
     fn build_cpu(&mut self) -> (NESCPUMemory<'_>, &mut CPUState) {
-        let ppu_memory = NESPPUMemory::new(&mut self.palette_ram, &mut self.cartridge.chr);
+        let (prg, chr) = self.cartridge.get_prg_chr();
+
+        let ppu_memory = NESPPUMemory::new(&mut self.palette_ram, chr);
         let ppu = RealPPU::new(ppu_memory, &mut self.video_out, &mut self.ppu);
 
         let cpu_memory = NESCPUMemory::new(
             &mut self.internal_ram,
-            &mut self.cartridge.prg,
+            prg,
             ppu,
             &mut self.apu,
             &mut self.controller,

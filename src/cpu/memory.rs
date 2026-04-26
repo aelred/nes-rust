@@ -3,12 +3,13 @@ use std::borrow::BorrowMut;
 use log::trace;
 
 use crate::apu::APU;
+use crate::cartridge::PRGMemory;
 use crate::cpu::Tickable;
 use crate::input::{Controller, Input};
 use crate::ppu::{self, RealPPU};
+use crate::Address;
 use crate::ArrayMemory;
 use crate::Memory;
-use crate::{cartridge, Address};
 
 const PPU_SPACE: Address = Address::new(0x2000);
 const PPU_CONTROL: Address = Address::new(0x2000);
@@ -44,9 +45,9 @@ const JOY1_ADDRESS: Address = Address::new(0x4016);
 const APU_FRAME_COUNTER: Address = Address::new(0x4017);
 const PRG_SPACE: Address = Address::new(0x4020);
 
-pub struct NESCPUMemory<'a, PRG = cartridge::PRG, PPU = RealPPU<'a>, IN = Controller> {
+pub struct NESCPUMemory<'a, PRG = PRGMemory<'a>, PPU = RealPPU<'a>, IN = Controller> {
     internal_ram: &'a mut [u8; 0x800],
-    prg: &'a mut PRG,
+    prg: PRG,
     ppu: PPU,
     apu: &'a mut APU,
     input: &'a mut IN,
@@ -56,7 +57,7 @@ pub struct NESCPUMemory<'a, PRG = cartridge::PRG, PPU = RealPPU<'a>, IN = Contro
 impl<'a, PRG: Memory, PPU: ppu::PPU, IN: Input> NESCPUMemory<'a, PRG, PPU, IN> {
     pub fn new(
         internal_ram: &'a mut [u8; 0x800],
-        prg: &'a mut PRG,
+        prg: PRG,
         ppu: PPU,
         apu: &'a mut APU,
         input: &'a mut IN,
@@ -448,7 +449,7 @@ mod tests {
     }
 
     impl TestCPUMemory {
-        fn memory(&mut self) -> NESCPUMemory<'_, ArrayMemory, &mut MockPPU, MockInput> {
+        fn memory(&mut self) -> NESCPUMemory<'_, &mut ArrayMemory, &mut MockPPU, MockInput> {
             NESCPUMemory::new(
                 &mut self.internal_ram,
                 &mut self.prg,
