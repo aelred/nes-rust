@@ -3,9 +3,6 @@ use std::fmt::Debug;
 use crate::Bus;
 use crate::{cartridge, Address};
 
-const CHR_END: usize = PALETTE_OFFSET - 1;
-const PALETTE_OFFSET: usize = 0x3f00;
-
 #[derive(Debug)]
 pub struct PPUBus<'a, CHR = cartridge::CHR<'a>> {
     palette_ram: &'a mut [u8; 0x20],
@@ -19,7 +16,7 @@ impl<'a, CHR> PPUBus<'a, CHR> {
     }
 
     fn palette_index(&self, address: Address) -> usize {
-        let index = (address.index() - PALETTE_OFFSET) % 0x0020;
+        let index = address.index() % 0x0020;
         let is_unused_colour = index % 0x04 == 0;
         // unused colours mirror between sprite and background palettes
         let mask = (is_unused_colour as usize).wrapping_sub(1) | 0b1111;
@@ -30,8 +27,8 @@ impl<'a, CHR> PPUBus<'a, CHR> {
 impl<CHR: Bus> Bus for PPUBus<'_, CHR> {
     fn read(&mut self, address: Address) -> u8 {
         match address.index() {
-            0x0000..=CHR_END => self.chr.read(address),
-            PALETTE_OFFSET..=0x3fff => self.palette_ram[self.palette_index(address)],
+            0x0000..=0x3eff => self.chr.read(address),
+            0x3f00..=0x3fff => self.palette_ram[self.palette_index(address)],
             _ => {
                 panic!("Out of addressable range: {:?}", address);
             }
@@ -40,8 +37,8 @@ impl<CHR: Bus> Bus for PPUBus<'_, CHR> {
 
     fn write(&mut self, address: Address, byte: u8) {
         match address.index() {
-            0x0000..=CHR_END => self.chr.write(address, byte),
-            PALETTE_OFFSET..=0x3fff => {
+            0x0000..=0x3eff => self.chr.write(address, byte),
+            0x3f00..=0x3fff => {
                 self.palette_ram[self.palette_index(address)] = byte;
             }
             _ => {

@@ -1,47 +1,9 @@
-use std::borrow::BorrowMut;
-
-use log::trace;
-
 use crate::apu::APU;
 use crate::cpu::Tickable;
 use crate::input::{Controller, Input};
 use crate::ppu::{self, RealPPU};
 use crate::Bus;
 use crate::{cartridge, Address};
-
-const PPU_SPACE: Address = Address::new(0x2000);
-const PPU_CONTROL: Address = Address::new(0x2000);
-const PPU_MASK: Address = Address::new(0x2001);
-const PPU_STATUS: Address = Address::new(0x2002);
-const OAM_ADDRESS: Address = Address::new(0x2003);
-const OAM_DATA: Address = Address::new(0x2004);
-const PPU_SCROLL: Address = Address::new(0x2005);
-const PPU_ADDRESS: Address = Address::new(0x2006);
-const PPU_DATA: Address = Address::new(0x2007);
-const APU_SPACE: Address = Address::new(0x4000);
-const APU_PULSE_1_FLAGS: Address = Address::new(0x4000);
-const APU_PULSE_1_SWEEP: Address = Address::new(0x4001);
-const APU_PULSE_1_TIMER: Address = Address::new(0x4002);
-const APU_PULSE_1_LENGTH: Address = Address::new(0x4003);
-const APU_PULSE_2_FLAGS: Address = Address::new(0x4004);
-const APU_PULSE_2_SWEEP: Address = Address::new(0x4005);
-const APU_PULSE_2_TIMER: Address = Address::new(0x4006);
-const APU_PULSE_2_LENGTH: Address = Address::new(0x4007);
-const APU_TRIANGLE_FLAGS: Address = Address::new(0x4008);
-const APU_TRIANGLE_TIMER: Address = Address::new(0x400a);
-const APU_TRIANGLE_LENGTH: Address = Address::new(0x400b);
-const APU_NOISE_FLAGS: Address = Address::new(0x400c);
-const APU_NOISE_MODE: Address = Address::new(0x400e);
-const APU_NOISE_LENGTH: Address = Address::new(0x400f);
-const APU_DMC_FLAGS: Address = Address::new(0x4010);
-const APU_DMC_DIRECT_LOAD: Address = Address::new(0x4011);
-const APU_DMC_SAMPLE_ADDRESS: Address = Address::new(0x4012);
-const APU_DMC_SAMPLE_LENGTH: Address = Address::new(0x4013);
-const OAM_DMA: Address = Address::new(0x4014);
-const APU_STATUS: Address = Address::new(0x4015);
-const JOY1_ADDRESS: Address = Address::new(0x4016);
-const APU_FRAME_COUNTER: Address = Address::new(0x4017);
-const PRG_SPACE: Address = Address::new(0x4020);
 
 pub struct CPUBus<'a, PRG = cartridge::PRG<'a>, PPU = RealPPU<'a>, IN = Controller> {
     internal_ram: &'a mut [u8; 0x800],
@@ -80,98 +42,77 @@ impl<'a, PRG: Bus, PPU: ppu::PPU, IN: Input> CPUBus<'a, PRG, PPU, IN> {
 
         self.ppu.write_oam_dma(data);
     }
+
+    fn mirrored_address(address: Address) -> Address {
+        match address.index() {
+            0x2000..=0x3fff => Address::new(0x2000) + address.bytes() % 8,
+            _ => address,
+        }
+    }
 }
 
 impl<PRG: Bus, PPU: ppu::PPU, IN: Input> Bus for CPUBus<'_, PRG, PPU, IN> {
     fn read(&mut self, address: Address) -> u8 {
-        if address >= PRG_SPACE {
-            self.prg.read(address)
-        } else if address == JOY1_ADDRESS {
-            self.input.read()
-        } else if address == APU_STATUS {
-            self.apu.read_status()
-        } else if address >= APU_SPACE {
-            // TODO: is it valid to read this? Maybe this is "open bus" behaviour
-            0
-        } else if address >= PPU_SPACE {
-            let mirrored = PPU_SPACE + (address.index() % 8) as u16;
-            let ppu_registers = self.ppu.borrow_mut();
-            match mirrored {
-                PPU_STATUS => ppu_registers.read_status(),
-                OAM_DATA => ppu_registers.read_oam_data(),
-                PPU_DATA => ppu_registers.read_data(),
-                _ => unimplemented!(),
-            }
-        } else {
-            self.internal_ram[address.index() % 0x0800]
+        match Self::mirrored_address(address).bytes() {
+            0x0000..=0x1fff => self.internal_ram[address.index() % 0x0800],
+            0x2000 => 0, // open bus
+            0x2001 => 0, // open bus
+            0x2002 => self.ppu.read_status(),
+            0x2003 => 0, // open bus
+            0x2004 => self.ppu.read_oam_data(),
+            0x2005 => 0, // open bus
+            0x2006 => 0, // open bus
+            0x2007 => self.ppu.read_data(),
+            0x2008..=0x3fff => unreachable!(), // handled by earlier address mirroring
+            0x4000..=0x4014 => 0,              // unused
+            0x4015 => self.apu.read_status(),
+            0x4016 => self.input.read(),
+            0x4017 => 0, // TODO: Joystick 2
+            0x4018..=0x401f => unimplemented!("APU test functionality"),
+            0x4020..=0xffff => self.prg.read(address),
         }
     }
 
     fn write(&mut self, address: Address, byte: u8) {
-        if address >= PRG_SPACE {
-            self.prg.write(address, byte);
-        } else if address == OAM_DMA {
-            self.write_oam_data(byte);
-        } else if address == JOY1_ADDRESS {
-            self.input.write(byte);
-        } else if address >= APU_SPACE {
-            match address {
-                APU_PULSE_1_FLAGS => self.apu.write_pulse_1_flags(byte),
-                APU_PULSE_1_SWEEP => {} // TODO
-                APU_PULSE_1_TIMER => self.apu.write_pulse_1_timer(byte),
-                APU_PULSE_1_LENGTH => self.apu.write_pulse_1_length(byte),
-                APU_PULSE_2_FLAGS => self.apu.write_pulse_2_flags(byte),
-                APU_PULSE_2_SWEEP => {} // TODO
-                APU_PULSE_2_TIMER => self.apu.write_pulse_2_timer(byte),
-                APU_PULSE_2_LENGTH => self.apu.write_pulse_2_length(byte),
-                APU_TRIANGLE_FLAGS => self.apu.write_triangle_flags(byte),
-                APU_TRIANGLE_TIMER => self.apu.write_triangle_timer(byte),
-                APU_TRIANGLE_LENGTH => self.apu.write_triangle_length(byte),
-                APU_NOISE_FLAGS => self.apu.write_noise_flags(byte),
-                APU_NOISE_MODE => self.apu.write_noise_mode(byte),
-                APU_NOISE_LENGTH => self.apu.write_noise_length(byte),
-                APU_DMC_FLAGS => {}          // TODO
-                APU_DMC_DIRECT_LOAD => {}    // TODO
-                APU_DMC_SAMPLE_ADDRESS => {} // TODO
-                APU_DMC_SAMPLE_LENGTH => {}  // TODO
-                APU_FRAME_COUNTER => self.apu.write_frame_counter(byte),
-                APU_STATUS => self.apu.write_status(byte),
-                _ => {} // TODO: maybe some valid addresses not covered
+        match Self::mirrored_address(address).bytes() {
+            0x0000..=0x1fff => {
+                self.internal_ram[address.index() % 0x0800] = byte;
             }
-        } else if address >= PPU_SPACE {
-            let mirrored = PPU_SPACE + (address.index() % 8) as u16;
-            let ppu_registers = self.ppu.borrow_mut();
-            match mirrored {
-                PPU_CONTROL => {
-                    ppu_registers.write_control(byte);
-                }
-                PPU_MASK => {
-                    ppu_registers.write_mask(byte);
-                }
-                OAM_ADDRESS => {
-                    ppu_registers.write_oam_address(byte);
-                }
-                OAM_DATA => {
-                    ppu_registers.write_oam_data(byte);
-                }
-                PPU_SCROLL => {
-                    ppu_registers.write_scroll(byte);
-                }
-                PPU_ADDRESS => {
-                    trace!("Writing PPU address {:#04x}", byte);
-                    ppu_registers.write_address(byte);
-                }
-                PPU_DATA => {
-                    trace!("Writing PPU data {:#04x}", byte);
-                    ppu_registers.write_data(byte);
-                }
-                _ => {
-                    // Writing to a read-only register
-                    // TODO: check behaviour https://www.nesdev.org/wiki/PPU_registers
-                }
-            }
-        } else {
-            self.internal_ram[address.index() % 0x0800] = byte;
+            0x2000 => self.ppu.write_control(byte),
+            0x2001 => self.ppu.write_mask(byte),
+            0x2002 => {} // TODO: unsupported, but has some odd open bus behaviour
+            0x2003 => self.ppu.write_oam_address(byte),
+            0x2004 => self.ppu.write_oam_data(byte),
+            0x2005 => self.ppu.write_scroll(byte),
+            0x2006 => self.ppu.write_address(byte),
+            0x2007 => self.ppu.write_data(byte),
+            0x2008..=0x3fff => unreachable!(), // handled by earlier address mirroring
+            0x4000 => self.apu.write_pulse_1_flags(byte),
+            0x4001 => {} // TODO: pulse 1 sweep
+            0x4002 => self.apu.write_pulse_1_timer(byte),
+            0x4003 => self.apu.write_pulse_1_length(byte),
+            0x4004 => self.apu.write_pulse_2_flags(byte),
+            0x4005 => {} // TODO: pulse 2 sweep
+            0x4006 => self.apu.write_pulse_2_timer(byte),
+            0x4007 => self.apu.write_pulse_2_length(byte),
+            0x4008 => self.apu.write_triangle_flags(byte),
+            0x4009 => {} // unused
+            0x400a => self.apu.write_triangle_timer(byte),
+            0x400b => self.apu.write_triangle_length(byte),
+            0x400c => self.apu.write_noise_flags(byte),
+            0x400d => {} // unused
+            0x400e => self.apu.write_noise_mode(byte),
+            0x400f => self.apu.write_noise_length(byte),
+            0x4010 => {} // TODO: DMC flags
+            0x4011 => {} // TODO: DMC direct load
+            0x4012 => {} // TODO: DMC sample address
+            0x4013 => {} // TODO: DMC sample length
+            0x4014 => self.write_oam_data(byte),
+            0x4015 => self.apu.write_status(byte),
+            0x4016 => self.input.write(byte),
+            0x4017 => self.apu.write_frame_counter(byte),
+            0x4018..=0x401f => unimplemented!("APU test functionality"),
+            0x4020..=0xffff => self.prg.write(address, byte),
         }
     }
 }
