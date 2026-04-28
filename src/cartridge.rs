@@ -200,11 +200,13 @@ impl Bus for PRG<'_> {
                         }
                         0xa000..=0xbfff => {
                             if value != 0 {
-                                todo!("Support MMC1 CHR bank 0");
+                                todo!("Support MMC1 CHR bank 0, value={value}");
                             }
                         }
                         0xc000..=0xdfff => {
-                            todo!("Support MMC1 CHR bank 1");
+                            if value != 0 {
+                                todo!("Support MMC1 CHR bank 1, value={value}");
+                            }
                         }
                         0xe000..=0xffff => {
                             self.state.bank_mapping[0] = value & 0b1111;
