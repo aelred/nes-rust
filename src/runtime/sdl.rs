@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use std::fs::File;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -60,7 +60,7 @@ pub fn run_with(params: SdlParams) -> Result<()> {
     };
     let cartridge = ines.into_cartridge();
 
-    let (runner, front_buffer, audio_source) = NESRunner::new();
+    let (mut runner, front_buffer, audio_source) = NESRunner::new();
 
     let mut display = SDLDisplay::new(&sdl_context, front_buffer)?;
     let _speaker = SDLSpeaker::new(&sdl_context, audio_source, params.audio_listener)?;
@@ -97,6 +97,10 @@ pub fn run_with(params: SdlParams) -> Result<()> {
                 }
                 _ => {}
             }
+        }
+
+        if runner.stopped() {
+            bail!("NES stopped");
         }
     }
 }

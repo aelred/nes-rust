@@ -3,11 +3,13 @@ use crate::video::{display_triple_buffer, FrontBuffer};
 use crate::{Buttons, Cartridge, NES, NES_FREQ};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
+use std::thread::JoinHandle;
 use web_time::Duration;
 
 pub struct NESRunner {
     commands: Sender<Command>,
     events: Receiver<Event>,
+    handle: Option<JoinHandle<()>>,
 }
 
 impl NESRunner {
@@ -19,30 +21,34 @@ impl NESRunner {
 
         let nes = NES::new(Cartridge::default(), back_buffer, audio_sink);
 
-        wasm_thread::spawn(move || run_nes(nes, commands_recv, events_send));
+        let handle = wasm_thread::spawn(move || run_nes(nes, commands_recv, events_send));
 
-        let this = Self { commands, events };
+        let this = Self {
+            commands,
+            events,
+            handle: Some(handle),
+        };
 
         (this, front_buffer, audio_source)
     }
 
-    pub fn resume(&self) {
+    pub fn resume(&mut self) {
         self.send(Command::Resume);
     }
 
-    pub fn pause(&self) {
+    pub fn pause(&mut self) {
         self.send(Command::Pause);
     }
 
-    pub fn press(&self, buttons: Buttons) {
+    pub fn press(&mut self, buttons: Buttons) {
         self.send(Command::Press(buttons))
     }
 
-    pub fn release(&self, buttons: Buttons) {
+    pub fn release(&mut self, buttons: Buttons) {
         self.send(Command::Release(buttons))
     }
 
-    pub fn load_cartridge(&self, cartridge: Cartridge) {
+    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.send(Command::LoadCartridge(cartridge));
     }
 
@@ -50,8 +56,19 @@ impl NESRunner {
         self.events.try_iter()
     }
 
-    fn send(&self, command: Command) {
-        self.commands.send(command).expect("unexpectedly stopped");
+    pub fn stopped(&self) -> bool {
+        self.handle.as_ref().is_none_or(|h| h.is_finished())
+    }
+
+    pub fn join(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            handle.join().unwrap();
+        }
+    }
+
+    fn send(&mut self, command: Command) {
+        // Ignore any errors here, caller should correctly monitor and exit the runner
+        let _ = self.commands.send(command);
     }
 }
 
