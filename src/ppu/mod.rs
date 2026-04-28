@@ -1259,7 +1259,7 @@ mod tests {
 
         ppu.state.object_attribute_memory[..oam.len()].copy_from_slice(oam);
 
-        ppu.state.scanline = 30;
+        ppu.state.scanline = 29;
 
         ppu.load_sprites();
 
