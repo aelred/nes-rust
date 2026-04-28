@@ -2,6 +2,7 @@ use crate::{Color, HEIGHT, WIDTH};
 use std::sync::atomic::Ordering::{AcqRel, Acquire, Release};
 use std::sync::atomic::{AtomicBool, AtomicPtr};
 use std::sync::Arc;
+use web_time::Instant;
 
 type Buffer = [u8; WIDTH as usize * HEIGHT as usize * 4];
 
@@ -14,9 +15,8 @@ pub fn display_triple_buffer() -> (FrontBuffer, BackBuffer) {
     };
 
     let back = BackBuffer {
-        back_buffer: Some(Box::new([0; _])),
-        offset: 0,
         intermediate_buffer,
+        ..Default::default()
     };
 
     (front, back)
@@ -43,6 +43,8 @@ pub struct BackBuffer {
     back_buffer: Option<Box<Buffer>>,
     offset: usize,
     intermediate_buffer: Arc<IntermediateBuffer>,
+    frames_since_fps_log: u64,
+    last_fps_log: Instant,
 }
 
 impl BackBuffer {
@@ -58,12 +60,28 @@ impl BackBuffer {
         self.offset += 4;
         if self.offset >= buffer.len() {
             self.offset = 0;
+            self.log_fps();
             self.swap_buffers();
         }
     }
 
     pub fn reset(&mut self) {
         self.offset = 0;
+    }
+
+    fn log_fps(&mut self) {
+        self.frames_since_fps_log += 1;
+
+        let now = Instant::now();
+        let elapsed_seconds = (now - self.last_fps_log).as_secs_f64();
+        if elapsed_seconds < 1.0 {
+            return;
+        }
+
+        let fps = self.frames_since_fps_log as f64 / elapsed_seconds;
+        log::info!("FPS: {fps}");
+        self.last_fps_log = now;
+        self.frames_since_fps_log = 0;
     }
 
     fn swap_buffers(&mut self) {
@@ -79,6 +97,8 @@ impl Default for BackBuffer {
             back_buffer: Some(Box::new([0; _])),
             offset: 0,
             intermediate_buffer: Default::default(),
+            frames_since_fps_log: 0,
+            last_fps_log: Instant::now(),
         }
     }
 }
