@@ -3,7 +3,7 @@ use crate::video::{display_triple_buffer, FrontBuffer};
 use crate::{Buttons, Cartridge, NES, NES_FREQ};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::thread::JoinHandle;
+use wasm_thread::JoinHandle;
 use web_time::Duration;
 
 pub struct NESRunner {
