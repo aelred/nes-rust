@@ -1,6 +1,6 @@
 # Run the given ROM file
-run rom:
-    cargo run --no-default-features --features=sdl -- {{quote(rom)}}
+run rom=`find './roms' -name '*.nes' -type f | fzf`:
+    cargo run --release --no-default-features --features=sdl -- {{quote(rom)}}
 
 profile rom:
     CARGO_PROFILE_RELEASE_DEBUG=true cargo run --release \
