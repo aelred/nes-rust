@@ -1,8 +1,13 @@
-use crate::mapper::Mapper;
+pub use i_nes::INes;
+
 use crate::Address;
 use crate::Bus;
+use mapper::Mapper;
 use std::cell::Cell;
 use std::fmt::{Debug, Formatter};
+
+mod i_nes;
+mod mapper;
 
 #[derive(Default, Debug)]
 pub struct Cartridge {
@@ -12,12 +17,7 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn new(
-        prg_rom: Box<[u8]>,
-        chr_rom: Box<[u8]>,
-        chr_ram_enabled: bool,
-        mapper: Mapper,
-    ) -> Self {
+    fn new(prg_rom: Box<[u8]>, chr_rom: Box<[u8]>, chr_ram_enabled: bool, mapper: Mapper) -> Self {
         let prg_bank_size = match mapper {
             Mapper::NROM => 0x4000,
             Mapper::UxROM => 0x4000,
@@ -335,7 +335,7 @@ impl Default for NametableMirroring {
 
 #[cfg(test)]
 mod tests {
-    use crate::mapper::Mapper;
+    use crate::cartridge::mapper::Mapper;
     use crate::Address;
 
     use super::*;

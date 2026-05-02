@@ -1,10 +1,8 @@
-use std::error::Error;
-use std::fmt;
-use std::io;
 use std::io::Read;
 
+use crate::cartridge::mapper::Mapper;
 use crate::cartridge::Cartridge;
-use crate::mapper::Mapper;
+use anyhow::Result;
 
 const PRG_ROM_SIZE_LOCATION: usize = 4;
 const CHR_ROM_SIZE_LOCATION: usize = 5;
@@ -14,31 +12,6 @@ const MAPPER_HIGH_LOCATION: usize = 7;
 const _8KB: usize = 8_192;
 const _16KB: usize = 16_384;
 
-#[derive(Debug)]
-pub enum INesReadError {
-    IO(io::Error),
-    UnrecognisedMapper(u8),
-}
-
-impl fmt::Display for INesReadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            INesReadError::IO(error) => fmt::Display::fmt(error, f),
-            INesReadError::UnrecognisedMapper(mapper) => {
-                write!(f, "Unrecognised mapper: {}", mapper)
-            }
-        }
-    }
-}
-
-impl Error for INesReadError {}
-
-impl From<io::Error> for INesReadError {
-    fn from(error: io::Error) -> Self {
-        INesReadError::IO(error)
-    }
-}
-
 pub struct INes {
     prg_rom: Box<[u8]>,
     chr_rom: Box<[u8]>,
@@ -47,7 +20,7 @@ pub struct INes {
 }
 
 impl INes {
-    pub fn read<R: Read>(mut reader: R) -> Result<Self, INesReadError> {
+    pub fn read<R: Read>(mut reader: R) -> Result<Self> {
         let mut header = [0u8; 16];
         reader.read_exact(&mut header)?;
 
@@ -95,7 +68,7 @@ impl INes {
         )
     }
 
-    fn mapper(header: [u8; 16]) -> Result<Mapper, INesReadError> {
+    fn mapper(header: [u8; 16]) -> Result<Mapper> {
         let low = header[MAPPER_LOW_LOCATION] >> 4;
         let high = header[MAPPER_HIGH_LOCATION] & 0b1111_0000;
         let byte = low | high;
