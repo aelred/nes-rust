@@ -5,14 +5,14 @@ use std::time::{Duration, Instant};
 
 use super::Runtime;
 use crate::audio::{AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
-use crate::runner::NESRunner;
+use crate::runner::{Event, NESRunner};
 use crate::video::FrontBuffer;
 use crate::INes;
 use crate::{Buttons, HEIGHT, WIDTH};
 use sdl2::audio::AudioCallback;
 use sdl2::audio::AudioDevice;
 use sdl2::audio::AudioSpecDesired;
-use sdl2::event::Event;
+use sdl2::event::Event as SdlEvent;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::Texture;
@@ -46,7 +46,7 @@ pub fn run_with(params: SdlParams) -> Result<()> {
 
     let sdl_context = sdl2::init().anyhow()?;
 
-    let mut event_pump = sdl_context.event_pump().anyhow()?;
+    let mut sdl_events = sdl_context.event_pump().anyhow()?;
 
     let args: Vec<String> = std::env::args().collect();
 
@@ -80,22 +80,30 @@ pub fn run_with(params: SdlParams) -> Result<()> {
 
         display.present()?;
 
-        for event in event_pump.poll_iter() {
+        for event in sdl_events.poll_iter() {
             match event {
-                Event::Quit { .. } => {
+                SdlEvent::Quit { .. } => {
                     return Ok(());
                 }
-                Event::KeyDown {
+                SdlEvent::KeyDown {
                     keycode: Some(key), ..
                 } => {
                     runner.press(keycode_binding(key));
                 }
-                Event::KeyUp {
+                SdlEvent::KeyUp {
                     keycode: Some(key), ..
                 } => {
                     runner.release(keycode_binding(key));
                 }
                 _ => {}
+            }
+        }
+
+        for event in runner.events() {
+            match event {
+                Event::RamChanged(_) => {
+                    // TODO: store game state in some persistent store
+                }
             }
         }
 
