@@ -12,17 +12,17 @@ use super::addressing_modes::STYAddressingMode;
 use super::addressing_modes::ShiftAddressingMode;
 use super::addressing_modes::StoreAddressingMode;
 
-pub mod arithmetic;
-pub mod branch;
-pub mod inc_dec;
-pub mod jump;
-pub mod load_store;
-pub mod logical;
-pub mod shift;
-pub mod stack;
-pub mod status;
-pub mod system;
-pub mod transfer;
+mod arithmetic;
+mod branch;
+mod inc_dec;
+mod jump;
+mod load_store;
+mod logical;
+mod shift;
+mod stack;
+mod status;
+mod system;
+mod transfer;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Instruction {

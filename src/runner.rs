@@ -127,7 +127,7 @@ fn run_nes(mut nes: NES, commands: Receiver<Command>, events: Sender<Event>) {
     }
 }
 
-pub enum Command {
+enum Command {
     Press(Buttons),
     Release(Buttons),
     LoadCartridge(Cartridge),
