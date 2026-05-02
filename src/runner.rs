@@ -119,7 +119,7 @@ fn run_nes(mut nes: NES, commands: Receiver<Command>, events: Sender<Event>) {
             }
         }
 
-        if let Some(ram) = nes.cartridge.changed_ram() {
+        if let Some(ram) = nes.changed_ram() {
             // TODO: ideally don't allocate
             let event = Event::RamChanged(Vec::from(ram));
             let _ = events.send(event);
