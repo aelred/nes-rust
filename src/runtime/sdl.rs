@@ -1,7 +1,5 @@
 use anyhow::{anyhow, bail, Result};
 use std::fs::File;
-use std::thread;
-use std::time::{Duration, Instant};
 
 use super::Runtime;
 use crate::audio::{AudioSource, AUDIO_SAMPLE_SIZE, TARGET_AUDIO_FREQ};
@@ -19,8 +17,6 @@ use sdl2::render::Texture;
 use sdl2::render::WindowCanvas;
 
 const SCALE: u16 = 3;
-const FPS: u64 = 60;
-const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / FPS);
 
 type AudioListener = Box<dyn FnMut(&[f32]) + Send>;
 
@@ -68,16 +64,7 @@ pub fn run_with(params: SdlParams) -> Result<()> {
     runner.load_cartridge(cartridge);
     runner.resume();
 
-    let mut expected_time = Duration::ZERO;
-    let start = Instant::now();
-
     loop {
-        expected_time += FRAME_DURATION;
-        let actual_time = start.elapsed();
-        if actual_time < expected_time {
-            thread::sleep(expected_time - actual_time);
-        }
-
         display.present()?;
 
         for event in sdl_events.poll_iter() {
@@ -153,7 +140,11 @@ impl SDLDisplay {
             .position_centered()
             .build()?;
 
-        let mut canvas = window.into_canvas().target_texture().build()?;
+        let mut canvas = window
+            .into_canvas()
+            .target_texture()
+            .present_vsync()
+            .build()?;
 
         canvas.set_draw_color(sdl2::pixels::Color::BLACK);
         canvas.set_scale(SCALE as f32, SCALE as f32).anyhow()?;
