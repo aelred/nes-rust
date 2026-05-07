@@ -1,7 +1,7 @@
 pub use i_nes::INes;
 
-use crate::cartridge::mapper::nrom::NROM;
-use crate::cartridge::mapper::{Mapper, PRGAddress};
+use crate::cartridge::mapper::NROM;
+use crate::cartridge::mapper::{AnyMapper, Mapper, PRGAddress};
 use crate::Address;
 use crate::Bus;
 use std::fmt::{Debug, Formatter};
@@ -11,7 +11,7 @@ mod mapper;
 
 #[derive(Debug)]
 pub struct Cartridge {
-    mapper: Box<dyn Mapper>,
+    mapper: AnyMapper,
     prg: PRGState,
     chr: CHRState,
 }
@@ -21,7 +21,7 @@ impl Cartridge {
         prg_rom: Box<[u8]>,
         chr_rom: Box<[u8]>,
         chr_ram_enabled: bool,
-        mapper: Box<dyn Mapper>,
+        mapper: AnyMapper,
     ) -> Self {
         let prg = PRGState {
             rom: prg_rom,
@@ -50,11 +50,11 @@ impl Cartridge {
     pub fn get_prg_chr(&mut self) -> (PRG<'_>, CHR<'_>) {
         let prg = PRG {
             state: &mut self.prg,
-            mapper: self.mapper.as_ref(),
+            mapper: &self.mapper,
         };
         let chr = CHR {
             state: &mut self.chr,
-            mapper: self.mapper.as_ref(),
+            mapper: &self.mapper,
         };
         (prg, chr)
     }
@@ -63,7 +63,7 @@ impl Cartridge {
 impl Default for Cartridge {
     fn default() -> Self {
         Self {
-            mapper: Box::new(NROM),
+            mapper: NROM.into(),
             prg: PRGState::default(),
             chr: CHRState::default(),
         }
@@ -107,7 +107,7 @@ impl Default for PRGState {
 /// Program memory on a NES cartridge, connected to the CPU
 pub struct PRG<'a> {
     state: &'a mut PRGState,
-    mapper: &'a dyn Mapper,
+    mapper: &'a AnyMapper,
 }
 
 impl Bus for PRG<'_> {
@@ -164,7 +164,7 @@ impl Default for CHRState {
 /// Character memory on a NES cartridge, stores pattern tables and is connected to the PPU
 pub struct CHR<'a> {
     state: &'a mut CHRState,
-    mapper: &'a dyn Mapper,
+    mapper: &'a AnyMapper,
 }
 
 impl Bus for CHR<'_> {
@@ -238,7 +238,7 @@ mod tests {
     fn cartridge_is_constructed_from_prg_rom_chr_rom_and_mapper() {
         let prg_rom = Box::new([0u8; 1024]);
         let chr_rom = Box::new([0u8; 1024]);
-        let mapper = Box::new(NROM);
+        let mapper = NROM.into();
         Cartridge::new(prg_rom, chr_rom, false, mapper);
     }
 
@@ -247,7 +247,7 @@ mod tests {
         let mut cartridge = nrom_cartridge();
         let mut prg = PRG {
             state: &mut cartridge.prg,
-            mapper: cartridge.mapper.as_ref(),
+            mapper: &cartridge.mapper,
         };
 
         for value in 0x6000..=0x7fff {
@@ -262,7 +262,7 @@ mod tests {
         let mut cartridge = nrom_cartridge();
         let mut prg = PRG {
             state: &mut cartridge.prg,
-            mapper: cartridge.mapper.as_ref(),
+            mapper: &cartridge.mapper,
         };
 
         for (i, item) in prg.state.rom.iter_mut().enumerate() {
@@ -278,7 +278,7 @@ mod tests {
     fn nrom_cartridge_mirrors_rom_if_not_large_enough() {
         let mut prg_rom = Box::new([0u8; 0x4000]);
         let chr_rom = Box::new([0u8; 0x8000]);
-        let mapper = Box::new(NROM);
+        let mapper = NROM.into();
 
         for (i, item) in prg_rom.iter_mut().enumerate() {
             *item = i as u8;
@@ -287,7 +287,7 @@ mod tests {
         let mut cartridge = Cartridge::new(prg_rom, chr_rom, false, mapper);
         let mut prg = PRG {
             state: &mut cartridge.prg,
-            mapper: cartridge.mapper.as_ref(),
+            mapper: &cartridge.mapper,
         };
 
         for value in 0xc000..=0xffff {
@@ -300,7 +300,7 @@ mod tests {
         let mut cartridge = nrom_cartridge();
         let mut chr = CHR {
             state: &mut cartridge.chr,
-            mapper: cartridge.mapper.as_ref(),
+            mapper: &cartridge.mapper,
         };
 
         for (i, item) in chr.state.chr_rom.iter_mut().enumerate() {
@@ -317,7 +317,7 @@ mod tests {
         let mut cartridge = nrom_cartridge();
         let mut chr = CHR {
             state: &mut cartridge.chr,
-            mapper: cartridge.mapper.as_ref(),
+            mapper: &cartridge.mapper,
         };
 
         for (i, item) in chr.state.ppu_ram.iter_mut().enumerate() {
@@ -336,7 +336,7 @@ mod tests {
         let mut cartridge = nrom_cartridge();
         let mut chr = CHR {
             state: &mut cartridge.chr,
-            mapper: cartridge.mapper.as_ref(),
+            mapper: &cartridge.mapper,
         };
 
         for (i, item) in chr.state.ppu_ram.iter_mut().enumerate() {
@@ -355,7 +355,7 @@ mod tests {
         let mut cartridge = nrom_cartridge();
         let mut chr = CHR {
             state: &mut cartridge.chr,
-            mapper: cartridge.mapper.as_ref(),
+            mapper: &cartridge.mapper,
         };
 
         for (i, item) in chr.state.ppu_ram.iter_mut().enumerate() {
@@ -381,7 +381,7 @@ mod tests {
         let mut cartridge = nrom_cartridge();
         let mut prg = PRG {
             state: &mut cartridge.prg,
-            mapper: cartridge.mapper.as_ref(),
+            mapper: &cartridge.mapper,
         };
 
         prg.write(Address::new(0x5000), 10);
@@ -390,7 +390,7 @@ mod tests {
     fn nrom_cartridge() -> Cartridge {
         let prg_rom = Box::new([0u8; 0x8000]);
         let chr_rom = Box::new([0u8; 0x8000]);
-        let mapper = Box::new(NROM);
+        let mapper = NROM.into();
         Cartridge::new(prg_rom, chr_rom, false, mapper)
     }
 }

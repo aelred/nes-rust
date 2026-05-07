@@ -1,12 +1,17 @@
-pub mod mmc1;
-pub mod nrom;
-pub mod uxrom;
+mod mmc1;
+mod nrom;
+mod uxrom;
 
+pub use crate::cartridge::mapper::mmc1::MMC1;
+pub use crate::cartridge::mapper::nrom::NROM;
+pub use crate::cartridge::mapper::uxrom::UxROM;
 use crate::cartridge::NametableMirroring;
 use crate::Address;
+use enum_dispatch::enum_dispatch;
 use std::fmt::Debug;
 
-pub trait Mapper: Debug + Send {
+#[enum_dispatch]
+pub trait Mapper: Debug {
     /// Map a CPU address to an address in the PRG
     fn map(&self, address: Address) -> PRGAddress;
 
@@ -22,6 +27,14 @@ pub trait Mapper: Debug + Send {
     fn nametable_mirroring(&self) -> NametableMirroring {
         NametableMirroring::default()
     }
+}
+
+#[enum_dispatch(Mapper)]
+#[derive(Debug)]
+pub enum AnyMapper {
+    NROM,
+    MMC1,
+    UxROM,
 }
 
 pub enum PRGAddress {

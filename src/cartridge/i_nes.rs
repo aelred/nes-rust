@@ -1,9 +1,9 @@
 use std::io::Read;
 
-use crate::cartridge::mapper::mmc1::MMC1;
-use crate::cartridge::mapper::nrom::NROM;
-use crate::cartridge::mapper::uxrom::UxROM;
-use crate::cartridge::mapper::Mapper;
+use crate::cartridge::mapper::AnyMapper;
+use crate::cartridge::mapper::UxROM;
+use crate::cartridge::mapper::MMC1;
+use crate::cartridge::mapper::NROM;
 use crate::cartridge::Cartridge;
 use anyhow::{bail, Result};
 
@@ -19,7 +19,7 @@ pub struct INes {
     prg_rom: Box<[u8]>,
     chr_rom: Box<[u8]>,
     chr_ram_enabled: bool,
-    mapper: Box<dyn Mapper>,
+    mapper: AnyMapper,
 }
 
 impl INes {
@@ -78,11 +78,11 @@ impl INes {
         low | high
     }
 
-    fn mapper_number_to_mapper(prg_rom: &[u8], number: u8) -> Result<Box<dyn Mapper>> {
+    fn mapper_number_to_mapper(prg_rom: &[u8], number: u8) -> Result<AnyMapper> {
         Ok(match number {
-            0 => Box::new(NROM),
-            1 => Box::new(MMC1::new(prg_rom)),
-            2 => Box::new(UxROM::new(prg_rom)),
+            0 => NROM.into(),
+            1 => MMC1::new(prg_rom).into(),
+            2 => UxROM::new(prg_rom).into(),
             _ => bail!("Unrecognised mapper: {number}"),
         })
     }
@@ -160,10 +160,6 @@ mod tests {
 
         let ines = INes::read(cursor).unwrap();
 
-        // Compare Debug output since this is a Box<dyn Mapper>
-        // TODO: currently failing
-        let actual = ines.mapper;
-        let expected = UxROM::default();
-        assert_eq!(format!("{actual:?}"), format!("{expected:?}"));
+        assert!(matches!(ines.mapper, AnyMapper::UxROM(_)));
     }
 }

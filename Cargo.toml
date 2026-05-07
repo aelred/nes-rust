@@ -23,6 +23,7 @@ web = [
 log = { version = "0.4.22", features = ["std"] }
 bitflags = "2.6.0"
 anyhow = "1.0.89"
+enum_dispatch = "0.3.13"
 
 # unsafe_textures removes a very annoying lifetime parameter on textures that we're not too worried about
 sdl2 = { version = "0.37.0", optional = true, features = ["bundled", "unsafe_textures"] }
