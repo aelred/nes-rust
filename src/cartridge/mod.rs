@@ -1,7 +1,7 @@
 pub use i_nes::INes;
 
-use crate::cartridge::mapper::NROM;
 use crate::cartridge::mapper::{AnyMapper, Mapper, PRGAddress};
+use crate::cartridge::mapper::{CHRAddress, NROM};
 use crate::Address;
 use crate::Bus;
 use std::fmt::{Debug, Formatter};
@@ -112,7 +112,7 @@ pub struct PRG<'a> {
 
 impl Bus for PRG<'_> {
     fn read(&mut self, address: Address) -> u8 {
-        match self.mapper.map(address) {
+        match self.mapper.map_cpu(address) {
             PRGAddress::ROM(index) => self.state.rom[index % self.state.rom.len()],
             PRGAddress::RAM(index) => self.state.ram[index],
             PRGAddress::Unmapped => panic!("Out of addressable range: {:?}", address),
@@ -126,7 +126,7 @@ impl Bus for PRG<'_> {
         }
 
         // Otherwise write to RAM
-        match self.mapper.map(address) {
+        match self.mapper.map_cpu(address) {
             PRGAddress::ROM(_) => panic!("Writing to PRG-ROM not supported"),
             PRGAddress::RAM(index) => {
                 self.state.dirty_ram = true;
@@ -169,28 +169,28 @@ pub struct CHR<'a> {
 
 impl Bus for CHR<'_> {
     fn read(&mut self, address: Address) -> u8 {
-        match address.index() {
-            0x0000..=0x1fff => self.state.chr_rom[address.index()],
-            0x2000..=0x3eff => {
-                self.state.ppu_ram[self.mapper.nametable_mirroring().map_address(address)]
+        match self.mapper.map_ppu(address) {
+            CHRAddress::ROM(index) => self.state.chr_rom[index],
+            CHRAddress::RAM(index) => {
+                self.state.ppu_ram[self.mapper.nametable_mirroring().map_index(index)]
             }
-            _ => panic!("Out of addressable range: {:?}", address),
+            CHRAddress::Unmapped => panic!("Out of addressable range: {:?}", address),
         }
     }
 
     fn write(&mut self, address: Address, byte: u8) {
-        match address.index() {
-            0x0000..=0x1fff => {
+        match self.mapper.map_ppu(address) {
+            CHRAddress::ROM(index) => {
                 debug_assert!(
                     self.state.chr_ram_enabled,
                     "Attempted to write to CHR-ROM, but writing is not enabled"
                 );
-                self.state.chr_rom[address.index()] = byte
+                self.state.chr_rom[index] = byte;
             }
-            0x2000..=0x3eff => {
-                self.state.ppu_ram[self.mapper.nametable_mirroring().map_address(address)] = byte
+            CHRAddress::RAM(index) => {
+                self.state.ppu_ram[self.mapper.nametable_mirroring().map_index(index)] = byte;
             }
-            _ => panic!("Out of addressable range: {:?}", address),
+            CHRAddress::Unmapped => panic!("Out of addressable range: {:?}", address),
         }
     }
 }
@@ -206,10 +206,7 @@ impl NametableMirroring {
     const HORIZONTAL: Self = NametableMirroring(0b0011);
     const VERTICAL: Self = NametableMirroring(0b0101);
 
-    fn map_address(&self, address: Address) -> usize {
-        debug_assert!(0x2000 <= address.index() && address.index() <= 0x3eff);
-
-        let index = address.index() - 0x2000;
+    fn map_index(&self, index: usize) -> usize {
         let logical_nametable = index / 0x400;
         let physical_nametable = self.logical_to_physical_nametable(logical_nametable);
 

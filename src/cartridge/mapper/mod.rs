@@ -13,7 +13,16 @@ use std::fmt::Debug;
 #[enum_dispatch]
 pub trait Mapper: Debug {
     /// Map a CPU address to an address in the PRG
-    fn map(&self, address: Address) -> PRGAddress;
+    fn map_cpu(&self, address: Address) -> PRGAddress;
+
+    /// Map a PPU address to an address in the CHR
+    fn map_ppu(&self, address: Address) -> CHRAddress {
+        match address.index() {
+            0x0000..=0x1fff => CHRAddress::ROM(address.index()),
+            0x2000..=0x3eff => CHRAddress::RAM(address.index() - 0x2000),
+            _ => CHRAddress::Unmapped,
+        }
+    }
 
     #[allow(unused)]
     /// Map a CPU write to a register, if one exists.
@@ -38,6 +47,12 @@ pub enum AnyMapper {
 }
 
 pub enum PRGAddress {
+    ROM(usize),
+    RAM(usize),
+    Unmapped,
+}
+
+pub enum CHRAddress {
     ROM(usize),
     RAM(usize),
     Unmapped,

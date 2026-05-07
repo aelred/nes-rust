@@ -20,7 +20,7 @@ impl UxROM {
 }
 
 impl Mapper for UxROM {
-    fn map(&self, address: Address) -> PRGAddress {
+    fn map_cpu(&self, address: Address) -> PRGAddress {
         match address.index() {
             0x6000..=0x7fff => PRGAddress::RAM(address.index() - 0x6000),
             0x8000..=0xbfff => PRGAddress::ROM(bank_index(address - 0x8000, self.bank.get())),
