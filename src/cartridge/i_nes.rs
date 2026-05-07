@@ -1,8 +1,11 @@
 use std::io::Read;
 
+use crate::cartridge::mapper::mmc1::MMC1;
+use crate::cartridge::mapper::nrom::NROM;
+use crate::cartridge::mapper::uxrom::UxROM;
 use crate::cartridge::mapper::Mapper;
 use crate::cartridge::Cartridge;
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 const PRG_ROM_SIZE_LOCATION: usize = 4;
 const CHR_ROM_SIZE_LOCATION: usize = 5;
@@ -16,16 +19,13 @@ pub struct INes {
     prg_rom: Box<[u8]>,
     chr_rom: Box<[u8]>,
     chr_ram_enabled: bool,
-    mapper: Mapper,
+    mapper: Box<dyn Mapper>,
 }
 
 impl INes {
     pub fn read<R: Read>(mut reader: R) -> Result<Self> {
         let mut header = [0u8; 16];
         reader.read_exact(&mut header)?;
-
-        let mapper = INes::mapper(header)?;
-        log::info!("Read mapper as {:?}", mapper);
 
         let prg_rom_size = header[PRG_ROM_SIZE_LOCATION] as usize * _16KB;
         log::info!("Read PRG ROM size as {}", prg_rom_size);
@@ -49,6 +49,10 @@ impl INes {
             chr_ram_enabled = false;
         };
 
+        let mapper_number = Self::mapper_number(header);
+        let mapper = Self::mapper_number_to_mapper(&prg_rom, mapper_number)?;
+        log::info!("Read mapper as {:?}", mapper);
+
         let ines = INes {
             prg_rom: prg_rom.into_boxed_slice(),
             chr_rom: chr_rom.into_boxed_slice(),
@@ -68,11 +72,19 @@ impl INes {
         )
     }
 
-    fn mapper(header: [u8; 16]) -> Result<Mapper> {
+    fn mapper_number(header: [u8; 16]) -> u8 {
         let low = header[MAPPER_LOW_LOCATION] >> 4;
         let high = header[MAPPER_HIGH_LOCATION] & 0b1111_0000;
-        let byte = low | high;
-        Mapper::try_from(byte)
+        low | high
+    }
+
+    fn mapper_number_to_mapper(prg_rom: &[u8], number: u8) -> Result<Box<dyn Mapper>> {
+        Ok(match number {
+            0 => Box::new(NROM),
+            1 => Box::new(MMC1::new(prg_rom)),
+            2 => Box::new(UxROM::new(prg_rom)),
+            _ => bail!("Unrecognised mapper: {number}"),
+        })
     }
 }
 
@@ -136,9 +148,9 @@ mod tests {
 
     #[test]
     fn can_read_mapper_from_ines_file() {
-        // this maps to mapper 19
-        let low: u8 = 0b0011_0000;
-        let high: u8 = 0b0001_0000;
+        // this maps to mapper 002
+        let low: u8 = 0b0010_0000;
+        let high: u8 = 0b0000_0000;
 
         let header: [u8; 16] = [
             0x4E, 0x45, 0x53, 0x1A, 2, 1, low, high, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -148,6 +160,10 @@ mod tests {
 
         let ines = INes::read(cursor).unwrap();
 
-        assert_eq!(ines.mapper, Mapper::Namco129);
+        // Compare Debug output since this is a Box<dyn Mapper>
+        // TODO: currently failing
+        let actual = ines.mapper;
+        let expected = UxROM::default();
+        assert_eq!(format!("{actual:?}"), format!("{expected:?}"));
     }
 }
