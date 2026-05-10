@@ -40,7 +40,12 @@ impl Input for Controller {
             self.read_cursor = CURSOR_START;
         }
 
-        let button_pressed = (self.buttons.bits() & self.read_cursor) != 0;
+        // Apply bitmask to "cancel-out" pressing left/right or up/down together
+        let buttons = self.buttons.bits();
+        let both = buttons & (buttons >> 1) & 0b0000_0101;
+        let masked = buttons & !(both | (both << 1));
+
+        let button_pressed = (masked & self.read_cursor) != 0;
 
         if !self.strobe {
             self.read_cursor >>= 1;
