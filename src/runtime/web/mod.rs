@@ -317,11 +317,20 @@ impl NesContext {
     }
 
     fn start_audio(&mut self) {
+        let Ok(window) = window() else {
+            return;
+        };
+        if !window.navigator().user_activation().has_been_active() {
+            return;
+        }
+
         let Some(silencer) = self.silencer.take() else {
             return;
         };
 
         async fn resume(silencer: Silencer) -> Result<()> {
+            // If the audio worklet doesn't start, the emulator hangs, cus nothing consumes audio
+            // Not sure what to do about it...
             let source = silencer.close();
             let mut source = source.join_async().await.expect("error in silencer thread");
 

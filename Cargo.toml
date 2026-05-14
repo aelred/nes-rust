@@ -58,6 +58,7 @@ web-sys = { version = "0.3.70", optional = true, features = [
     'PointerEvent',
     'TouchEvent',
     'Navigator',
+    'UserActivation',
     # Feature required for saving the game
     'Storage',
     # Features required for audio
